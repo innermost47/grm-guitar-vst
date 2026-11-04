@@ -1,0 +1,6 @@
+build/
+*.wav
+__pycache__/
+.vs
+build
+out
