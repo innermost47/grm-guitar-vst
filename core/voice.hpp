@@ -109,10 +109,15 @@ public:
         active = count_ + over_ > 0;
     }
 
-    // the string is damped (the finger relaxes, the hand touches it): every mode loses `extra` more per second
+    // the string is damped (the finger relaxes, the hand touches it): skin on a string takes more from the fast
+    // modes than from the fundamental, so each mode loses extra * (1 + sqrt(f / f1)) / 2 more per second (at
+    // most 4 extra): the note darkens as it dies instead of only getting quieter
     void damp(double extra = 40.0) {
+        const double f1 = std::max(what.place.f1, 1.0);
         for (int k = 0; k < count_; ++k) {
-            rate_[(size_t) k] = cplx(rate_[(size_t) k].real() - extra, rate_[(size_t) k].imag());
+            const double f = rate_[(size_t) k].imag() / (2 * PI);
+            const double e = extra * std::min(4.0, 0.5 * (1.0 + std::sqrt(std::max(f, 0.0) / f1)));
+            rate_[(size_t) k] = cplx(rate_[(size_t) k].real() - e, rate_[(size_t) k].imag());
             step_[(size_t) k] = std::exp(rate_[(size_t) k] / sr_);
         }
         for (int k = 0; k < over_; ++k) {

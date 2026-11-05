@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 Anthony Charretier
 cmake_minimum_required(VERSION 3.22)
-project(GRMGuitar VERSION 0.1.0 LANGUAGES C CXX)
+project(GRMGuitar VERSION 0.2.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -21,6 +21,9 @@ if(GRMG_BUILD_TESTS)
     add_executable(test_physics tests/test_physics.cpp)
     target_link_libraries(test_physics PRIVATE grm_core)
     add_test(NAME guitar_physics_matches_python COMMAND test_physics)
+    add_executable(test_play tests/test_play.cpp)
+    target_link_libraries(test_play PRIVATE grm_core)
+    add_test(NAME guitar_playing COMMAND test_play)
     add_executable(render_offline tests/render_offline.cpp)
     target_link_libraries(render_offline PRIVATE grm_core)
 endif()

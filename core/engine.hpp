@@ -97,6 +97,9 @@ public:
     }
     void set_performance(const Performance* p) {
         if (p == perf_) return;
+        // the finger noises sounding are samples of the old performance, which the worker frees soon after:
+        // they stop here (a new take, an edit or a player setting while a squeak plays)
+        for (auto& s : squeaks_) s.clear();
         perf_ = p;
         relocate_ = true;
     }
@@ -154,13 +157,26 @@ public:
 
     // ------------------------------------------------------------ the block
     void render(float* out, int samples, const Transport& tr) {
+        if (live_palm != live_palm_was_) {
+            // the palm comes down on the strings: what rings is damped at once (the palm takes the high modes
+            // first), and the free strings are under it; lifted, the free strings ring open again
+            live_palm_was_ = live_palm;
+            if (live_palm && model_ && model_->palm_ready)
+                for (auto& v : voices_)
+                    if (v.active) v.damp(LIVE_PALM_DAMP);
+            set_palm(live_palm || song_palm_);
+        }
         int pos = 0;
         while (pos < samples) {
             const int n = std::min(samples - pos, BLOCK);
             render_part(out + pos, n, tr, pos);
             pos += n;
         }
-        if (was_playing_ && !tr.playing) all_off();   // the transport stops: the hands stop the strings
+        if (was_playing_ && !tr.playing) {             // the transport stops: the hands stop the strings
+            all_off();
+            song_palm_ = false;
+            set_palm(live_palm);
+        }
         was_playing_ = tr.playing;
     }
 
@@ -176,8 +192,17 @@ private:
     std::array<std::vector<double>, NUM_STRINGS> string_force_;
     std::vector<double> total_, others_, mix_;
     bool sym_set_ = false, relocate_ = true, was_playing_ = false, palm_down_ = false;
+    bool song_palm_ = false, live_palm_was_ = false;
+    static constexpr double LIVE_PALM_DAMP = 60.0;   // s^-1: a palm laid on ringing strings
     size_t next_ = 0;
     double expected_beat_ = -1.0;
+
+    void set_palm(bool down) {
+        if (down == palm_down_) return;
+        palm_down_ = down;
+        for (int i = 0; i < NUM_STRINGS; ++i)       // the free strings are under the palm too
+            if (sym_[(size_t) i].on) free_string(i, sym_[(size_t) i].fret, 0.005);
+    }
 
     void free_string(int i, int fret, double fade) {
         if (!model_) return;
@@ -190,12 +215,16 @@ private:
         s.free_from_now(fade);
     }
 
-    void start(const Pluck& p) {
+    void start(const Pluck& p0) {
         const Model& m = *model_;
+        Pluck p = p0;
+        // the live palm mutes everything struck while it is down, the roll included
+        if (live_palm && !p.palm && p.kind == Kind::strike && m.palm_ready)
+            p.palm = m.palm[(size_t) p.string][(size_t) p.fret].get();
         auto& v = voices_[(size_t) p.string];
-        if (v.active) {                           // struck again: the old note stops (15 ms)
+        if (v.active) {                           // struck again: the pick takes the old vibration away (20 ms)
             fading_[(size_t) p.string] = v;
-            fading_[(size_t) p.string].fade_out();
+            fading_[(size_t) p.string].fade_out(0.02);
         }
         v.start(p, m.body, m.s.resonance, m.s.brightness, sr_);
         v.note = -1;
@@ -208,7 +237,7 @@ private:
     void apply(const Event& e) {
         switch (e.type) {
             case EventType::pluck: start(e.pluck); break;
-            case EventType::damp: voices_[(size_t) e.string].damp(); break;
+            case EventType::damp: voices_[(size_t) e.string].damp(e.extra); break;
             case EventType::squeak:
                 for (auto& s : squeaks_)
                     if (!s.sound) {
@@ -219,14 +248,10 @@ private:
                     }
                 break;
             case EventType::palm_on:
-            case EventType::palm_off: {
-                const bool down = e.type == EventType::palm_on;
-                if (down == palm_down_) break;
-                palm_down_ = down;
-                for (int i = 0; i < NUM_STRINGS; ++i)       // the free strings are under the palm too
-                    if (sym_[(size_t) i].on) free_string(i, sym_[(size_t) i].fret, 0.005);
+            case EventType::palm_off:
+                song_palm_ = e.type == EventType::palm_on;
+                set_palm(song_palm_ || live_palm);
                 break;
-            }
         }
     }
 

@@ -33,6 +33,7 @@ void SolverThread::run() {
     int compiledSong = -1;
     unsigned compiledSeed = 0;
     double compiledTempo = 0.0;
+    bool compiledLoop = false;
     const grmg::Model* compiledModel = nullptr;
     double modelRate = 0.0;
     auto sameSettings = [](const grmg::Settings& a, const grmg::Settings& b) {
@@ -96,7 +97,8 @@ void SolverThread::run() {
         const int version = owner.songVersion.load();
         const unsigned sd = owner.seed.load();
         const double tempo = owner.currentTempo.load();
-        if (model && (version != compiledSong || sd != compiledSeed || std::abs(tempo - compiledTempo) > 0.01
+        const bool loop = owner.params.getRawParameterValue("loop")->load() > 0.5f;
+        if (model && (version != compiledSong || sd != compiledSeed || std::abs(tempo - compiledTempo) > 0.01 || loop != compiledLoop
                       || model.get() != compiledModel || !samePlayer(s, compiledPlayer))) {
             grmg::Song song;
             {
@@ -114,6 +116,7 @@ void SolverThread::run() {
                 grmg::CompileOptions o;
                 o.tempo = tempo;
                 o.seed = sd;
+                o.loop = loop;
                 auto perf = compiler.compile(song, m, o);
                 owner.perfBox.post(perf.release());
             } catch (const std::exception& e) {
@@ -122,6 +125,7 @@ void SolverThread::run() {
             compiledSong = version;
             compiledSeed = sd;
             compiledTempo = tempo;
+            compiledLoop = loop;
             compiledModel = model.get();
             compiledPlayer = s;
         }
@@ -235,7 +239,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout GRMGuitarProcessor::createLa
     real("pick", "Pick (mm)", 0.4f, 1.5f, 0.71f);
     // palm
     real("palm_mm", "Palm from bridge (mm)", 5.0f, 80.0f, 30.0f);
-    real("palm_intensity", "Palm pressure", 0.2f, 4.0f, 1.0f, 1.0f);
+    real("palm_intensity", "Palm pressure (0: lifted)", 0.0f, 4.0f, 1.0f, 1.0f);
     flag("live_palm", "Palm mute (live)", false);
     // body
     real("body_size", "Body size", 0.8f, 1.25f, 1.0f);
@@ -254,7 +258,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout GRMGuitarProcessor::createLa
     flag("finger_noises", "Finger noises", true);
     real("finger_force", "Finger force (N)", 0.1f, 2.0f, 0.6f, 0.6f);
     // output and MIDI
-    real("volume", "Volume", 0.0f, 1.5f, 0.6f);
+    real("volume", "Volume", 0.0f, 2.0f, 1.0f, 1.0f);
     choice("midi_strings", "MIDI to strings", StringArray {"Lowest fret", "Channel = string"}, 0);
     flag("loop", "Loop the roll", true);
     flag("follow_host", "Follow the host", true);
@@ -277,7 +281,10 @@ grmg::Settings GRMGuitarProcessor::readSettings() const {
     s.force = v("force");
     s.pick_mm = v("pick");
     s.palm_mm = std::round(v("palm_mm"));
-    s.palm_intensity = std::pow(10.0, std::round(std::log10(v("palm_intensity")) / 0.05) * 0.05);
+    // steps of 0.05 in log (each one a palm network to solve); below grmg::PALM_OFF the palm is lifted
+    s.palm_intensity = v("palm_intensity") < grmg::PALM_OFF
+                           ? 0.0
+                           : std::pow(10.0, std::round(std::log10(v("palm_intensity")) / 0.05) * 0.05);
     s.body_size = v("body_size");
     s.top_mm = v("top_mm");
     s.coupling = v("coupling");
@@ -445,14 +452,21 @@ void GRMGuitarProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
         juce::dsp::AudioBlock<float> block(wet.getArrayOfWritePointers(), 2, (size_t) n);
         roomConv.process(juce::dsp::ProcessContextReplacing<float>(block));
     }
-    // newtons to the output: a fixed scale, then a soft limit
+    // newtons to the output: a fixed scale (the default song peaks around -9 dBFS at volume 1: headroom for
+    // harder playing), then a peak limiter that only acts above LIMIT and reduces the gain smoothly instead of
+    // bending the wave (no distortion when a strong stroke goes over)
     const int outs = buffer.getNumChannels();
+    constexpr float SCALE = 0.018f, LIMIT = 0.89f;
+    const float release = std::exp(-1.0f / (0.15f * (float) sr));
     for (int t = 0; t < n; ++t) {
-        const float g = volume.getNextValue() * 0.12f;
-        for (int ch = 0; ch < outs; ++ch) {
-            const float x = outs == 1 ? 0.5f * (wet.getSample(0, t) + wet.getSample(1, t)) : wet.getSample(std::min(ch, 1), t);
-            buffer.setSample(ch, t, std::tanh(x * g));
-        }
+        const float g = volume.getNextValue() * SCALE;
+        float l = wet.getSample(0, t) * g, r = wet.getSample(1, t) * g;
+        const float peak = std::max(std::abs(l), std::abs(r));
+        const float need = peak > LIMIT ? LIMIT / peak : 1.0f;
+        limiterGain = need < limiterGain ? need : 1.0f - (1.0f - limiterGain) * release;
+        l *= limiterGain;
+        r *= limiterGain;
+        for (int ch = 0; ch < outs; ++ch) buffer.setSample(ch, t, outs == 1 ? 0.5f * (l + r) : (ch % 2 == 0 ? l : r));
     }
     // the oscilloscope
     const auto scope = scopeFifo.write(std::min(n, scopeFifo.getFreeSpace()));

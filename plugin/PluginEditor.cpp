@@ -329,8 +329,9 @@ GRMGuitarEditor::GRMGuitarEditor(GRMGuitarProcessor& p)
         l->setColour(juce::Label::textColourId, TEXT);
         l->setFont(font(12.0f));
     }
-    help.setText("Click a lane: new note (drag: length).  Wheel or digits: fret.  P: palm mute.  Right click: menu.  "
-                 "Double click / Del: delete.  Ctrl+wheel: zoom.  Space: play.",
+    help.setText("Click: new note / select.  Ctrl+click: add to selection.  Ctrl/Shift+drag: rectangle.  Ctrl+drag a note: "
+                 "copy.  Ctrl+A/C/X/V/D: all, copy, cut, paste, duplicate.  Arrows: move (Shift: bar, Shift+up/down: string).  "
+                 "Wheel or digits: fret.  P: palm.  Del: delete.  Ctrl+wheel: zoom.  Space: play.",
                  juce::dontSendNotification);
     help.setFont(font(11.0f));
     roll.onPlayToggle = [this] { togglePlay(); };

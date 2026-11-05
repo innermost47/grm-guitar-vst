@@ -11,6 +11,7 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include "../core/playability.hpp"
 #include "../core/song.hpp"
 
 class GRMGuitarProcessor;
@@ -68,13 +69,17 @@ private:
     int stateVersion = 0;
     int brushFret[6] = {0, 0, 0, 0, 0, 0};
 
-    enum class Drag { none, move, resize };
+    enum class Drag { none, move, resize, rect };
     struct Selection { bool strum = false; int index = -1; } sel;
     Drag drag = Drag::none;
     bool dragChanged = false;
     double downBeat = 0, origStart = 0, origLength = 0;
     int origString = 0;
     std::string beforeDrag;
+    grmg::Song dragBase;           // the song when the drag started (every selected object moves from there)
+    bool copyDrag = false, copied = false, toggleOnUp = false;
+    juce::Point<float> rectFrom, rectTo;
+    double pasteBeat = 0.0;        // where Ctrl+V pastes: the last place clicked
     juce::String typed;
     juce::uint32 typedAt = 0;
 
@@ -97,8 +102,28 @@ private:
     void showMenu(const Selection& s);
     void changeSelected(const std::function<void(grmg::RollNote&)>& note, const std::function<void(grmg::RollStrum&)>& strum);
     void deleteSelected();
+    // the selection lives in the song's objects (their `selected` flag), so it follows them through sorts
+    bool anySelected() const;
+    void clearSelection();
+    void selectOnly(const Selection& s);
+    bool isSelected(const Selection& s) const;
+    void setSelected(const Selection& s, bool on);
+    void primaryFromFlags();        // `sel` = the first selected object (menus, the fret typed)
+    void selectAll();
+    std::string selectionText() const;   // the selected objects, from their earliest start, as a song text
+    void copySelection();
+    void paste(double at);
+    void duplicateSelection();
+    void showEmptyMenu();
     void pushUndo();
-    void commit();
+    void commit(bool checkPlayable = true);   // checkPlayable: refuse a change that adds an impossible moment
+    void findProblems();
+
+    // what one guitarist cannot play (the hands' constraints, core/playability.hpp)
+    std::vector<grmg::Problem> problems;
+    bool problemsPick = true;
+    juce::String refusal;          // why the last change was refused (shown for a few seconds)
+    juce::uint32 refusalAt = 0;
     void updateScroll();
     void scrollBarMoved(juce::ScrollBar*, double newRangeStart) override;
     void timerCallback() override;

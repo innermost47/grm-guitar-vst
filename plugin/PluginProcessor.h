@@ -139,6 +139,7 @@ private:
     mutable std::mutex exportLock;
     juce::AudioBuffer<float> dry, wet;
     juce::SmoothedValue<float> bodyMix, volume;
+    float limiterGain = 1.0f;     // output peak limiter (audio thread)
 
     // transport
     std::atomic<bool> internalPlaying {false}, hostPlaying {false};

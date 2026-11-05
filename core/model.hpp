@@ -41,6 +41,9 @@ constexpr int NUM_TUNINGS = (int) (sizeof(TUNINGS) / sizeof(TUNINGS[0]));
 
 inline double midi_hz(int note) { return 440.0 * std::pow(2.0, (note - 69) / 12.0); }
 
+// below this palm pressure the palm is lifted: palm-muted notes ring free
+constexpr double PALM_OFF = 0.05;
+
 // The settings of the sound, as the Python app has them (same names, same defaults)
 struct Settings {
     // strings
@@ -56,7 +59,7 @@ struct Settings {
     double pick_mm = 0.71;
     // palm
     double palm_mm = PALM_X * 1000;
-    double palm_intensity = 1.0;
+    double palm_intensity = 1.0;  // 0 (below PALM_OFF): the palm does not touch the strings at all
     // body
     double body_size = 1.0, top_mm = 2.8, coupling = 0.35, body_amount = 0.85;
     bool sympathy = true;
@@ -194,7 +197,9 @@ public:
             }
             room_id = next_id();
         }
-        if (keep_strings && previous->palm_ready && same_palm(previous->s, s)) {
+        if (s.palm_intensity < PALM_OFF) {
+            palm_ready = false;                      // the palm is lifted: nothing to solve
+        } else if (keep_strings && previous->palm_ready && same_palm(previous->s, s)) {
             palm = previous->palm;
             palm_ready = true;
         } else if (with_palm) {
@@ -206,7 +211,7 @@ public:
                         std::make_shared<const Palm>(palm_network(sp.mu, sp.L, f, x, n, tension[(size_t) i]));
                 }
             palm_ready = true;
-        } else if (previous && previous->palm_ready) {
+        } else if (previous && previous->palm_ready && previous->s.palm_intensity >= PALM_OFF) {
             palm = previous->palm;                   // the old palm, until the new one is solved
             palm_ready = true;
         }

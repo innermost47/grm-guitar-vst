@@ -9,6 +9,8 @@ the Python numbers: the strings at every fret (tuning, inharmonicity), the attac
 string), the player's arm (timing, force, pluck point, pick depth, palm), the body (air cavity coupled to the top,
 bridge admittance, radiation) and the room (Eyring reverberation by band, critical distance, image sources).
 
+![GRM Guitar, standalone, with the demo roll](docs/screenshot.png)
+
 ## The guitar roll
 
 A piano roll does not know that a guitar has six strings. The roll of the plugin has one lane per string
@@ -19,12 +21,38 @@ A piano roll does not know that a guitar has six strings. The roll of the plugin
   each string and how hard (an upstroke often misses the bass).
 - when a string changes fret, the left hand lifts from the old fret (the string jumps back to open: a soft pluck)
   and lands on the new one (a knock); on a wound string the finger makes its noise. "Finger noises" turns this off.
-- palm mute per note or per strum; dynamics (pp to ff) per note or strum.
+- palm mute per note or per strum; dynamics (pp to ff) per note or strum. "Palm pressure" at 0 lifts the palm:
+  palm-muted notes ring free. "Palm mute (live)" lays the palm on everything at once, the roll included: what
+  rings is damped as the palm lands.
+- a note that ends dies as a player stops it: a fretted note as the finger relaxes, an open string more slowly
+  (a hand has to touch it), the strings of a chord one after the other, and the high modes first (it darkens
+  as it dies). Before a new shape the fingers move as late as they can, so the notes ring until then.
+- in a loop, the end of the roll leads into its start: the fingers change shape for the first notes at the end.
+- the hands are constraints, as on a real guitar (`core/playability.hpp`): the left hand has four fingers (the
+  thumb can take the low E), a barre is one finger, and its stretch is a GRM network (fingertips behind their
+  frets against the hand's natural spread; the frets come closer up the neck, so more frets fit there). Fret 3
+  with fret 7 is hard but possible, fret 3 with fret 8 is not. A pick cannot strike two strings without the ones
+  between. The roll refuses an edit that asks for something no guitarist can play, says why, and marks the
+  moments already impossible (a red mark on the ruler).
+- the pick sweeps: each string it pushes aside takes some of the hand's energy, so the pick slows and the later
+  strings of a chord get a little less (a slow, soft strum fades across the chord, a fast one hardly). Notes
+  struck together with a pick are one sweep; single notes are picked down on the sixteenths of the beat and up
+  between (alternate picking). With the fingers, notes together are a pinch: the thumb slightly first, each
+  finger its own force.
+- the arm tires: every stroke costs an effort it recovers from in about two seconds; a long run of sixteenths
+  ends a little softer and slower, a stroke after a rest comes out fresh.
+- the palm is a hand, not a switch per string: it covers the strings asked and presses half as hard on their
+  neighbours, presses harder on a harder stroke, and stops the strings ringing under it when it lands.
 - "New take": the player network plays the same roll again with new imprecisions ("Human feel" off: exactly the grid).
 
-Editing: click a lane to add a note (drag to set its length), drag to move (also to another string), drag the right
-edge to resize, mouse wheel or digits for the fret, P for palm mute, right click for the menu, double click or Del to
-delete, Ctrl+wheel to zoom, Space to play, Ctrl+Z / Ctrl+Y. Click the ruler to choose a bar: "Fill strums" and
+Editing: click a lane to add a note (drag to set its length); click a note or strum to select it, drag to move
+every selected object (also to another string), drag the right edge to resize them. Ctrl+click adds to or removes
+from the selection, Ctrl or Shift+drag on an empty place draws a selection rectangle, Ctrl+drag on a note copies.
+Ctrl+A select all, Ctrl+C / Ctrl+X / Ctrl+V copy, cut, paste (at the last place clicked, also between two
+instances), Ctrl+D duplicate after the selection, Ctrl+Z / Ctrl+Y undo, redo, Esc deselect. Arrows move the
+selection by a grid step (Shift: a bar; Shift+up/down: to the next string), up/down alone change the fret, digits
+type it, the mouse wheel too, P palm mute, Del or double click delete. Right click: the same as a menu.
+Ctrl+wheel zooms, Space plays. Click the ruler to choose a bar: "Fill strums" and
 "Fill arpeggio" write the patterns of the Python sequencer there with the chosen chord.
 
 The roll follows the host's position and tempo when the host plays; otherwise (standalone, or host stopped) the
@@ -52,6 +80,8 @@ string", channel 1 to 6 picks the string (1 = high E).
 ## Tests
 
 - `test_core`: 210 checks that the C++ GRM gives the same numbers as the Python (values to 1e-9, uncertainties to 1e-6).
+- `test_play`: how it is played (palm lifted, loop, notes that end, live palm, the hands' limits and every
+  built-in chord shape, the sweep, the pinch, the muscle, alternate picking, the palm's band).
 - `test_physics`: 137 checks for the body, bridge admittance, room, palm, finger, action, player and strum networks,
   and the sound of one string (C++ voice vs `synthesize_string`: same to 1e-8 without the palm, to about 0.5 %
   with it, where the C++ updates the palm's recovery every 16 samples).
@@ -88,4 +118,4 @@ Validation: [pluginval](https://github.com/Tracktion/pluginval), `pluginval --st
 ## Next
 
 - Presets (guitars, string sets, rooms), MIDI export of the roll, MIDI import into the roll.
-- Copy / paste and multiple selection in the roll; slides and hammer-ons as techniques.
+- Copy / paste and multiple selection in the roll; slides and hammer-ons as techniques; TuxGuitar import.

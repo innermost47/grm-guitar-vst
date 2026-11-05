@@ -1,6 +1,9 @@
 build/
+build-*/
+out/
+.vs/
+.vscode/
+CMakeUserPresets.json
 *.wav
 __pycache__/
-.vs
-build
-out
+RELEASE_NOTES.md

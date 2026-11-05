@@ -23,6 +23,7 @@ struct RollNote {
     double start = 0.0, length = 1.0;   // beats
     double velocity = 0.8;
     bool palm = false;
+    bool selected = false;  // in the roll editor (not saved)
 };
 
 struct RollStrum {
@@ -32,6 +33,7 @@ struct RollStrum {
     double velocity = 0.8;
     bool palm = false;
     std::string chord = "";
+    bool selected = false;  // in the roll editor (not saved)
 };
 
 // chord shapes, from string 6 to string 1; -1 = string not played (CHORDS of grm_guitar.py, and a few more)
