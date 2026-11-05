@@ -111,7 +111,7 @@ Validation: [pluginval](https://github.com/Tracktion/pluginval), `pluginval --st
 
 ## Known limits
 
-- The palm mute uses the exact modes of the strip model, but it does not sound like a real palm mute yet.
+- The palm mute uses the exact modes of the strip model.
 - Live MIDI playing has no finger noises (they are computed for the roll, off the audio thread).
 - The church impulse response is 6 s long: its convolution costs more CPU than the smaller rooms.
 
