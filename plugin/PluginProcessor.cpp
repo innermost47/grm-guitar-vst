@@ -42,6 +42,30 @@ namespace {
 
 	float dbToGain(float db) { return std::pow(10.0f, db / 20.0f); }
 
+	// The WAV writer finalizes its header in its destructor and ignores individual header write results.
+	// Keep the file stream open so the caller can check those writes and flush after finalization.
+	class CheckedWavStream final : public juce::OutputStream {
+	public:
+		CheckedWavStream(juce::FileOutputStream& stream, bool& failed) : file(stream), writeFailed(failed) {}
+
+		juce::int64 getPosition() override { return file.getPosition(); }
+		bool setPosition(juce::int64 position) override { return check(file.setPosition(position)); }
+		bool write(const void* data, size_t size) override { return check(file.write(data, size)); }
+		void flush() override {
+			file.flush();
+			check(file.getStatus().wasOk());
+		}
+
+	private:
+		bool check(bool ok) {
+			writeFailed |= !ok;
+			return ok;
+		}
+
+		juce::FileOutputStream& file;
+		bool& writeFailed;
+	};
+
 }  // namespace
 
 // ================================================================== the solver thread
@@ -323,6 +347,7 @@ void GRMGuitarProcessor::exportSong(const juce::File& file) {
 	exportThread = std::thread([this, parts, tempo, sd, file] {
 		juce::String result;
 		try {
+			if (parts.empty()) throw std::runtime_error("No audible guitars to export");
 			const double sr = 48000.0;
 			std::array<std::vector<double>, 2> mix;
 			for (const auto& part : parts) {
@@ -362,19 +387,25 @@ void GRMGuitarProcessor::exportSong(const juce::File& file) {
 			juce::AudioBuffer<float> buf(2, (int)mix[0].size());
 			for (int ch = 0; ch < 2; ++ch)
 				for (int t = 0; t < buf.getNumSamples(); ++t) buf.setSample(ch, t, (float)(mix[(size_t)ch][(size_t)t] / peak * 0.89));
-			juce::WavAudioFormat wav;
-			file.deleteFile();
-			std::unique_ptr<juce::OutputStream> stream(file.createOutputStream());
-			std::unique_ptr<juce::AudioFormatWriter> writer;
-			if (stream)
-				writer = wav.createWriterFor(stream, juce::AudioFormatWriterOptions{}.withSampleRate(sr).withNumChannels(2).withBitsPerSample(24));
-			if (writer && buf.getNumSamples() > 0) {
-				writer->writeFromAudioSampleBuffer(buf, 0, buf.getNumSamples());
-				result = "Exported " + file.getFileName();
+			juce::TemporaryFile temporary(file);
+			{
+				// Unbuffered writes also report short writes while finalizing the header.
+				juce::FileOutputStream output(temporary.getFile(), 0);
+				if (!output.openedOk()) throw std::runtime_error("Could not open temporary WAV");
+
+				bool writeFailed = false;
+				std::unique_ptr<juce::OutputStream> stream = std::make_unique<CheckedWavStream>(output, writeFailed);
+				juce::WavAudioFormat wav;
+				auto writer = wav.createWriterFor(stream, juce::AudioFormatWriterOptions{}.withSampleRate(sr).withNumChannels(2).withBitsPerSample(24));
+				if (!writer || !writer->writeFromAudioSampleBuffer(buf, 0, buf.getNumSamples()))
+					throw std::runtime_error("Could not write WAV data");
+
+				writer.reset();
+				output.flush();
+				if (writeFailed || output.getStatus().failed()) throw std::runtime_error("Could not finalize WAV data");
 			}
-			else {
-				result = "Could not write " + file.getFullPathName();
-			}
+			if (!temporary.overwriteTargetFileWithTemporary()) throw std::runtime_error("Could not replace destination WAV");
+			result = "Exported " + file.getFileName();
 		}
 		catch (const std::exception& ex) {
 			result = juce::String("Export failed: ") + ex.what();

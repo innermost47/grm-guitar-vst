@@ -87,6 +87,47 @@ int main(int argc, char** argv) {
         std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
         failures += ok ? 0 : 1;
     };
+    // Export over an existing file only after the replacement WAV has been written.
+    {
+        juce::TemporaryFile destination(".wav"), blocked(".wav");
+        GRMGuitarProcessor exporter;
+        const auto existing = destination.getFile();
+        check("create previous export", existing.replaceWithText("previous export"));
+        auto waitForExport = [&] {
+            const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+            while (exporter.isExporting() && std::chrono::steady_clock::now() < deadline)
+                std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            return !exporter.isExporting();
+        };
+
+        auto* mute = exporter.params.getParameter("mix_mute");
+        mute->setValueNotifyingHost(1.0f);
+        exporter.exportSong(existing);
+        check("muted export finishes and preserves previous bytes",
+              waitForExport() && existing.loadFileAsString() == "previous export"
+              && exporter.getStatus().startsWith("Export failed"));
+
+        grmg::Song song;
+        song.bars = 1;
+        song.notes.push_back({0, 0, 0.0, 1.0, 0.8});
+        exporter.setSong(song);
+        exporter.params.getParameter("sensor")->setValueNotifyingHost(1.0f); // Piezo, no convolution needed.
+        mute->setValueNotifyingHost(0.0f);
+        exporter.exportSong(existing);
+        check("successful export finishes", waitForExport());
+        std::unique_ptr<juce::AudioFormatReader> wavReader(wav.createReaderFor(existing.createInputStream().release(), true));
+        juce::AudioBuffer<float> exported(2, (int)sr);
+        check("successful export replaces the file with a readable stereo WAV",
+              wavReader && wavReader->numChannels == 2 && wavReader->bitsPerSample == 24 && wavReader->lengthInSamples >= exported.getNumSamples()
+              && wavReader->read(&exported, 0, exported.getNumSamples(), 0, true, true) && exported.getMagnitude(0, exported.getNumSamples()) > 0.1f);
+
+        const auto directory = blocked.getFile();
+        const auto marker = directory.getChildFile("keep.txt");
+        check("create a destination that cannot be replaced", directory.createDirectory().wasOk() && marker.replaceWithText("keep"));
+        exporter.exportSong(directory);
+        check("failed replacement preserves the destination",
+              waitForExport() && marker.loadFileAsString() == "keep" && exporter.getStatus().startsWith("Export failed"));
+    }
     auto* g = dynamic_cast<GRMGuitarProcessor*>(p);
     g->addPattern(false);                              // pattern 2: one low G, four beats
     grmg::Song two;
