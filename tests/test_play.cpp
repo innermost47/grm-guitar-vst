@@ -50,6 +50,43 @@ int main() {
         ok("palm lifted: palm-muted notes ring free", free);
     }
 
+    // ---- a quick solve may borrow the old palm, but the full solve must refresh it
+    {
+        auto checkRefresh = [&](const char* name, const Settings& settings) {
+            Model quick, full, fresh;
+            quick.solve(settings, sr, model.get(), false);
+            full.solve(settings, sr, &quick, true);
+            fresh.solve(settings, sr, nullptr, true);
+
+            bool matches = full.palm_ready && fresh.palm_ready;
+            for (int string = 0; string < NUM_STRINGS; ++string) {
+                for (int fret = 0; fret < NUM_FRETS; ++fret) {
+                    const auto& staged = full.palm[(size_t) string][(size_t) fret];
+                    const auto& direct = fresh.palm[(size_t) string][(size_t) fret];
+                    matches = matches && staged && direct && staged->sigma == direct->sigma && staged->ratio == direct->ratio;
+                }
+            }
+            ok(name, matches);
+        };
+
+        auto position = model->s;
+        position.palm_mm = 60.0;
+        checkRefresh("staged palm solve matches a fresh solve after moving the palm", position);
+        auto pressure = model->s;
+        pressure.palm_intensity = 0.3;
+        checkRefresh("staged palm solve matches a fresh solve after changing pressure", pressure);
+        auto tuning = model->s;
+        tuning.tuning = 2; // Drop D
+        checkRefresh("staged palm solve matches a fresh solve after retuning", tuning);
+
+        auto body = model->s;
+        body.body_size = 1.2;
+        Model quick, full;
+        quick.solve(body, sr, model.get(), false);
+        full.solve(body, sr, &quick, true);
+        ok("staged palm solve reuses the table after a body-only change", full.palm_ready && full.palm == model->palm);
+    }
+
     // ---- in a loop the hands lead from the end of the song into its start
     {
         Song song = Song::demo();

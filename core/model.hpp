@@ -117,6 +117,7 @@ public:
     std::vector<float> body_ir;
     std::array<std::vector<float>, 2> room_ir;                                  // left and right ear
     Room room;
+    Settings palm_settings;             // inputs that produced the palm table, including borrowed tables
     bool palm_ready = false;
     unsigned body_id = 0, room_id = 0;     // a new number each time an impulse response is computed again
 
@@ -256,8 +257,10 @@ public:
         }
         if (s.palm_intensity < PALM_OFF) {
             palm_ready = false;                      // the palm is lifted: nothing to solve
-        } else if (keep_strings && previous->palm_ready && same_palm(previous->s, s)) {
+        } else if (previous && previous->palm_ready && same_strings(previous->palm_settings, s)
+                   && same_palm(previous->palm_settings, s)) {
             palm = previous->palm;
+            palm_settings = previous->palm_settings;
             palm_ready = true;
         } else if (with_palm) {
             const auto [x, n] = palm_home();
@@ -267,9 +270,11 @@ public:
                     palm[(size_t) i][(size_t) f] =
                         std::make_shared<const Palm>(palm_network(sp.mu, sp.L, f, x, n, tension[(size_t) i]));
                 }
+            palm_settings = s;
             palm_ready = true;
         } else if (previous && previous->palm_ready && previous->s.palm_intensity >= PALM_OFF) {
             palm = previous->palm;                   // the old palm, until the new one is solved
+            palm_settings = previous->palm_settings;
             palm_ready = true;
         }
     }
