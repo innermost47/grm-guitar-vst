@@ -161,6 +161,7 @@ private:
     std::array<int, MAX_GUITARS> roomOf {};       // per guitar this block: its shared room, -1 none, -2 its own
 
     // mixer (audio thread)
+    const std::atomic<float>* const volumeParam = params.getRawParameterValue("volume");
     juce::SmoothedValue<float> volume;
     std::array<juce::SmoothedValue<float>, MAX_GUITARS> stripGain, stripPan;
     std::array<float, MAX_GUITARS + 1> limiterGain {};   // per output bus

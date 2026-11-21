@@ -532,6 +532,15 @@ void GRMGuitarProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
 		t.midi(msg);
 	}
 
+	// The room routing and the mixer use the same per-block control values.
+	std::array<GuitarTrack::MixerValues, MAX_GUITARS> mix{};
+	bool solo = false;
+	for (int g = 0; g < count; ++g) {
+		auto& values = mix[(size_t)g];
+		values = tracks[(size_t)g]->mixerValues();
+		solo |= values.solo;
+	}
+
 	// the rooms: guitars in the same room, going to the same output, share one (it costs as much as the strings)
 	for (auto& r : rooms) {
 		r.used = false;
@@ -544,7 +553,7 @@ void GRMGuitarProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
 		roomOf[(size_t)g] = -1;
 		const long key = t.roomKey();
 		if (key < 0) continue;
-		const int bus = t.param("mix_out") > 0.5f ? g + 1 : 0;
+		const int bus = mix[(size_t)g].ownOutput ? g + 1 : 0;
 		int slot = -1;
 		for (int k = 0; k < MAX_GUITARS && slot < 0; ++k)
 			if (rooms[(size_t)k].key == key && rooms[(size_t)k].bus == bus) slot = k;
@@ -584,8 +593,6 @@ void GRMGuitarProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
 
 	// ---------------------------------------------------------------- the mixer: each guitar to its output
 	for (int ch = 0; ch < buffer.getNumChannels(); ++ch) buffer.clear(ch, 0, n);
-	bool solo = false;
-	for (int g = 0; g < count; ++g) solo |= tracks[(size_t)g]->param("mix_solo") > 0.5f;
 	// an output the host enabled and gave channels for (a host may pass fewer channels than the layout says)
 	auto usable = [&](int b) {
 		auto* bus = getBus(false, b);
@@ -595,10 +602,11 @@ void GRMGuitarProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
 	auto mainBus = getBusBuffer(buffer, false, 0);
 	for (int g = 0; g < count; ++g) {
 		auto& t = *tracks[(size_t)g];
-		const bool silent = t.param("mix_mute") > 0.5f || (solo && t.param("mix_solo") < 0.5f);
-		stripGain[(size_t)g].setTargetValue(silent ? 0.0f : dbToGain(t.param("mix_gain")) * t.param("mix_level"));
-		stripPan[(size_t)g].setTargetValue(t.param("mix_pan"));
-		const bool own = t.param("mix_out") > 0.5f && usable(g + 1);
+		const auto& values = mix[(size_t)g];
+		const bool silent = values.mute || (solo && !values.solo);
+		stripGain[(size_t)g].setTargetValue(silent ? 0.0f : dbToGain(values.gainDb) * values.level);
+		stripPan[(size_t)g].setTargetValue(values.pan);
+		const bool own = values.ownOutput && usable(g + 1);
 		const int room = roomOf[(size_t)g];
 		juce::AudioBuffer<float> roomBuf;
 		if (room >= 0) roomBuf.setDataToReferTo(rooms[(size_t)room].buf.getArrayOfWritePointers(), 2, n);
@@ -632,7 +640,7 @@ void GRMGuitarProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
 	}
 	// the main output's volume, then a peak limiter on every output that only acts above LIMIT and lowers the gain
 	// smoothly instead of bending the wave
-	volume.setTargetValue(params.getRawParameterValue("volume")->load());
+	volume.setTargetValue(volumeParam->load());
 	for (int k = 0; k < n; ++k) {
 		const float v = volume.getNextValue();
 		for (int ch = 0; ch < mainBus.getNumChannels(); ++ch) mainBus.setSample(ch, k, mainBus.getSample(ch, k) * v);

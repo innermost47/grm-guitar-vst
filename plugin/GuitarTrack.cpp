@@ -11,12 +11,23 @@ double positive_mod(double x, double m) {
 }
 }  // namespace
 
-GuitarTrack::GuitarTrack(juce::AudioProcessorValueTreeState& s, int i) : index(i), state(s) {
+GuitarTrack::GuitarTrack(juce::AudioProcessorValueTreeState& s, int i)
+    : index(i), state(s),
+      mixParams {s.getRawParameterValue(paramId("mix_gain")), s.getRawParameterValue(paramId("mix_level")),
+                 s.getRawParameterValue(paramId("mix_pan")), s.getRawParameterValue(paramId("mix_mute")),
+                 s.getRawParameterValue(paramId("mix_solo")), s.getRawParameterValue(paramId("mix_out"))},
+      bodyAmount(s.getRawParameterValue(paramId("body_amount"))),
+      roomOn(s.getRawParameterValue(paramId("room_on"))) {
     if (i > 0) {
         grmg::Song empty;
         empty.bars = 4;
         patterns = {empty};
     }
+}
+
+GuitarTrack::MixerValues GuitarTrack::mixerValues() const {
+    return {mixParams.gainDb->load(), mixParams.level->load(), mixParams.pan->load(),
+            mixParams.mute->load() > 0.5f, mixParams.solo->load() > 0.5f, mixParams.ownOutput->load() > 0.5f};
 }
 
 grmg::Settings GuitarTrack::readSettings() const {
@@ -50,9 +61,9 @@ grmg::Settings GuitarTrack::readSettings() const {
     s.pickup_mm = std::round(v("pickup_mm"));
     s.pickup_type = juce::jlimit(0, 1, c("pickup_type"));
     s.cable_pf = std::round(v("cable_pf") / 10.0) * 10.0;
-    s.body_amount = v("body_amount");
+    s.body_amount = bodyAmount->load();
     s.sympathy = b("sympathy");
-    s.room_on = b("room_on");
+    s.room_on = roomOn->load() > 0.5f;
     s.room_size = juce::jlimit(0, 3, c("room_size"));
     s.room_material = juce::jlimit(0, 5, c("room_material"));
     s.room_distance = std::round(v("room_distance") * 10.0) / 10.0;
@@ -203,8 +214,7 @@ void GuitarTrack::solveStep(double sr, unsigned seed, double tempo, bool loop, s
     } else if (std::abs(model->s.string_age - s.string_age) > 1e-12 || std::abs(model->s.brightness - s.brightness) > 1e-12
                || model->s.sensor != s.sensor || std::abs(model->s.pickup_mm - s.pickup_mm) > 1e-9
                || model->s.pickup_type != s.pickup_type || std::abs(model->s.cable_pf - s.cable_pf) > 1e-9
-               || model->s.sympathy != s.sympathy || std::abs(model->s.body_amount - s.body_amount) > 1e-12
-               || model->s.room_on != s.room_on) {
+               || model->s.sympathy != s.sympathy) {
         // settings read when a note starts: a copy of the model carries them
         auto copy = std::make_shared<grmg::Model>(*model);
         copy->s.string_age = s.string_age;
@@ -216,8 +226,6 @@ void GuitarTrack::solveStep(double sr, unsigned seed, double tempo, bool loop, s
         copy->solve_pickup();
         copy->s.brightness = s.brightness;
         copy->s.sympathy = s.sympathy;
-        copy->s.body_amount = s.body_amount;
-        copy->s.room_on = s.room_on;
         model = copy;
         modelBox.post(makeHolder(copy));
         std::lock_guard<std::mutex> lock(shownLock);
@@ -391,7 +399,7 @@ void GuitarTrack::renderTo(int at, const SongClock& clock) {
 
 long GuitarTrack::roomKey() const {
     const auto* m = engine.model();
-    if (!m || !m->s.room_on || m->s.sensor != 0) return -1;
+    if (!m || roomOn->load() <= 0.5f || m->s.sensor != 0) return -1;
     return 1 + m->s.room_size + 4L * m->s.room_material + 24L * std::lround(m->s.room_distance * 10.0)
            + 24L * 1000L * std::lround(m->sample_rate);
 }
@@ -439,7 +447,7 @@ void GuitarTrack::finish(int n, double sr, bool ownRoom) {
         return;
     }
     // a microphone: the body, then the room
-    bodyMix.setTargetValue(model ? (float) model->s.body_amount : 0.85f);
+    bodyMix.setTargetValue(bodyAmount->load());
     out.copyFrom(0, 0, dry, 0, 0, n);
     {
         juce::dsp::AudioBlock<float> block(out.getArrayOfWritePointers(), 1, (size_t) n);
@@ -451,7 +459,7 @@ void GuitarTrack::finish(int n, double sr, bool ownRoom) {
         w0[t] = OUTPUT_SCALE * ((1.0f - a) * d[t] + a * w0[t]);
     }
     out.copyFrom(1, 0, out, 0, 0, n);
-    if (ownRoom && model && model->s.room_on && roomLoaded) {
+    if (ownRoom && roomLoaded) {
         juce::dsp::AudioBlock<float> block(out.getArrayOfWritePointers(), 2, (size_t) n);
         roomConv.process(juce::dsp::ProcessContextReplacing<float>(block));
     }

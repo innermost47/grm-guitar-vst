@@ -311,6 +311,36 @@ int main(int argc, char** argv) {
     a2->removeGuitar(0);
     check("removing guitar 1: guitar 2 becomes guitar 1", a2->getGuitarCount() == 1 && a2->guitar(0).getSong().notes.size() == 4
                                                               && a2->params.getRawParameterValue("mix_out")->load() > 0.5f);
+    // Advance a track's solver and audio handoff synchronously to test automation.
+    {
+        GRMGuitarProcessor fixture;
+        auto& track = fixture.guitar(0);
+        track.prepare(sr, block);
+        grmg::Song song;
+        song.notes.push_back({0, 0, 0.0, 1.0, 0.8});
+        track.setSong(song);
+        std::atomic<bool> solving {false};
+        std::atomic<int> stage {0};
+        auto solve = [&] {
+            track.solveStep(sr, 7, 90.0, false, solving, stage, [] { return false; });
+            track.begin(false, false);
+        };
+        solve();
+        const auto model = track.getShownModel();
+        const auto* performance = track.engine.performance();
+        check("mix automation starts with a compiled pattern and a room", model && performance && track.roomKey() >= 0);
+
+        fixture.params.getParameter("body_amount")->setValueNotifyingHost(0.2f);
+        solve();
+        check("body mix retains the solved model and compiled pattern",
+              track.getShownModel() == model && track.engine.performance() == performance);
+
+        fixture.params.getParameter("room_on")->setValueNotifyingHost(0.0f);
+        check("room automation takes effect without waiting for the solver", track.roomKey() < 0);
+        solve();
+        check("room toggle retains the solved model and compiled pattern",
+              track.getShownModel() == model && track.engine.performance() == performance);
+    }
     plugin->releaseResources();
     return finite && peak > 1e-3 && failures == 0 ? 0 : 1;
 }

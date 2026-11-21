@@ -54,6 +54,11 @@ public:
     juce::String paramId(const juce::String& id) const { return paramId(index, id); }
     float param(const char* id) const { return state.getRawParameterValue(paramId(id))->load(); }
     grmg::Settings readSettings() const;
+    struct MixerValues {
+        float gainDb, level, pan;
+        bool mute, solo, ownOutput;
+    };
+    MixerValues mixerValues() const;
 
     // ------------------------------------------------------------ patterns (message thread)
     grmg::Song getSong() const;                  // the pattern being edited
@@ -111,6 +116,11 @@ public:
 
 private:
     juce::AudioProcessorValueTreeState& state;
+    const struct {
+        const std::atomic<float> *gainDb, *level, *pan, *mute, *solo, *ownOutput;
+    } mixParams;
+    const std::atomic<float>* const bodyAmount;
+    const std::atomic<float>* const roomOn;
 
     // patterns, edited on the message thread, read by the solver
     mutable std::mutex songLock;
