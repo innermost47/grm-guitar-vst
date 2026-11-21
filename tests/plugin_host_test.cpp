@@ -163,6 +163,13 @@ int main(int argc, char** argv) {
     check("a key plays its pattern", held > 20 * quiet + 1e-5);
     check("the playing pattern is pattern 2", g->getPlayingPattern() == 1);
     run(0.1, [](juce::MidiBuffer& m, int pos) {
+        if (pos == 0) {
+            m.addEvent(juce::MidiMessage::noteOff(2, GRMGuitarProcessor::PATTERN_KEY + 1), 0);
+            m.addEvent(juce::MidiMessage::allSoundOff(2), 10);
+        }
+    });
+    check("another channel cannot release a held pattern", g->getPlayingPattern() == 1);
+    run(0.1, [](juce::MidiBuffer& m, int pos) {
         if (pos == 0) m.addEvent(juce::MidiMessage::noteOff(1, GRMGuitarProcessor::PATTERN_KEY + 1), 0);
     });
     check("releasing the key stops it", g->getPlayingPattern() == -1);
@@ -260,7 +267,38 @@ int main(int argc, char** argv) {
     }
     g->setSong(lead);
     run(4.0, none);                                    // the second guitar's networks
+    {
+        auto send = [&](const juce::MidiMessage& message) {
+            midi.clear();
+            midi.addEvent(message, 17);
+            plugin->processBlock(buf, midi);
+            midi.clear();
+        };
+        auto settle = [&] {
+            for (int i = 0; i < 150; ++i) plugin->processBlock(buf, midi);
+        };
+        g->params.getParameter("midi_strings")->setValueNotifyingHost(1.0f);
+        g->selectGuitar(0);
+        // The same E4 can be held on the first and second strings independently.
+        send(juce::MidiMessage::noteOn(1, 64, (juce::uint8) 100));
+        send(juce::MidiMessage::noteOn(2, 64, (juce::uint8) 100));
+        const auto& levels = g->guitar(0).engine.shown_level;
+        check("both channels play the same pitch on guitar 1", levels[5].load() > 0.01f && levels[4].load() > 0.01f);
+        g->selectGuitar(1);
+        send(juce::MidiMessage::noteOff(1, 64));
+        settle();
+        check("note-off follows the original guitar and string", levels[4].load() > 0.01f && levels[5].load() < 0.02f * levels[4].load());
+        send(juce::MidiMessage::allNotesOff(2));
+        settle();
+        check("all notes off follows the channel to the original guitar", levels[4].load() < 0.001f);
+        g->params.getParameter("midi_strings")->setValueNotifyingHost(0.0f);
+    }
     g->setInternalPlaying(true);
+    midi.addEvent(juce::MidiMessage::noteOn(1, 0, (juce::uint8) 100), block / 2); // Split rendering without sounding a string.
+    plugin->processBlock(buf, midi);
+    midi.clear();
+    check("MIDI dispatch advances the clock by exactly one block",
+          std::abs(g->getShownBeat() - block * g->getTempo() / (60.0 * sr)) < 1e-6);
     const double both = run(2.0, none);
     g->params.getParameter("mix_mute")->setValueNotifyingHost(1.0f);
     run(2.0, none);

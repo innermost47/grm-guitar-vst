@@ -13,6 +13,7 @@
 // responses from their networks (Model::body_ir, Model::room_ir), applied by a convolution after it.
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <cmath>
@@ -139,12 +140,18 @@ public:
         const int fret = midi - model_->open_midi(best);
         if (fret < 0 || fret >= NUM_FRETS) return;
         pluck_string(best, fret, velocity);
-        voices_[(size_t) best].note = midi;
+        auto& voice = voices_[(size_t) best];
+        voice.note = midi;
+        voice.note_channel = channel;
     }
-    void note_off(int midi) {
-        for (int i = 0; i < NUM_STRINGS; ++i)
-            if (voices_[(size_t) i].active && voices_[(size_t) i].note == midi) voices_[(size_t) i].damp();
+    bool holds_midi_note(int channel, int pitch) const {
+        return std::any_of(voices_.begin(), voices_.end(), [=](const auto& voice) { return voice.holds_midi_note(channel, pitch); });
     }
+    void note_off(int midi, int channel = 0) {
+        for (auto& voice : voices_)
+            if (voice.holds_midi_note(channel, midi)) voice.damp();
+    }
+    void note_off_channel(int channel) { note_off(-1, channel); }
     void all_off() {
         for (auto& v : voices_)
             if (v.active) v.damp();

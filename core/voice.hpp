@@ -52,6 +52,11 @@ public:
     bool active = false;
     Pluck what;
     int note = -1;          // MIDI note that holds it (live playing), -1 otherwise
+    int note_channel = 0;
+
+    bool holds_midi_note(int channel, int pitch) const {
+        return active && note >= 0 && (channel == 0 || note_channel == channel) && (pitch < 0 || note == pitch);
+    }
 
     // pickup_x > 0: a magnetic pickup listens at that distance from the saddle (render's `pickup` output)
     void start(const Pluck& p, const Body& body, const StringLosses& losses, double brightness, double sr,

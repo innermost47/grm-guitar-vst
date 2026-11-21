@@ -336,7 +336,24 @@ void GuitarTrack::pluckFromInterface(int string, int fret, float velocity) {
     else if (scope.blockSize2 > 0) uiPlucks[(size_t) scope.startIndex2] = {string, fret, velocity};
 }
 
+bool GuitarTrack::holdsMidiNote(int channel, int pitch) const {
+    if (keys && heldKey >= 0 && heldChannel == channel && (pitch < 0 || heldKey == pitch)) return true;
+    return engine.holds_midi_note(channel, pitch);
+}
+
 void GuitarTrack::midi(const juce::MidiMessage& msg) {
+    const int channel = msg.getChannel();
+    if (msg.isNoteOff()) {
+        const int pitch = msg.getNoteNumber();
+        if (heldChannel == channel && heldKey == pitch) heldKey = heldPattern = -1;
+        engine.note_off(pitch, channel);
+        return;
+    }
+    if (msg.isAllNotesOff() || msg.isAllSoundOff()) {
+        if (heldChannel == channel) releaseKeys();
+        engine.note_off_channel(channel);
+        return;
+    }
     if (keys) {
         // a key plays its pattern (its loop) from its start; another key takes over; releasing the key that holds
         // the pattern stops it (the hands stop the strings)
@@ -344,21 +361,15 @@ void GuitarTrack::midi(const juce::MidiMessage& msg) {
             const int k = msg.getNoteNumber() - PATTERN_KEY;
             if (perfSet && perfSet->at(k)) {
                 heldKey = msg.getNoteNumber();
+                heldChannel = channel;
                 heldPattern = k;
                 patternBeat = 0.0;
                 engine.set_performance(perfSet->at(k), true);     // the old pattern's notes end as they were asked
             }
-        } else if (msg.isNoteOff() && msg.getNoteNumber() == heldKey) {
-            heldKey = heldPattern = -1;
-        } else if (msg.isAllNotesOff() || msg.isAllSoundOff()) {
-            heldKey = heldPattern = -1;
-            engine.all_off();
         }
         return;
     }
-    if (msg.isNoteOn()) engine.note_on(msg.getNoteNumber(), msg.getFloatVelocity(), msg.getChannel());
-    else if (msg.isNoteOff()) engine.note_off(msg.getNoteNumber());
-    else if (msg.isAllNotesOff() || msg.isAllSoundOff()) engine.all_off();
+    if (msg.isNoteOn()) engine.note_on(msg.getNoteNumber(), msg.getFloatVelocity(), channel);
 }
 
 void GuitarTrack::releaseKeys() {

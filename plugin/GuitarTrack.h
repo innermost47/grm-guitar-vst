@@ -96,6 +96,8 @@ public:
     void begin(bool patternMode, bool internalPlaying);   // takes the newest networks and performances
     // MIDI for this guitar, at sample `at` of the block (render up to there first with renderTo)
     void midi(const juce::MidiMessage& msg);
+    // Use pitch -1 for a release of every held note on a channel.
+    bool holdsMidiNote(int channel, int pitch) const;
     void releaseKeys();                           // the host stopped: patterns held by keys stop too
     void renderTo(int at, const SongClock& clock);
     // body (and the room if ownRoom) or pickup: the stereo `out`, before the mixer. The plugin shares one room
@@ -159,7 +161,7 @@ private:
     juce::SmoothedValue<float> bodyMix;
     grmg::Biquad pickupFilter;
     double filterFr = -1.0, filterQ = -1.0;
-    int heldKey = -1, heldPattern = -1, shownPattern = -1;
+    int heldKey = -1, heldChannel = 0, heldPattern = -1, shownPattern = -1;
     double patternBeat = 0.0;
     int pos = 0;
 

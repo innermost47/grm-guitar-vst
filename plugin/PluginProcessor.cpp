@@ -498,38 +498,34 @@ void GRMGuitarProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
 		for (int g = 0; g < count; ++g) tracks[(size_t)g]->releaseKeys();
 	hostWasPlaying = hostNow;
 
-	// Suivi précis du nombre d'échantillons déjà rendus par guitare dans ce bloc
-	std::array<int, MAX_GUITARS> renderedSample{};
-
-	// Calcule la position temporelle exacte (beat) au début précis de chaque sous-tranche
-	auto clockForTrack = [&](int g) {
-		SongClock c = clock;
-		c.beat = clock.beat + (double)renderedSample[(size_t)g] * clock.beats_per_sample;
-		return c;
-		};
-
-	// where MIDI goes: by channel (channel k: guitar k), or to the selected guitar; in "Play patterns" a key starts
-	// its pattern on every guitar that has one (a scene), unless the channels choose the guitar
+	// Note-ons follow the configured route. Releases follow the notes that are still held.
 	const bool byChannel = params.getRawParameterValue("midi_route")->load() > 0.5f;
 	const int sel = juce::jlimit(0, count - 1, selected.load());
 	for (const auto meta : midi) {
 		const auto msg = meta.getMessage();
 		const int at = juce::jlimit(0, n, meta.samplePosition);
-		if (patternMode && !playingOwn && !byChannel) {
-			for (int g = 0; g < count; ++g) {
-				const int renderTarget = juce::jmax(renderedSample[(size_t)g], at);
-				tracks[(size_t)g]->renderTo(renderTarget, clockForTrack(g));
-				renderedSample[(size_t)g] = renderTarget;
-				tracks[(size_t)g]->midi(msg);
-			}
-			continue;
+		const int channel = msg.getChannel();
+		auto dispatch = [&](int g) {
+			auto& track = *tracks[(size_t)g];
+			track.renderTo(at, clock);
+			track.midi(msg);
+		};
+
+		if (msg.isNoteOff() || msg.isAllNotesOff() || msg.isAllSoundOff()) {
+			const int pitch = msg.isNoteOff() ? msg.getNoteNumber() : -1;
+			for (int g = 0; g < count; ++g)
+				if (tracks[(size_t)g]->holdsMidiNote(channel, pitch)) dispatch(g);
 		}
-		const int target = byChannel && msg.getChannel() >= 1 && msg.getChannel() <= count ? msg.getChannel() - 1 : sel;
-		auto& t = *tracks[(size_t)target];
-		const int renderTarget = juce::jmax(renderedSample[(size_t)target], at);
-		t.renderTo(renderTarget, clockForTrack(target));
-		renderedSample[(size_t)target] = renderTarget;
-		t.midi(msg);
+		else if (msg.isNoteOn()) {
+			if (patternMode && !playingOwn && !byChannel) {
+				// A pattern key launches the scene on every guitar equipped with that pattern.
+				for (int g = 0; g < count; ++g) dispatch(g);
+			}
+			else {
+				const int target = byChannel && channel >= 1 && channel <= count ? channel - 1 : sel;
+				dispatch(target);
+			}
+		}
 	}
 
 	// The room routing and the mixer use the same per-block control values.
@@ -576,8 +572,7 @@ void GRMGuitarProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
 	}
 
 	for (int g = 0; g < count; ++g) {
-		tracks[(size_t)g]->renderTo(n, clockForTrack(g));
-		renderedSample[(size_t)g] = n;
+		tracks[(size_t)g]->renderTo(n, clock);
 		tracks[(size_t)g]->finish(n, sr, roomOf[(size_t)g] == -2);
 	}
 	songBeat.store(clock.playing ? (clock.host ? clock.beat : clock.start + clock.beat) : -1.0);
