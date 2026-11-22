@@ -14,6 +14,7 @@ AGPL-3.0).
 ## Video demo
 
 [![Watch the GRM Guitar demo on YouTube](https://img.youtube.com/vi/PHgxrdl3X0Q/maxresdefault.jpg)](https://www.youtube.com/watch?v=PHgxrdl3X0Q)
+[![!With feedback larsen](https://img.youtube.com/vi/dbz1AT30W6M/maxresdefault.jpg)](https://www.youtube.com/watch?v=dbz1AT30W6M)
 
 ## The GRM family
 
@@ -52,6 +53,8 @@ the literature on guitars (string losses, wood, pickups, hands): see [Sources](#
 - **Room.** Reverberation by band, critical distance, image sources, a tail per ear. Guitars in the same room
   going to the same output share one room (it costs as much as the strings).
 - **Sympathetic strings.** The strings nobody plays answer the others through the bridge.
+- **Amplifier & Distortion.** A physical 12AX7 tube preamp circuit solved by the GRM network, featuring dynamic bias shift (sag) for organic attack compression, an interactive tone stack, and a dedicated 4x12 cabinet simulation to dial in everything from transparent crunch to crushing modern high-gain metal.
+- **Acoustic Feedback (Larsen).** Real-time closed-loop acoustic coupling between the virtual speaker and the strings. Sound travels through virtual air ($d/c$), exciting the string modes to create natural, self-sustaining singing feedback that responds dynamically to distance, palm mutes, and selectable harmonic targets.
 
 ## The player
 
