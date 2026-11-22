@@ -3,32 +3,34 @@
 cmake_minimum_required(VERSION 3.22)
 project(GRMGuitar VERSION 0.3.0 LANGUAGES C CXX)
 
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the build type" FORCE)
+endif()
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 option(GRMG_BUILD_PLUGIN "Build the JUCE plugin (downloads JUCE)" ON)
 option(GRMG_BUILD_TESTS "Build the tests and the offline renderer" OFF)
 
-# ---------------------------------------------------------------- the GRM core and the guitar engine (no JUCE)
 add_library(grm_core INTERFACE)
 target_include_directories(grm_core INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/core)
 
 if(GRMG_BUILD_TESTS)
     enable_testing()
-    add_executable(test_core tests/test_core.cpp )
+    add_executable(test_core tests/test_core.cpp)
     target_link_libraries(test_core PRIVATE grm_core)
     add_test(NAME grm_core_matches_python COMMAND test_core)
-    add_executable(test_physics tests/test_physics.cpp )
+    add_executable(test_physics tests/test_physics.cpp)
     target_link_libraries(test_physics PRIVATE grm_core)
     add_test(NAME guitar_physics_matches_python COMMAND test_physics)
-    add_executable(test_play tests/test_play.cpp )
+    add_executable(test_play tests/test_play.cpp)
     target_link_libraries(test_play PRIVATE grm_core)
     add_test(NAME guitar_playing COMMAND test_play)
-    add_executable(render_offline tests/render_offline.cpp )
+    add_executable(render_offline tests/render_offline.cpp)
     target_link_libraries(render_offline PRIVATE grm_core)
 endif()
 
-# ---------------------------------------------------------------- the plugin
 if(GRMG_BUILD_PLUGIN)
     include(FetchContent)
     set(FETCHCONTENT_QUIET OFF)
@@ -38,8 +40,6 @@ if(GRMG_BUILD_PLUGIN)
         GIT_SHALLOW ON)
     FetchContent_MakeAvailable(JUCE)
 
-    # The vendor is the one of Anthony's other plugins (the hosts list them together). The codes stay those of the
-    # first versions: a host knows a plugin by them, and changing them would lose every session made with it.
     set(PROJECT_VENDOR "InnerMost47")
     juce_add_plugin(GRMGuitar
         COMPANY_NAME ${PROJECT_VENDOR}
@@ -58,13 +58,40 @@ if(GRMG_BUILD_PLUGIN)
         plugin/PluginProcessor.cpp
         plugin/GuitarTrack.cpp
         plugin/PluginEditor.cpp
-        plugin/RollView.cpp )
+        plugin/RollView.cpp)
 
     target_compile_definitions(GRMGuitar PUBLIC
         JUCE_WEB_BROWSER=0
         JUCE_USE_CURL=0
         JUCE_VST3_CAN_REPLACE_VST2=0
         JUCE_DISPLAY_SPLASH_SCREEN=0)
+
+    target_compile_options(GRMGuitar PRIVATE
+        $<$<CXX_COMPILER_ID:GNU,Clang>:
+            $<$<CONFIG:Release>:
+                -O3
+                -ffast-math
+                -fno-finite-math-only
+                -fno-math-errno
+                -fno-trapping-math
+            >
+        >
+        $<$<CXX_COMPILER_ID:MSVC>:
+            $<$<CONFIG:Release>:
+                /O2
+                /fp:fast
+            >
+        >)
+
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
+        target_compile_options(GRMGuitar PRIVATE
+            $<$<CXX_COMPILER_ID:GNU,Clang>:
+                -march=x86-64-v3
+            >
+            $<$<CXX_COMPILER_ID:MSVC>:
+                /arch:AVX2
+            >)
+    endif()
 
     target_link_libraries(GRMGuitar
         PRIVATE
@@ -78,14 +105,13 @@ if(GRMG_BUILD_PLUGIN)
             juce::juce_recommended_warning_flags)
 
     if(GRMG_BUILD_TESTS)
-        # the plugin's own code, called as a host would, without a host
-        add_executable(plugin_host_test tests/plugin_host_test.cpp )
+        add_executable(plugin_host_test tests/plugin_host_test.cpp)
         target_link_libraries(plugin_host_test PRIVATE GRMGuitar juce::juce_audio_formats juce::juce_recommended_config_flags)
         target_compile_definitions(plugin_host_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
-        add_executable(plugin_cpu_test tests/plugin_cpu_test.cpp )
+        add_executable(plugin_cpu_test tests/plugin_cpu_test.cpp)
         target_link_libraries(plugin_cpu_test PRIVATE GRMGuitar juce::juce_audio_formats juce::juce_recommended_config_flags)
         target_compile_definitions(plugin_cpu_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
-        add_executable(editor_snapshot tests/editor_snapshot.cpp )
+        add_executable(editor_snapshot tests/editor_snapshot.cpp)
         target_link_libraries(editor_snapshot PRIVATE GRMGuitar juce::juce_audio_formats juce::juce_recommended_config_flags)
         target_compile_definitions(editor_snapshot PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
     endif()
