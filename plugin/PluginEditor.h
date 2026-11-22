@@ -79,6 +79,7 @@ private:
 	juce::AudioProcessorValueTreeState &state;
 	std::vector<Row> rows;
 	juce::String sensorId;
+	juce::Label warningLabel;
 	int lastSensor = -1;
 };
 

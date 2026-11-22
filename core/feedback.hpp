@@ -21,33 +21,33 @@ namespace grmg
 
 	enum class FeedbackTarget
 	{
-		Auto = 0,       // phase-constructive harmonic chosen naturally by the distance
-		Fundamental = 1,// 1st harmonic (f1)
-		Octave = 2,     // 2nd harmonic (2 * f1)
-		Fifth = 3,      // 3rd harmonic (3 * f1)
-		DoubleOctave = 4// 4th harmonic (4 * f1)
+		Auto = 0,		 // phase-constructive harmonic chosen naturally by the distance
+		Fundamental = 1, // 1st harmonic (f1)
+		Octave = 2,		 // 2nd harmonic (2 * f1)
+		Fifth = 3,		 // 3rd harmonic (3 * f1)
+		DoubleOctave = 4 // 4th harmonic (4 * f1)
 	};
 
 	struct FeedbackSpec
 	{
-		double amount = 0.0;          // feedback intensity (0.0: off, up to 1.0: screaming)
-		double distance = 1.0;        // distance from speaker to guitar (metres, 0.2 to 5.0)
-		int target = 0;               // 0: Auto, 1: Fundamental, 2: Octave, 3: Octave+5th, 4: 2nd Octave
+		double amount = 0.0;		  // feedback intensity (0.0: off, up to 1.0: screaming)
+		double distance = 1.0;		  // distance from speaker to guitar (metres, 0.2 to 5.0)
+		int target = 0;				  // 0: Auto, 1: Fundamental, 2: Octave, 3: Octave+5th, 4: 2nd Octave
 		double c_air = C_AIR_DEFAULT; // speed of sound (m/s)
 	};
 
 	struct FeedbackModel
 	{
-		double tau = 0.003;        // acoustic propagation delay (s)
-		double attenuation = 1.0;  // 1/d geometric sound pressure decay
-		double coupling = 0.0;     // effective loop gain
-		double target_freq = 0.0;  // Hz, bandpass filter center (0: wideband auto)
-		double target_q = 2.0;     // Q of harmonic targeting filter
+		double tau = 0.003;		  // acoustic propagation delay (s)
+		double attenuation = 1.0; // 1/d geometric sound pressure decay
+		double coupling = 0.0;	  // effective loop gain
+		double target_freq = 0.0; // Hz, bandpass filter center (0: wideband auto)
+		double target_q = 2.0;	  // Q of harmonic targeting filter
 		FeedbackSpec spec;
 	};
 
 	// ------------------------------------------------------------ GRM network solver
-	inline FeedbackModel feedback_network(const FeedbackSpec& spec, double string_f1 = 0.0)
+	inline FeedbackModel feedback_network(const FeedbackSpec &spec, double string_f1 = 0.0)
 	{
 		grm::Network net;
 
@@ -66,20 +66,18 @@ namespace grmg
 		const int iatt = net.index("att"), igain = net.index("gain"), ikappa = net.index("kappa");
 
 		// Acoustic propagation delay: tau * cair - d = 0
-		net.add_fn("propagation_delay", { "tau", "cair", "d" }, [=](const grm::Values& v) {
-			return v[itau] * v[icair] - v[id];
-			}, 1e-6);
+		net.add_fn("propagation_delay", {"tau", "cair", "d"}, [=](const grm::Values &v)
+				   { return v[itau] * v[icair] - v[id]; }, 1e-6);
 
 		// Spherical pressure attenuation: att * max(d, 0.3) - 1.0 = 0
-		net.add_fn("geometric_attenuation", { "att", "d" }, [=](const grm::Values& v) {
-			return v[iatt] * std::max(v[id], 0.3) - 1.0;
-			}, 1e-4);
+		net.add_fn("geometric_attenuation", {"att", "d"}, [=](const grm::Values &v)
+				   { return v[iatt] * std::max(v[id], 0.3) - 1.0; }, 1e-4);
 
 		// Effective coupling rate: kappa = gain * att * scale
-		net.add_fn("feedback_coupling", { "kappa", "gain", "att" }, [=](const grm::Values& v) {
+		net.add_fn("feedback_coupling", {"kappa", "gain", "att"}, [=](const grm::Values &v)
+				   {
 			const double expected = v[igain] * v[iatt] * 1.5;
-			return v[ikappa] - expected;
-			}, 1e-4);
+			return v[ikappa] - expected; }, 1e-4);
 
 		const auto r = net.solve({}, 25, 1e-3, 1e-12, false);
 
@@ -94,11 +92,21 @@ namespace grmg
 		{
 			switch (spec.target)
 			{
-			case 1: m.target_freq = string_f1; break;         // Fundamental
-			case 2: m.target_freq = 2.0 * string_f1; break;   // Octave
-			case 3: m.target_freq = 3.0 * string_f1; break;   // 12th / 5th
-			case 4: m.target_freq = 4.0 * string_f1; break;   // 2nd Octave
-			default: m.target_freq = 0.0; break;
+			case 1:
+				m.target_freq = string_f1;
+				break; // Fundamental
+			case 2:
+				m.target_freq = 2.0 * string_f1;
+				break; // Octave
+			case 3:
+				m.target_freq = 3.0 * string_f1;
+				break; // 12th / 5th
+			case 4:
+				m.target_freq = 4.0 * string_f1;
+				break; // 2nd Octave
+			default:
+				m.target_freq = 0.0;
+				break;
 			}
 			m.target_q = 3.5; // narrow resonance peak
 		}
@@ -124,7 +132,7 @@ namespace grmg
 			update_coefficients();
 		}
 
-		void set_model(const FeedbackModel& m)
+		void set_model(const FeedbackModel &m)
 		{
 			model_ = m;
 			update_coefficients();

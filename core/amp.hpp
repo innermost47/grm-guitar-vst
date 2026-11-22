@@ -43,6 +43,9 @@ namespace grmg
 		double Vk0 = 0.0;
 		double Vgk0 = 0.0;
 		double A0 = 0.0;
+		double Vdd_sag0 = 320.0;
+		double transformer_coupling = 0.9;
+		double output_makeup = 1.0;
 		double knee_pos = 1.0;
 		double knee_neg = 1.0;
 		double drive_scale = 1.0;
@@ -58,22 +61,37 @@ namespace grmg
 		net.add_node("Vdd", spec.Vdd, true, true);
 		net.add_node("Rp", spec.Rp, true, true);
 		net.add_node("Rk", spec.Rk, true, true);
+		net.add_node("R_supply", 2.5e3, true, true);
 		net.add_node("Ip", 0.0012, true, false);
 		net.add_node("Vp", 180.0, true, false);
 		net.add_node("Vk", 1.8, true, false);
 		net.add_node("Vgk", -1.8, true, false);
 		net.add_node("Vpk", 178.0, true, false);
 		net.add_node("A0", 55.0, true, false);
+		net.add_node("Vdd_sag", spec.Vdd * 0.9, true, false);
+		net.add_node("transformer_coupling", 0.85, true, false);
 
 		const int iVdd = net.index("Vdd"), iRp = net.index("Rp"), iRk = net.index("Rk");
+		const int iR_supply = net.index("R_supply"), iVdd_sag = net.index("Vdd_sag");
 		const int iIp = net.index("Ip"), iVp = net.index("Vp"), iVk = net.index("Vk");
 		const int iVgk = net.index("Vgk"), iVpk = net.index("Vpk"), iA0 = net.index("A0");
+		const int iTr = net.index("transformer_coupling");
 
-		net.add_fn("plate_kcl", {"Vp", "Ip", "Rp", "Vdd"}, [=](const grm::Values &v)
-				   { return (v[iVp] + v[iIp] * v[iRp] - v[iVdd]) / 10.0; }, 1e-5);
+		net.add_fn("plate_kcl", {"Vp", "Ip", "Rp", "Vdd_sag"}, [=](const grm::Values &v)
+				   { return (v[iVp] + v[iIp] * v[iRp] - v[iVdd_sag]) / 10.0; }, 1e-5);
 
 		net.add_fn("cathode_kcl", {"Vk", "Ip", "Rk"}, [=](const grm::Values &v)
 				   { return (v[iVk] - v[iIp] * v[iRk]) * 10.0; }, 1e-5);
+
+		net.add_fn("power_supply_sag", {"Vdd_sag", "Vdd", "R_supply", "Ip"}, [=](const grm::Values &v)
+				   { 
+					   const double total_Ip = v[iIp] * 4.0;
+					   return (v[iVdd_sag] - (v[iVdd] - v[iR_supply] * total_Ip)) / 10.0; }, 1e-5);
+
+		net.add_fn("transformer_warmth_rel", {"transformer_coupling", "A0"}, [=](const grm::Values &v)
+				   {
+					   const double expected_tr = 0.75 + 0.25 * std::tanh(v[iA0] / 40.0);
+					   return (v[iTr] - expected_tr) / 10.0; }, 1e-5);
 
 		net.add_sum("grid_bias", {{"Vgk", 1.0}, {"Vk", 1.0}}, 0.0, 1e-6);
 		net.add_sum("plate_cathode", {{"Vpk", 1.0}, {"Vp", -1.0}, {"Vk", 1.0}}, 0.0, 1e-6);
@@ -101,14 +119,18 @@ namespace grmg
 		m.Vk0 = r["Vk"];
 		m.Vgk0 = r["Vgk"];
 		m.A0 = r["A0"];
+		m.Vdd_sag0 = r["Vdd_sag"];
+		m.transformer_coupling = r["transformer_coupling"];
 
-		const double headroom_cutoff = std::max(spec.Vdd - m.Vp0, 10.0);
+		m.output_makeup = 1.2 + static_cast<double>(spec.stages) * 0.2 * std::log10(std::max(m.A0, 10.0));
+
+		const double headroom_cutoff = std::max(m.Vdd_sag0 - m.Vp0, 10.0);
 		const double headroom_sat = std::max(m.Vp0 - V_SAT_TRIODE, 10.0);
 		m.knee_neg = headroom_cutoff / std::max(m.A0, 1.0);
 		m.knee_pos = headroom_sat / std::max(m.A0, 1.0);
 
-		const double drive_factor = std::pow(10.0, (spec.gain - 3.5) * 0.35);
-		m.drive_scale = drive_factor * (m.A0 / 22.0);
+		const double drive_factor = std::pow(10.0, (spec.gain - 3.5) * 0.20);
+		m.drive_scale = drive_factor * (m.A0 / 30.0);
 
 		m.sag_tau_charge = 0.001;
 		m.sag_tau_leak = 0.060 + (1.0 - spec.gain / 10.0) * 0.040;
@@ -225,6 +247,8 @@ namespace grmg
 			bias_shift_.fill(0.0);
 			miller_state_.fill(0.0);
 			interstage_hp_.fill(0.0);
+			sag_envelope_ = 0.0;
+			limiter_env_ = 0.0;
 
 			pre_lp_state_ = 0.0;
 			pre_hp_state_ = 0.0;
@@ -261,10 +285,11 @@ namespace grmg
 			const double drive = model_.drive_scale;
 			const double master = model_.spec.master * 4.8;
 			const int stages = std::clamp(model_.spec.stages, 1, 4);
-			const double input_boost = 4.2;
-			const double inter_stage_drive = 1.15 + (model_.spec.gain / 10.0) * 0.9;
+			const double input_boost = 1.8;
+			const double inter_stage_drive = 1.05 + (model_.spec.gain / 10.0) * 0.4;
 			const bool use_tight = model_.spec.tight;
 			const bool use_ts = model_.spec.ts_boost;
+			const double warmth_factor = model_.transformer_coupling;
 
 			for (int i = 0; i < num_samples; ++i)
 			{
@@ -288,14 +313,17 @@ namespace grmg
 				{
 					double s = os[k] * drive * input_boost;
 
+					sag_envelope_ += sag_charge_coef_ * (std::abs(s) - sag_envelope_);
+					const double sag_compression = 1.0 - std::min(0.15, sag_envelope_ * model_.spec.sag_amount * 0.05);
+
 					for (int st = 0; st < stages; ++st)
 					{
 						if (st > 0)
-							s *= inter_stage_drive;
-						s = process_triode_stage(s, st);
+							s *= inter_stage_drive * sag_compression;
+						s = process_triode_stage(s, st, sag_compression, warmth_factor);
 					}
 
-					s = final_saturation(s);
+					s = final_saturation(s, sag_compression, warmth_factor);
 
 					os_lp_state_ += os_lp_coef_ * (s - os_lp_state_);
 					os[k] = os_lp_state_;
@@ -309,10 +337,34 @@ namespace grmg
 				y = process_cab_sim(y);
 
 				dc_blocker_ += 0.005 * (y - dc_blocker_);
-				y = (y - dc_blocker_) * master;
+				y = y - dc_blocker_;
 
-				if (std::abs(y) > 1.0)
-					y = std::tanh(y);
+				y = y * master * model_.output_makeup;
+
+				const double current_peak = std::abs(y);
+				const double attack = 0.02;
+				const double release = 0.005;
+
+				if (current_peak > limiter_env_)
+				{
+					limiter_env_ += attack * (current_peak - limiter_env_);
+				}
+				else
+				{
+					limiter_env_ += release * (current_peak - limiter_env_);
+				}
+
+				const double threshold = 1.8;
+				double gain_reduction = 1.0;
+
+				if (limiter_env_ > threshold)
+				{
+					gain_reduction = threshold / limiter_env_;
+				}
+
+				y = y * gain_reduction;
+
+				y = std::tanh(y);
 
 				buffer[i] = static_cast<float>(y);
 			}
@@ -333,6 +385,8 @@ namespace grmg
 		double sag_leak_coef_ = 0.0;
 		double interstage_hp_coef_ = 0.0;
 		double ts_hp_a_ = 0.0;
+		double sag_envelope_ = 0.0;
+		double limiter_env_ = 0.0;
 
 		double pre_hp_coef_ = 0.0;
 		double pre_lp_coef_ = 0.0;
@@ -414,36 +468,37 @@ namespace grmg
 			return biased_tanh(x_hp, K, B) + 0.08 * x_hp;
 		}
 
-		inline double process_triode_stage(double in, int st) noexcept
+		inline double process_triode_stage(double in, int st, double sag_comp, double warmth) noexcept
 		{
 			constexpr double TWOPI = 2.0 * PI;
-			constexpr double ASYM = 0.18;
+			const double ASYM = 0.15 * warmth;
 
 			const double miller_w = TWOPI * 6200.0 / os_sr_;
 			const double miller_c = std::min(0.6, miller_w / (1.0 + std::abs(in) * 0.8));
 			miller_state_[st] += miller_c * (in - miller_state_[st]);
 			in = miller_state_[st];
 
-			constexpr double GRID_KNEE = 0.85;
+			constexpr double GRID_KNEE = 1.2;
 			if (in > GRID_KNEE)
 			{
 				const double e = in - GRID_KNEE;
-				in = GRID_KNEE + e / (1.0 + e);
+				in = GRID_KNEE + e / (1.0 + e * 0.5);
 			}
 
 			double &bias = bias_shift_[st];
 			const double v_grid = in - bias;
 
 			if (v_grid > 0.0)
-				bias += v_grid * sag_charge_coef_ * model_.spec.sag_amount;
+				bias += v_grid * sag_charge_coef_ * model_.spec.sag_amount * 0.5;
 			else
 				bias -= bias * sag_leak_coef_;
 
-			bias = std::clamp(bias, 0.0, 2.0);
+			bias = std::clamp(bias, 0.0, 1.5);
 
 			const double x = in - bias;
-			const double kp = model_.knee_pos;
-			const double kn = model_.knee_neg;
+
+			const double kp = model_.knee_pos * sag_comp * 1.5;
+			const double kn = model_.knee_neg * sag_comp * 1.5;
 
 			const double xb = x + ASYM;
 
@@ -462,14 +517,17 @@ namespace grmg
 			return y;
 		}
 
-		inline double final_saturation(double x) const noexcept
+		inline double final_saturation(double x, double sag_comp, double warmth) const noexcept
 		{
-			constexpr double pos = 0.85;
-			constexpr double neg = 1.30;
-			if (x >= 0.0)
-				return pos * std::tanh(x / pos);
+			constexpr double pos = 1.2;
+			constexpr double neg = 1.5;
+
+			const double warmed = x + 0.03 * (x * x) * warmth;
+
+			if (warmed >= 0.0)
+				return (pos * sag_comp) * std::tanh(warmed / (pos * sag_comp));
 			else
-				return -neg * std::tanh(-x / neg);
+				return -(neg * sag_comp) * std::tanh(-warmed / (neg * sag_comp));
 		}
 
 		inline void upsample4x(double in, double out[4]) noexcept
