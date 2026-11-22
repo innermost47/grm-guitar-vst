@@ -7,7 +7,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 option(GRMG_BUILD_PLUGIN "Build the JUCE plugin (downloads JUCE)" ON)
-option(GRMG_BUILD_TESTS "Build the tests and the offline renderer" ON)
+option(GRMG_BUILD_TESTS "Build the tests and the offline renderer" OFF)
 
 # ---------------------------------------------------------------- the GRM core and the guitar engine (no JUCE)
 add_library(grm_core INTERFACE)

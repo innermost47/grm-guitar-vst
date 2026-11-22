@@ -37,8 +37,11 @@ the literature on guitars (string losses, wood, pickups, hands): see [Sources](#
   50). **Wood**: 8 species with their density and stiffness (Wood Handbook), and the piece's density against its
   species' average. **Body: solid to hollow**: from a flat-top acoustic to a solid body (no cavity, a 44.5 mm slab).
 - **Sensor.** A **microphone** (body and room), a **magnetic pickup** (the string's velocity where the pickup sits,
-  through the coil, the cable and the volume pot: a 1970s single coil or a hotter one, measured values) or a
-  **piezo** under the saddle (the force on the bridge).
+  through the coil, the cable and the volume pot: a 1970s single coil or a hotter one, measured values), **three
+  magnetic pickups (HSS)** — bridge, middle and neck, each with its own on/off switch, the bridge splittable from
+  humbucker to single coil, the cable shared by all three, each through its own coil and load then mixed: every
+  classic selector position, from the bridge alone to the neck alone and back through the in-between combinations
+  — or a **piezo** under the saddle (the force on the bridge).
 - **Room.** Reverberation by band, critical distance, image sources, a tail per ear. Guitars in the same room
   going to the same output share one room (it costs as much as the strings).
 - **Sympathetic strings.** The strings nobody plays answer the others through the bridge.
@@ -112,7 +115,7 @@ Up to 8 guitars in one plugin, each with its own settings, patterns, player and 
 
 - `core/grm.hpp`: the GRM engine in C++ (header only), the algorithm of grm-core and pygrm.
 - `core/guitar_networks.hpp`, `core/physics.hpp`: the networks (strings and their losses, attack, palm, body,
-  pickup, room, fingers, player, strums).
+  pickup (one, or three for the HSS set), room, fingers, player, strums).
 - `core/model.hpp`: everything the networks give for the current settings, solved off the audio thread.
 - `core/song.hpp`, `core/chords.hpp`, `core/ringing.hpp`, `core/playability.hpp`: the roll, the chords and scales,
   how long notes ring, the hands.
@@ -165,7 +168,8 @@ Validation: [pluginval](https://github.com/Tracktion/pluginval), `pluginval --st
 - The body has seven modes below about 1.4 kHz: its resonances stand out more than on a real guitar, whose modes
   get denser up high (moving the body settings changes the "vowel" more than a real guitar would).
 - Some chord shapes chosen by the hand network are unusual (they are playable; edit them in the roll).
-- The magnetic pickup listens at one point (the width of its magnetic window is not modelled yet).
+- A magnetic pickup listens at one point (the width of its magnetic window is not modelled yet); the HSS set uses
+  three fixed positions (65 mm, 160 mm, 255 mm from the saddle) and the three pickups share one cable capacitance.
 - On a solid body, a real low E fundamental may ring longer than the measured string losses give here (Zollner's
   measurements on electric guitars): to be checked.
 - Live MIDI playing has no finger noises (they are computed for the roll).
