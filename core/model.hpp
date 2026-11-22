@@ -41,12 +41,12 @@ namespace grmg
 		{0.648, 0.0006834364, 70.0, false},
 		{0.648, 0.0003835658, 70.0, false},
 	};
-	constexpr const char* STRING_NAMES[NUM_STRINGS] = { "E2", "A2", "D3", "G3", "B3", "E4" };
+	constexpr const char *STRING_NAMES[NUM_STRINGS] = {"E2", "A2", "D3", "G3", "B3", "E4"};
 
 	// tunings: MIDI note of each open string, from string 6 to string 1
 	struct Tuning
 	{
-		const char* name;
+		const char *name;
 		int midi[NUM_STRINGS];
 	};
 	constexpr Tuning TUNINGS[] = {
@@ -62,44 +62,42 @@ namespace grmg
 	inline double midi_hz(int note) { return 440.0 * std::pow(2.0, (note - 69) / 12.0); }
 
 	// below this palm pressure the palm is lifted: palm-muted notes ring free
-	constexpr double PALM_OFF = 0.005; // below: the palm does not touch the strings (above, a touch that grows)
+	constexpr double PALM_OFF = 0.005;
 
 	// The settings of the sound, as the Python app has them (same names, same defaults)
 	struct Settings
 	{
 		// strings
 		int tuning = 0;
-		double core = 0.45;      // steel core share of the wound strings
-		bool stiff = true;       // inharmonicity from the stiffness network
-		double string_age = 0.0; // 0 new strings, 1 played strings (the losses network, Woodhouse 2012)
+		double core = 0.45;
+		bool stiff = true;
+		double string_age = 0.0;
 		double brightness = 0.6;
 		// attack
 		bool pick = true;
-		double pluck = 0.22; // pluck point, share of the vibrating length
-		double force = 2.0;  // N
+		double pluck = 0.22;
+		double force = 2.0;
 		double pick_mm = 0.71;
 		// palm
 		double palm_mm = PALM_X * 1000;
-		double palm_intensity = 1.0; // 0 (below PALM_OFF): the palm does not touch the strings at all
+		double palm_intensity = 1.0;
 		// body
 		double body_size = 1.0, top_mm = 2.8, coupling = 0.35, body_amount = 0.85;
-		double braces_g = BRACES_KG * 1000; // braces under the top (with the bridge: the top's own load)
-		double body_q = BODY_Q;             // how long the body's modes ring (Q of each mode)
-		int wood = 0;                       // WOODS: the top's (or the solid body's) wood
-		double density_pct = 0.0;           // the piece of wood against its species' average density (%)
-		double hollow = 1.0;                // 1 a hollow acoustic body, 0 a solid body
+		double braces_g = BRACES_KG * 1000;
+		double body_q = BODY_Q;
+		int wood = 0;
+		double density_pct = 0.0;
+		double hollow = 1.0;
 		// what listens to the guitar
-		int sensor = 0;           // 0 microphone, 1 one magnetic pickup, 2 piezo, 3 three magnetic pickups (HSS)
-		double pickup_mm = 100.0; // sensor 1: distance from the saddle
-		int pickup_type = 0;      // sensor 1: index in PICKUP_TYPES
-		double cable_pf = 500.0;  // cable capacitance (shared by every pickup)
-		// sensor 3: three pickups (bridge / middle / neck), each with its own switch; the bridge may be
-		// a humbucker or split to a single coil
+		int sensor = 0;
+		double pickup_mm = 100.0;
+		int pickup_type = 0;
+		double cable_pf = 500.0;
 		bool pickup_bridge_on = true;
 		bool pickup_middle_on = false;
 		bool pickup_neck_on = false;
-		bool pickup_bridge_split = false; // true: the bridge plays as a single coil
-		int pickup_bridge_type = 1;       // PICKUP_TYPES: humbucker-like by default
+		bool pickup_bridge_split = false;
+		int pickup_bridge_type = 1;
 		int pickup_middle_type = 0;
 		int pickup_neck_type = 0;
 		bool sympathy = true;
@@ -109,10 +107,10 @@ namespace grmg
 		double room_distance = 1.0;
 		// player
 		bool human = true;
-		double human_amount = 1.0; // how loose the player is (scales every imprecision of the player network; 1: its default)
+		double human_amount = 1.0;
 		double swing_cm = SWING * 100;
 		bool finger_noises = true;
-		double finger_force = 0.6; // N, pressure of a finger sliding on a string
+		double finger_force = 0.6;
 		// amplifier, distortion & feedback
 		double feedback_amount = 0.0;
 		double feedback_distance = 1.0;
@@ -120,30 +118,19 @@ namespace grmg
 		bool amp_on = false;
 		AmpSpec amp = amp_preset_5150_lead();
 
-		bool is_magnetic_pickup() const
-		{
-			return sensor == 1 || sensor == 3;
-		}
-
-		bool amp_active() const
-		{
-			return amp_on && is_magnetic_pickup();
-		}
+		bool is_magnetic_pickup() const { return sensor == 1 || sensor == 3; }
+		bool amp_active() const { return amp_on && is_magnetic_pickup(); }
 	};
 
-	// What the networks give for one string at one fret
 	struct Place
 	{
 		double f1 = 0, B = 0, T = 0, Leff = 0, c = 0, Zs = 0;
 	};
 
-	// The losses of one string (string_losses_network): the decay rate of each partial, from the string itself and
-	// the air around it (the bridge and the palm add theirs)
 	struct StringLosses
 	{
 		double etaF = 0, etaA = 0, etaB = 0;
-		double legacy = 0; // > 0: the curve of the Python app, (1 + (f / 1800)^2) / legacy (parity tests only)
-		// s^-1, partial n at frequency f of a string of inharmonicity B
+		double legacy = 0;
 		double sigma(double f, int n, double B) const
 		{
 			if (legacy > 0)
@@ -158,87 +145,112 @@ namespace grmg
 	public:
 		Settings s;
 		double sample_rate = 48000.0;
-		std::array<double, NUM_STRINGS> tension{}; // N, from the tuning network
+		std::array<double, NUM_STRINGS> tension{};
 		std::array<std::array<Place, NUM_FRETS>, NUM_STRINGS> place{};
 		std::array<StringLosses, NUM_STRINGS> losses{};
-		std::array<std::array<double, NUM_FRETS>, NUM_STRINGS> y0{}, tau{}; // attack at the set force
+		std::array<std::array<double, NUM_FRETS>, NUM_STRINGS> y0{}, tau{};
 		std::array<std::array<std::shared_ptr<const Palm>, NUM_FRETS>, NUM_STRINGS> palm{};
 		std::array<Action, NUM_FRETS> action{};
 		Body body;
 		std::vector<float> body_ir;
-		std::array<std::vector<float>, 2> room_ir; // left and right ear
+		std::array<std::vector<float>, 2> room_ir;
 		Room room;
-		Settings palm_settings; // inputs that produced the palm table, including borrowed tables
+		Settings palm_settings;
 		bool palm_ready = false;
-		unsigned body_id = 0, room_id = 0; // a new number each time an impulse response is computed again
+		unsigned body_id = 0, room_id = 0;
 
-		// Amplifier and acoustic feedback models
 		AmpModel amp;
 		bool amp_active = false;
 		FeedbackModel feedback;
 
 		static unsigned next_id()
 		{
-			static std::atomic<unsigned> counter{ 0 };
+			static std::atomic<unsigned> counter{0};
 			return ++counter;
 		}
 
 		int open_midi(int i) const { return TUNINGS[s.tuning].midi[i]; }
 		double core_fraction(int i) const { return STRING_SPECS[i].wound ? s.core : 1.0; }
 
-		// the parts of a model depend on different settings: a new model keeps what it can of the previous one
-		static bool same_strings(const Settings& a, const Settings& b)
+		static bool same_strings(const Settings &a, const Settings &b)
 		{
 			return a.tuning == b.tuning && std::abs(a.core - b.core) < 1e-12 && a.stiff == b.stiff;
 		}
-		static bool same_attack(const Settings& a, const Settings& b)
+		static bool same_attack(const Settings &a, const Settings &b)
 		{
-			return a.pick == b.pick && std::abs(a.pluck - b.pluck) < 1e-12 && std::abs(a.force - b.force) < 1e-12 && std::abs(a.pick_mm - b.pick_mm) < 1e-12;
+			return a.pick == b.pick && std::abs(a.pluck - b.pluck) < 1e-12 &&
+				   std::abs(a.force - b.force) < 1e-12 && std::abs(a.pick_mm - b.pick_mm) < 1e-12;
 		}
-		static bool same_palm(const Settings& a, const Settings& b)
+		static bool same_palm(const Settings &a, const Settings &b)
 		{
 			return std::abs(a.palm_mm - b.palm_mm) < 1e-9 && std::abs(a.palm_intensity - b.palm_intensity) < 1e-9;
 		}
-		static bool same_body(const Settings& a, const Settings& b)
+		static bool same_body(const Settings &a, const Settings &b)
 		{
-			return std::abs(a.body_size - b.body_size) < 1e-12 && std::abs(a.top_mm - b.top_mm) < 1e-12 && std::abs(a.coupling - b.coupling) < 1e-12 && std::abs(a.braces_g - b.braces_g) < 1e-9 && std::abs(a.body_q - b.body_q) < 1e-9 && a.wood == b.wood && std::abs(a.density_pct - b.density_pct) < 1e-9 && std::abs(a.hollow - b.hollow) < 1e-9;
+			return std::abs(a.body_size - b.body_size) < 1e-12 && std::abs(a.top_mm - b.top_mm) < 1e-12 &&
+				   std::abs(a.coupling - b.coupling) < 1e-12 && std::abs(a.braces_g - b.braces_g) < 1e-9 &&
+				   std::abs(a.body_q - b.body_q) < 1e-9 && a.wood == b.wood &&
+				   std::abs(a.density_pct - b.density_pct) < 1e-9 && std::abs(a.hollow - b.hollow) < 1e-9;
 		}
-		static bool same_room(const Settings& a, const Settings& b)
+		static bool same_room(const Settings &a, const Settings &b)
 		{
-			return a.room_size == b.room_size && a.room_material == b.room_material && std::abs(a.room_distance - b.room_distance) < 1e-9;
+			return a.room_size == b.room_size && a.room_material == b.room_material &&
+				   std::abs(a.room_distance - b.room_distance) < 1e-9;
 		}
-		static bool same_pickups(const Settings& a, const Settings& b)
+		static bool same_pickups(const Settings &a, const Settings &b)
 		{
-			return a.sensor == b.sensor && std::abs(a.pickup_mm - b.pickup_mm) < 1e-9 && a.pickup_type == b.pickup_type && std::abs(a.cable_pf - b.cable_pf) < 1e-9 && a.pickup_bridge_on == b.pickup_bridge_on && a.pickup_middle_on == b.pickup_middle_on && a.pickup_neck_on == b.pickup_neck_on && a.pickup_bridge_split == b.pickup_bridge_split && a.pickup_bridge_type == b.pickup_bridge_type && a.pickup_middle_type == b.pickup_middle_type && a.pickup_neck_type == b.pickup_neck_type;
-		}
-		static bool same_amp(const Settings& a, const Settings& b)
-		{
-			if (a.amp_on != b.amp_on) return false;
-			if (!a.amp_on) return true;
-			return std::abs(a.amp.gain - b.amp.gain) < 1e-4 &&
-				std::abs(a.amp.master - b.amp.master) < 1e-4 &&
-				std::abs(a.amp.bass - b.amp.bass) < 1e-4 &&
-				std::abs(a.amp.middle - b.amp.middle) < 1e-4 &&
-				std::abs(a.amp.treble - b.amp.treble) < 1e-4 &&
-				std::abs(a.amp.presence - b.amp.presence) < 1e-4 &&
-				a.amp.tight == b.amp.tight &&
-				a.amp.stages == b.amp.stages &&
-				std::abs(a.amp.Vdd - b.amp.Vdd) < 1e-4;
-		}
-		static bool same_feedback(const Settings& a, const Settings& b)
-		{
-			return std::abs(a.feedback_amount - b.feedback_amount) < 1e-4 &&
-				std::abs(a.feedback_distance - b.feedback_distance) < 1e-4 &&
-				a.feedback_target == b.feedback_target;
+			return a.sensor == b.sensor && std::abs(a.pickup_mm - b.pickup_mm) < 1e-9 &&
+				   a.pickup_type == b.pickup_type && std::abs(a.cable_pf - b.cable_pf) < 1e-9 &&
+				   a.pickup_bridge_on == b.pickup_bridge_on && a.pickup_middle_on == b.pickup_middle_on &&
+				   a.pickup_neck_on == b.pickup_neck_on && a.pickup_bridge_split == b.pickup_bridge_split &&
+				   a.pickup_bridge_type == b.pickup_bridge_type && a.pickup_middle_type == b.pickup_middle_type &&
+				   a.pickup_neck_type == b.pickup_neck_type;
 		}
 
-		// the palm the player chooses: where (from the saddle) and how hard, snapped like the hand of a player
-		// (3 mm, 0.15 dex), as palm_model in grm_guitar.py
+		// What forces the GRM to be re-solved (expensive, ~40 Newton steps on a 9x9 system).
+		// Only what enters the DC operating point: the rail, the plate/cathode resistors, the gain
+		// (the gain moves drive_scale and the sag time constant, both derived from the solve).
+		static bool same_amp_dc(const Settings &a, const Settings &b)
+		{
+			return std::abs(a.amp.Vdd - b.amp.Vdd) < 1e-4 &&
+				   std::abs(a.amp.Rp - b.amp.Rp) < 1e-4 &&
+				   std::abs(a.amp.Rk - b.amp.Rk) < 1e-4 &&
+				   std::abs(a.amp.gain - b.amp.gain) < 1e-4;
+		}
+
+		// What only needs the freshly solved AmpModel to be *published* with a new
+		// `spec` (cheap � just recopies the tone knobs into the model the audio
+		// thread reads; `AmpProcessor::update_coefficients()` then rebuilds the
+		// biquads and the sag coefficients from it).
+		static bool same_amp_params(const Settings &a, const Settings &b)
+		{
+			if (a.amp_on != b.amp_on)
+				return false;
+			if (!a.amp_on)
+				return true;
+			return std::abs(a.amp.master - b.amp.master) < 1e-4 &&
+				   std::abs(a.amp.bass - b.amp.bass) < 1e-4 &&
+				   std::abs(a.amp.middle - b.amp.middle) < 1e-4 &&
+				   std::abs(a.amp.treble - b.amp.treble) < 1e-4 &&
+				   std::abs(a.amp.presence - b.amp.presence) < 1e-4 &&
+				   std::abs(a.amp.sag_amount - b.amp.sag_amount) < 1e-4 &&
+				   a.amp.tight == b.amp.tight &&
+				   a.amp.ts_boost == b.amp.ts_boost &&
+				   a.amp.stages == b.amp.stages;
+		}
+
+		static bool same_feedback(const Settings &a, const Settings &b)
+		{
+			return std::abs(a.feedback_amount - b.feedback_amount) < 1e-4 &&
+				   std::abs(a.feedback_distance - b.feedback_distance) < 1e-4 &&
+				   a.feedback_target == b.feedback_target;
+		}
+
 		static std::pair<double, double> palm_snap(double x, double force)
 		{
 			const double xs = std::max(0.002, std::round(x * 333.3) / 333.3);
-			const double fs = std::pow(10.0, std::round(std::log10(std::max(force, 1e-3)) / 0.05) * 0.05); // 12 % steps
-			return { xs, fs };
+			const double fs = std::pow(10.0, std::round(std::log10(std::max(force, 1e-3)) / 0.05) * 0.05);
+			return {xs, fs};
 		}
 		std::pair<double, double> palm_home() const
 		{
@@ -253,16 +265,15 @@ namespace grmg
 			b.coupling = s.coupling;
 			b.braces_kg = s.braces_g / 1000.0;
 			b.q = s.body_q;
-			const auto& w = WOODS[std::min(std::max(s.wood, 0), NUM_WOODS - 1)];
+			const auto &w = WOODS[std::min(std::max(s.wood, 0), NUM_WOODS - 1)];
 			b.rho = w.rho * (1.0 + s.density_pct / 100.0);
 			b.E = w.E;
 			b.hollow = s.hollow;
 			return b;
 		}
 
-		// the pickup's circuit (cheap: solved again with the strings' losses)
-		PickupCircuit pickup;                   // sensor 1
-		std::array<PickupCircuit, 3> pickup3{}; // sensor 3
+		PickupCircuit pickup;
+		std::array<PickupCircuit, 3> pickup3{};
 		std::array<bool, 3> pickup3_on{};
 
 		void solve_pickup()
@@ -277,38 +288,33 @@ namespace grmg
 				pickup3[0] = pickup_network(bridge_type, s.cable_pf);
 				pickup3[1] = pickup_network(s.pickup_middle_type, s.cable_pf);
 				pickup3[2] = pickup_network(s.pickup_neck_type, s.cable_pf);
-				pickup3_on = { s.pickup_bridge_on, s.pickup_middle_on, s.pickup_neck_on };
+				pickup3_on = {s.pickup_bridge_on, s.pickup_middle_on, s.pickup_neck_on};
 			}
 		}
 
-		// where the strings are heard: sensor 1 one position, sensor 3 three positions, otherwise none
 		std::array<double, 3> pickup_xs() const
 		{
 			if (s.sensor == 1)
-				return { s.pickup_mm / 1000.0, 0.0, 0.0 };
+				return {s.pickup_mm / 1000.0, 0.0, 0.0};
 			if (s.sensor == 3)
-				return { PICKUP_POS_MM[0] / 1000.0,
+				return {PICKUP_POS_MM[0] / 1000.0,
 						PICKUP_POS_MM[1] / 1000.0,
-						PICKUP_POS_MM[2] / 1000.0 };
-			return { 0.0, 0.0, 0.0 };
+						PICKUP_POS_MM[2] / 1000.0};
+			return {0.0, 0.0, 0.0};
 		}
 
-		// thin wrapper, kept for any other caller
 		double pickup_x() const { return pickup_xs()[0]; }
 
-		// the losses of the strings at their age (six small networks: cheap enough to solve again on every change)
 		void solve_losses()
 		{
 			for (int i = 0; i < NUM_STRINGS; ++i)
 			{
 				const auto r = string_losses_network(i, s.string_age);
-				losses[(size_t)i] = { r["etaF"], r["etaA"], r["etaB"], 0.0 };
+				losses[(size_t)i] = {r["etaF"], r["etaA"], r["etaB"], 0.0};
 			}
 		}
 
-		// solve what changed since `previous` (null: everything). `stage` limits the slow parts (palm, room):
-		// the processor first publishes a model without them, then the complete one.
-		void solve(const Settings& settings, double sr, const Model* previous, bool with_palm = true)
+		void solve(const Settings &settings, double sr, const Model *previous, bool with_palm = true)
 		{
 			s = settings;
 			sample_rate = sr;
@@ -323,12 +329,12 @@ namespace grmg
 			{
 				for (int i = 0; i < NUM_STRINGS; ++i)
 				{
-					const auto& sp = STRING_SPECS[i];
+					const auto &sp = STRING_SPECS[i];
 					tension[(size_t)i] = tune_string_model(sp.L, sp.mu, midi_hz(open_midi(i)), core_fraction(i))["T"];
 					for (int f = 0; f < NUM_FRETS; ++f)
 					{
 						const auto r = play_string_model(sp.L, sp.mu, tension[(size_t)i], f, core_fraction(i));
-						Place& p = place[(size_t)i][(size_t)f];
+						Place &p = place[(size_t)i][(size_t)f];
 						p.f1 = r["f1"];
 						p.B = s.stiff ? r["B"] : 0.0;
 						p.T = tension[(size_t)i];
@@ -343,12 +349,19 @@ namespace grmg
 			solve_losses();
 			solve_pickup();
 
-			// Solves the amplifier operating point in the worker thread
 			if (s.amp_active())
 			{
-				if (previous && previous->amp_active && same_amp(previous->s, s))
+				const bool dc_stable = previous && previous->amp_active && same_amp_dc(previous->s, s);
+				const bool spec_stable = previous && previous->amp_active && same_amp_params(previous->s, s);
+
+				if (dc_stable)
 				{
 					amp = previous->amp;
+					if (!spec_stable)
+					{
+						amp.spec = s.amp;
+						amp.sag_tau_leak = 0.060 + (1.0 - s.amp.gain / 10.0) * 0.040;
+					}
 				}
 				else
 				{
@@ -361,13 +374,10 @@ namespace grmg
 				amp_active = false;
 			}
 
-			// Solves the acoustic feedback coupling in the worker thread
 			if (s.feedback_amount > 1e-4 && s.is_magnetic_pickup())
 			{
 				if (previous && same_feedback(previous->s, s))
-				{
 					feedback = previous->feedback;
-				}
 				else
 				{
 					FeedbackSpec fbspec;
@@ -392,7 +402,7 @@ namespace grmg
 				for (int i = 0; i < NUM_STRINGS; ++i)
 					for (int f = 0; f < NUM_FRETS; ++f)
 					{
-						const auto& sp = STRING_SPECS[i];
+						const auto &sp = STRING_SPECS[i];
 						const auto a = pluck_network(sp.mu, sp.L, tension[(size_t)i], f, s.pluck, s.force, s.pick, s.pick_mm);
 						y0[(size_t)i][(size_t)f] = a["y0"];
 						tau[(size_t)i][(size_t)f] = a["tau"];
@@ -419,10 +429,10 @@ namespace grmg
 			}
 			else if (with_palm)
 			{
-				const auto& size = ROOMS[s.room_size];
+				const auto &size = ROOMS[s.room_size];
 				room = room_network(size, s.room_material);
 				for (int ear = 0; ear < 2; ++ear)
-				{ // two ears: the same room, a tail of their own
+				{
 					const auto h = room_impulse(room, size, s.room_distance + 0.09 * ear, sr, 3u + (unsigned)ear);
 					room_ir[(size_t)ear].assign(h.begin(), h.end());
 				}
@@ -430,7 +440,7 @@ namespace grmg
 			}
 			if (s.palm_intensity < PALM_OFF)
 			{
-				palm_ready = false; // the palm is lifted: nothing to solve
+				palm_ready = false;
 			}
 			else if (previous && previous->palm_ready && same_strings(previous->palm_settings, s) && same_palm(previous->palm_settings, s))
 			{
@@ -444,7 +454,7 @@ namespace grmg
 				for (int i = 0; i < NUM_STRINGS; ++i)
 					for (int f = 0; f < NUM_FRETS; ++f)
 					{
-						const auto& sp = STRING_SPECS[i];
+						const auto &sp = STRING_SPECS[i];
 						palm[(size_t)i][(size_t)f] =
 							std::make_shared<const Palm>(palm_network(sp.mu, sp.L, f, x, n, tension[(size_t)i]));
 					}
@@ -453,7 +463,7 @@ namespace grmg
 			}
 			else if (previous && previous->palm_ready && previous->s.palm_intensity >= PALM_OFF)
 			{
-				palm = previous->palm; // the old palm, until the new one is solved
+				palm = previous->palm;
 				palm_settings = previous->palm_settings;
 				palm_ready = true;
 			}

@@ -232,7 +232,7 @@ void GuitarTrack::solveStep(double sr, unsigned seed, double tempo, bool loop, s
 	auto sameSettings = [](const grmg::Settings& a, const grmg::Settings& b)
 		{
 			return M::same_strings(a, b) && M::same_attack(a, b) && M::same_palm(a, b) && M::same_body(a, b) && M::same_room(a, b)
-				&& M::same_amp(a, b) && M::same_feedback(a, b);
+				&& M::same_amp_dc(a, b) && M::same_feedback(a, b) && M::same_amp_params(a, b);
 		};
 	auto samePlayer = [](const grmg::Settings& a, const grmg::Settings& b)
 		{

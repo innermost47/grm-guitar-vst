@@ -296,16 +296,93 @@ namespace grmg
         return c;
     }
 
-    // the circuit as a digital filter (bilinear transform, warped at the resonance)
     struct Biquad
     {
-        double b0 = 1, b1 = 0, b2 = 0, a1 = 0, a2 = 0, z1 = 0, z2 = 0;
-        double process(double x)
+        double b0 = 1.0, b1 = 0.0, b2 = 0.0, a1 = 0.0, a2 = 0.0;
+        double z1 = 0.0, z2 = 0.0;
+
+        inline double process(double x) noexcept
         {
             const double y = b0 * x + z1;
             z1 = b1 * x - a1 * y + z2;
             z2 = b2 * x - a2 * y;
             return y;
+        }
+
+        void reset() noexcept
+        {
+            z1 = 0.0;
+            z2 = 0.0;
+        }
+
+        void set_lowpass(double sr, double fc, double q) noexcept
+        {
+            const double w0 = 2.0 * 3.14159265358979323846 * fc / sr;
+            const double cw = std::cos(w0), sw = std::sin(w0);
+            const double alpha = sw / (2.0 * q);
+            const double a0 = 1.0 + alpha;
+            b0 = ((1.0 - cw) * 0.5) / a0;
+            b1 = (1.0 - cw) / a0;
+            b2 = b0;
+            a1 = -2.0 * cw / a0;
+            a2 = (1.0 - alpha) / a0;
+        }
+
+        void set_highpass(double sr, double fc, double q) noexcept
+        {
+            const double w0 = 2.0 * 3.14159265358979323846 * fc / sr;
+            const double cw = std::cos(w0), sw = std::sin(w0);
+            const double alpha = sw / (2.0 * q);
+            const double a0 = 1.0 + alpha;
+            b0 = ((1.0 + cw) * 0.5) / a0;
+            b1 = -(1.0 + cw) / a0;
+            b2 = b0;
+            a1 = -2.0 * cw / a0;
+            a2 = (1.0 - alpha) / a0;
+        }
+
+        void set_peaking(double sr, double fc, double q, double gain_db) noexcept
+        {
+            const double A = std::pow(10.0, gain_db / 40.0);
+            const double w0 = 2.0 * 3.14159265358979323846 * fc / sr;
+            const double cw = std::cos(w0), sw = std::sin(w0);
+            const double alpha = sw / (2.0 * q);
+            const double a0 = 1.0 + alpha / A;
+            b0 = (1.0 + alpha * A) / a0;
+            b1 = -2.0 * cw / a0;
+            b2 = (1.0 - alpha * A) / a0;
+            a1 = -2.0 * cw / a0;
+            a2 = (1.0 - alpha / A) / a0;
+        }
+
+        void set_lowshelf(double sr, double fc, double gain_db) noexcept
+        {
+            const double A = std::pow(10.0, gain_db / 40.0);
+            const double w0 = 2.0 * 3.14159265358979323846 * fc / sr;
+            const double cw = std::cos(w0), sw = std::sin(w0);
+            const double alpha = sw * 0.5 * std::sqrt(2.0);
+            const double sqA = std::sqrt(A);
+            const double a0 = (A + 1.0) + (A - 1.0) * cw + 2.0 * sqA * alpha;
+            b0 = A * ((A + 1.0) - (A - 1.0) * cw + 2.0 * sqA * alpha) / a0;
+            b1 = 2.0 * A * ((A - 1.0) - (A + 1.0) * cw) / a0;
+            b2 = A * ((A + 1.0) - (A - 1.0) * cw - 2.0 * sqA * alpha) / a0;
+            a1 = -2.0 * ((A - 1.0) + (A + 1.0) * cw) / a0;
+            a2 = ((A + 1.0) + (A - 1.0) * cw - 2.0 * sqA * alpha) / a0;
+        }
+
+        void set_highshelf(double sr, double fc, double gain_db) noexcept
+        {
+            const double A = std::pow(10.0, gain_db / 40.0);
+            const double w0 = 2.0 * 3.14159265358979323846 * fc / sr;
+            const double cw = std::cos(w0), sw = std::sin(w0);
+            const double alpha = sw * 0.5 * std::sqrt(2.0); // S = 1
+            const double sqA = std::sqrt(A);
+            const double a0 = (A + 1.0) - (A - 1.0) * cw + 2.0 * sqA * alpha;
+            b0 = A * ((A + 1.0) + (A - 1.0) * cw + 2.0 * sqA * alpha) / a0;
+            b1 = -2.0 * A * ((A - 1.0) + (A + 1.0) * cw) / a0;
+            b2 = A * ((A + 1.0) + (A - 1.0) * cw - 2.0 * sqA * alpha) / a0;
+            a1 = 2.0 * ((A - 1.0) - (A + 1.0) * cw) / a0;
+            a2 = ((A + 1.0) - (A - 1.0) * cw - 2.0 * sqA * alpha) / a0;
         }
     };
 
