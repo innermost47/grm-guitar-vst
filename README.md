@@ -6,6 +6,13 @@ pickups and the room. Several guitars in one plugin, a guitar roll that knows a 
 that refuse what no guitarist can play. Free software under the AGPL-3.0 (JUCE 8 is itself available under the
 AGPL-3.0).
 
+## Tracks composed with GRM Guitar
+
+- [Trembling Hands](https://anthony-charretier.fr/post.php?slug=trembling-hands)
+- [His Own Story](https://anthony-charretier.fr/post.php?slug=his-own-story)
+
+## Video demo
+
 [![Watch the GRM Guitar demo on YouTube](https://img.youtube.com/vi/PHgxrdl3X0Q/maxresdefault.jpg)](https://www.youtube.com/watch?v=PHgxrdl3X0Q)
 
 ## The GRM family
