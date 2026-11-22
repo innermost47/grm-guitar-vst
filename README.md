@@ -11,9 +11,10 @@ AGPL-3.0).
 - [Trembling Hands](https://anthony-charretier.fr/post.php?slug=trembling-hands)
 - [His Own Story](https://anthony-charretier.fr/post.php?slug=his-own-story)
 
-## Video demo
+## Videos demos
 
-[![Watch the GRM Guitar demo on YouTube](https://img.youtube.com/vi/PHgxrdl3X0Q/maxresdefault.jpg)](https://www.youtube.com/watch?v=PHgxrdl3X0Q)
+[![Watch the GRM Guitar demo on YouTube](https://img.youtube.com/vi/PHgxrdl3X0Q/maxresdefault.jpg)](https://www.youtube.com/watch?v=PHgxrdl3X0Q)  
+
 [![!With feedback larsen](https://img.youtube.com/vi/dbz1AT30W6M/maxresdefault.jpg)](https://www.youtube.com/watch?v=dbz1AT30W6M)
 
 ## The GRM family
