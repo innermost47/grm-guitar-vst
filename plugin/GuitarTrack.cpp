@@ -107,6 +107,7 @@ grmg::Settings GuitarTrack::readSettings() const
 	s.amp_lead.tight = param("amp_lead_tight") > 0.5f;
 
 	s.amp_channel_mix = param("amp_channel_mix");
+	s.amp_room_mix = param("amp_room_mix");
 	// --------------------------------------
 
 	s.feedback_amount = param("feedback_amount");
@@ -261,6 +262,7 @@ void GuitarTrack::solveStep(double sr, unsigned seed, double tempo, bool loop, s
 		{
 			return a.amp_on == b.amp_on &&
 				std::abs(a.amp_channel_mix - b.amp_channel_mix) < 1e-4 &&
+				std::abs(a.amp_room_mix - b.amp_room_mix) < 1e-4 &&
 				M::same_strings(a, b) && M::same_attack(a, b) && M::same_palm(a, b) && M::same_body(a, b) && M::same_room(a, b)
 				&& M::same_feedback(a, b)
 				&& M::same_amp_dc(a.amp_clean, b.amp_clean) && M::same_amp_params(a.amp_clean, b.amp_clean)
@@ -386,6 +388,7 @@ void GuitarTrack::prepare(double sr, int block)
 	dry.setSize(1, block);
 	pickupBuf.setSize(1, block);
 	out.setSize(2, block);
+	ampRoomBuf.setSize(2, block, false, false, true);
 	bodyMix.reset(sr, 0.05);
 	filterFr = filterQ = -1.0;
 }
@@ -556,8 +559,9 @@ void GuitarTrack::renderTo(int at, const SongClock& clock)
 long GuitarTrack::roomKey() const
 {
 	const auto* m = engine.model();
-	if (!m || roomOn->load() <= 0.5f || m->s.sensor != 0)
+	if (!m || roomOn->load() <= 0.5f)
 		return -1;
+
 	return 1 + m->s.room_size + 4L * m->s.room_material + 24L * std::lround(m->s.room_distance * 10.0) + 24L * 1000L * std::lround(m->sample_rate);
 }
 
@@ -591,12 +595,11 @@ void GuitarTrack::finish(int n, double sr, bool ownRoom)
 	out.clear();
 	if (sensor != 0)
 	{
-		// a magnetic pickup or a piezo: no body, no room
 		if (sensor == 1 && model && (model->pickup.fr != filterFr || model->pickup.Q != filterQ))
 		{
 			const auto previous = pickupFilter;
 			pickupFilter = grmg::pickup_filter(model->pickup, sr);
-			pickupFilter.z1 = previous.z1; // the new circuit continues where the old one was
+			pickupFilter.z1 = previous.z1;
 			pickupFilter.z2 = previous.z2;
 			filterFr = model->pickup.fr;
 			filterQ = model->pickup.Q;
@@ -623,14 +626,33 @@ void GuitarTrack::finish(int n, double sr, bool ownRoom)
 		}
 		else
 		{
-			// piezo: the force on the bridge
 			for (int t = 0; t < n; ++t)
 				w0[t] = OUTPUT_SCALE * (float)(grmg::PIEZO_LEVEL * d[t]);
 		}
+
 		out.copyFrom(1, 0, out, 0, 0, n);
+
+		if (model && model->s.room_on && roomLoaded && model->s.amp_room_mix > 0.001f)
+		{
+			ampRoomBuf.copyFrom(0, 0, out, 0, 0, n);
+			ampRoomBuf.copyFrom(1, 0, out, 0, 0, n);
+
+			juce::dsp::AudioBlock<float> block(ampRoomBuf.getArrayOfWritePointers(), 2, (size_t)n);
+			roomConv.process(juce::dsp::ProcessContextReplacing<float>(block));
+
+			const float wet = (float)model->s.amp_room_mix;
+			const float dry = 1.0f - wet;
+
+			out.applyGain(0, 0, n, dry);
+			out.applyGain(1, 0, n, dry);
+
+			out.addFrom(0, 0, ampRoomBuf, 0, 0, n, wet);
+			out.addFrom(1, 0, ampRoomBuf, 1, 0, n, wet);
+		}
+
 		return;
 	}
-	// a microphone: the body, then the room
+
 	bodyMix.setTargetValue(bodyAmount->load());
 	out.copyFrom(0, 0, dry, 0, 0, n);
 	{

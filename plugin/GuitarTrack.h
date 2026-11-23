@@ -179,7 +179,7 @@ private:
 	int heldKey = -1, heldChannel = 0, heldPattern = -1, shownPattern = -1;
 	double patternBeat = 0.0;
 	int pos = 0;
-
+	juce::AudioBuffer<float> ampRoomBuf;
 	struct UiPluck
 	{
 		int string, fret;

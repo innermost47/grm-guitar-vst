@@ -57,7 +57,7 @@ namespace
 		"amp_clean_treble", "amp_clean_presence", "amp_clean_tight", "amp_clean_ts_boost", "amp_clean_stages",
 		"amp_lead_model", "amp_lead_gain", "amp_lead_master", "amp_lead_bass", "amp_lead_middle",
 		"amp_lead_treble", "amp_lead_presence", "amp_lead_tight", "amp_lead_ts_boost", "amp_lead_stages",
-
+		"amp_room_mix",
 		"feedback_amount", "feedback_distance", "feedback_target",
 		"sympathy", "room_on", "room_size", "room_material", "room_distance",
 		"human", "human_amount", "swing_cm", "finger_noises", "finger_force",
@@ -249,7 +249,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout GRMGuitarProcessor::createLa
 		real("feedback_amount", "Feedback intensity", 0.0f, 1.0f, 0.0f);
 		real("feedback_distance", "Amp distance (m)", 0.2f, 4.0f, 1.0f, 1.0f, 0.05f);
 		choice("feedback_target", "Feedback harmonic", StringArray{ "Auto (acoustic phase)", "Fundamental (1st)", "Octave (2nd)", "5th (3rd)", "Double Octave (4th)" }, 0);
-
+		real("amp_room_mix", "Amp Room Mix", 0.0f, 1.0f, 0.2f);
 		flag("sympathy", "Sympathetic strings", true);
 		// room
 		flag("room_on", "Room", true);

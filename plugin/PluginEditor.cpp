@@ -775,7 +775,7 @@ void GRMGuitarEditor::rebuildGuitars()
 		  "amp_clean_treble", "amp_clean_presence", "amp_clean_tight", "amp_clean_ts_boost", "amp_clean_stages",
 		  "amp_lead_model", "amp_lead_gain", "amp_lead_master", "amp_lead_bass", "amp_lead_middle",
 		  "amp_lead_treble", "amp_lead_presence", "amp_lead_tight", "amp_lead_ts_boost", "amp_lead_stages",
-		  "feedback_amount", "feedback_distance", "feedback_target" },
+		  "feedback_amount", "feedback_distance", "feedback_target", "amp_room_mix" },
 		true,
 		[this](ParamPanel& panel)
 		{
@@ -785,7 +785,7 @@ void GRMGuitarEditor::rebuildGuitars()
 							  "amp_clean_treble", "amp_clean_presence", "amp_clean_tight", "amp_clean_ts_boost", "amp_clean_stages",
 							  "amp_lead_model", "amp_lead_gain", "amp_lead_master", "amp_lead_bass", "amp_lead_middle",
 							  "amp_lead_treble", "amp_lead_presence", "amp_lead_tight", "amp_lead_ts_boost", "amp_lead_stages",
-							  "feedback_amount", "feedback_distance", "feedback_target" })
+							  "feedback_amount", "feedback_distance", "feedback_target", "amp_room_mix" })
 			{
 				panel.showOnlyForSensor(processor.paramId(id), { 1, 3 });
 			}

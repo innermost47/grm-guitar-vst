@@ -115,7 +115,7 @@ namespace grmg
 		double feedback_distance = 1.0;
 		int feedback_target = 0;
 		bool amp_on = false;
-
+		double amp_room_mix = 0.2;
 		double amp_channel_mix = 1.0;
 		AmpSpec amp_clean = amp_preset_clean();
 		AmpSpec amp_lead = amp_preset_5150_lead();
