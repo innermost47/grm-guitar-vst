@@ -166,14 +166,29 @@ Needs CMake 3.22+ and Git (JUCE is downloaded by CMake); on Windows, Visual Stud
 cmake -B build -G "Visual Studio 17 2022"
 cmake --build build --config Release
 ctest --test-dir build -C Release
+
 ```
+
 The plugin is in `build\GRMGuitar_artefacts\Release\VST3\GRM Guitar.vst3` (copy it to
 `C:\Program Files\Common Files\VST3`), the standalone in `build\GRMGuitar_artefacts\Release\Standalone`.
 
-Linux: the same commands with the default generator (needs the ALSA, X11, Xrandr, Xinerama, Xcursor, freetype
-and fontconfig development packages).
+**Linux:** needs the ALSA, X11, Xrandr, Xinerama, Xcursor, freetype and fontconfig development packages.
 
-Validation: [pluginval](https://github.com/Tracktion/pluginval), `pluginval --strictness-level 5 --validate "GRM Guitar.vst3"`.
+```bash
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+
+```
+
+On `x86_64`, Release builds target `x86-64-v3` (requiring **AVX**, **AVX2**, and **FMA**; check with `lscpu | grep -iE "avx|fma"`). If a prebuilt binary crashes at load with `SIGILL` (signal 4) or if the target CPU lacks AVX2, build with `-DGRMG_PORTABLE_CPU=ON`:
+
+```bash
+cmake -B build -DCMAKE_BUILD_TYPE=Release -DGRMG_PORTABLE_CPU=ON
+cmake --build build
+
+```
+
+**Validation:** [pluginval](https://github.com/Tracktion/pluginval), `pluginval --strictness-level 5 --validate "GRM Guitar.vst3"`.
 
 ## Known limits
 
@@ -185,6 +200,11 @@ Validation: [pluginval](https://github.com/Tracktion/pluginval), `pluginval --st
 - On a solid body, a real low E fundamental may ring longer than the measured string losses give here (Zollner's
   measurements on electric guitars): to be checked.
 - Live MIDI playing has no finger noises (they are computed for the roll).
+- Linux: the same commands with the default generator (needs the ALSA, X11, Xrandr, Xinerama, Xcursor, freetype
+and fontconfig development packages). On x86_64, release builds target `x86-64-v3` (requiring **AVX**, **AVX2**,
+and **FMA**); if a prebuilt binary fails with `SIGILL` (signal 4) or if the target CPU lacks AVX2, build from source
+with `-DGRMG_PORTABLE_CPU=ON` (or pass `-DCMAKE_CXX_FLAGS="-march=x86-64"`). You can check CPU support with
+`lscpu | grep -iE "avx|fma"`.
 
 ## Next
 

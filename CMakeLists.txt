@@ -12,6 +12,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 option(GRMG_BUILD_PLUGIN "Build the JUCE plugin (downloads JUCE)" ON)
 option(GRMG_BUILD_TESTS "Build the tests and the offline renderer" OFF)
+option(GRMG_PORTABLE_CPU "Disable x86-64-v3 / AVX2 requirements for older CPUs" OFF)
 
 add_library(grm_core INTERFACE)
 target_include_directories(grm_core INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/core)
@@ -84,13 +85,15 @@ if(GRMG_BUILD_PLUGIN)
         >)
 
     if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
-        target_compile_options(GRMGuitar PRIVATE
-            $<$<CXX_COMPILER_ID:GNU,Clang>:
-                -march=x86-64-v3
-            >
-            $<$<CXX_COMPILER_ID:MSVC>:
-                /arch:AVX2
-            >)
+        if(NOT GRMG_PORTABLE_CPU)
+            target_compile_options(GRMGuitar PRIVATE
+                $<$<CXX_COMPILER_ID:GNU,Clang>:
+                    -march=x86-64-v3
+                >
+                $<$<CXX_COMPILER_ID:MSVC>:
+                    /arch:AVX2
+                >)
+        endif()
     endif()
 
     target_link_libraries(GRMGuitar
