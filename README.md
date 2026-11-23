@@ -8,6 +8,7 @@ AGPL-3.0).
 
 ## Tracks composed with GRM Guitar
 
+- [A New Path To Trace](https://anthony-charretier.fr/post.php?slug=a-new-path-to-trace)
 - [Trembling Hands](https://anthony-charretier.fr/post.php?slug=trembling-hands)
 - [His Own Story](https://anthony-charretier.fr/post.php?slug=his-own-story)
 
