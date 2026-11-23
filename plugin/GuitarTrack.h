@@ -24,6 +24,7 @@
 // every pattern of a guitar, played by its player network (built by the solver, read by the audio thread)
 struct PerformanceSet
 {
+	std::shared_ptr<const grmg::Model> model;
 	std::vector<std::shared_ptr<const grmg::Performance>> list;
 	const grmg::Performance* at(int k) const
 	{
@@ -57,7 +58,7 @@ public:
 		return guitar == 0 ? id : "g" + juce::String(guitar + 1) + "_" + id;
 	}
 	juce::String paramId(const juce::String& id) const { return paramId(index, id); }
-	float param(const char* id) const { return state.getRawParameterValue(paramId(id))->load(); }
+	float param(const char* k) const;
 	grmg::Settings readSettings() const;
 	struct MixerValues
 	{
@@ -129,6 +130,7 @@ public:
 
 private:
 	juce::AudioProcessorValueTreeState& state;
+	std::shared_ptr<const grmg::Model> compiledModelShared;
 	const struct
 	{
 		const std::atomic<float>* gainDb, * level, * pan, * mute, * solo, * ownOutput;

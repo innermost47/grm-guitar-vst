@@ -205,6 +205,11 @@ void ScopeView::paint(juce::Graphics& g)
 ParamPanel::ParamPanel(juce::AudioProcessorValueTreeState& s, const std::vector<juce::String>& ids)
 	: state(s)
 {
+	viewport.setViewedComponent(&content, false);
+	viewport.setScrollBarsShown(true, false);
+	viewport.setScrollBarThickness(8);
+	addAndMakeVisible(viewport);
+
 	for (const auto& id : ids)
 	{
 		auto* param = state.getParameter(id);
@@ -218,7 +223,8 @@ ParamPanel::ParamPanel(juce::AudioProcessorValueTreeState& s, const std::vector<
 		r.label = std::make_unique<juce::Label>(juce::String(), name);
 		r.label->setFont(font(13.0f));
 		r.label->setColour(juce::Label::textColourId, ui::BRIGHT);
-		addAndMakeVisible(*r.label);
+		content.addAndMakeVisible(*r.label);
+
 		if (dynamic_cast<juce::AudioParameterBool*>(param))
 		{
 			auto b = std::make_unique<juce::ToggleButton>();
@@ -236,10 +242,11 @@ ParamPanel::ParamPanel(juce::AudioProcessorValueTreeState& s, const std::vector<
 		{
 			auto sl = std::make_unique<juce::Slider>(juce::Slider::LinearHorizontal, juce::Slider::TextBoxRight);
 			sl->setTextBoxStyle(juce::Slider::TextBoxRight, false, 56, 20);
+			sl->setScrollWheelEnabled(false);
 			r.slider = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(state, id, *sl);
 			r.control = std::move(sl);
 		}
-		addAndMakeVisible(*r.control);
+		content.addAndMakeVisible(*r.control);
 		rows.push_back(std::move(r));
 	}
 
@@ -248,22 +255,34 @@ ParamPanel::ParamPanel(juce::AudioProcessorValueTreeState& s, const std::vector<
 	warningLabel.setColour(juce::Label::textColourId, ui::TEXT);
 	warningLabel.setJustificationType(juce::Justification::centred);
 	warningLabel.setVisible(false);
-	addAndMakeVisible(warningLabel);
+	content.addAndMakeVisible(warningLabel);
 
 	vblank = std::make_unique<juce::VBlankAttachment>(this, [this] { updateForSensor(); });
 }
 
 void ParamPanel::resized()
 {
+	viewport.setBounds(getLocalBounds());
+	layoutContent();
+}
+
+void ParamPanel::layoutContent()
+{
 	std::vector<Row*> visible;
 	visible.reserve(rows.size());
 	for (auto& r : rows)
-		if (r.control->isVisible())
+		if (r.control && r.control->isVisible())
 			visible.push_back(&r);
+
+	const int viewW = viewport.getWidth();
+	const int viewH = viewport.getHeight();
+	if (viewW <= 0 || viewH <= 0)
+		return;
 
 	if (visible.empty())
 	{
-		warningLabel.setBounds(getLocalBounds().reduced(40));
+		content.setBounds(0, 0, viewW, viewH);
+		warningLabel.setBounds(content.getLocalBounds().reduced(20));
 		warningLabel.setVisible(true);
 		return;
 	}
@@ -272,13 +291,29 @@ void ParamPanel::resized()
 		warningLabel.setVisible(false);
 	}
 
-	const int cols = getWidth() > 520 ? 2 : 1;
-	const int perCol = (int)(visible.size() + (size_t)cols - 1) / cols;
-	const int colW = getWidth() / cols, rowH = 26;
+	const int rowH = 26;
+	const int rowSpacing = 2;
+	const int margin = 6;
+
+	const int cols = viewW > 520 ? 2 : 1;
+	const int numVisible = (int)visible.size();
+	const int totalRows = (numVisible + cols - 1) / cols;
+
+	const int neededH = margin * 2 + totalRows * (rowH + rowSpacing);
+	const int targetH = std::max(viewH, neededH);
+
+	const bool willScroll = neededH > viewH;
+	const int scrollbarW = willScroll ? viewport.getScrollBarThickness() : 0;
+	const int targetW = viewW - scrollbarW;
+
+	content.setBounds(0, 0, targetW, targetH);
+
+	const int colW = targetW / cols;
 	for (size_t k = 0; k < visible.size(); ++k)
 	{
-		const int c = (int)k / std::max(perCol, 1), r = (int)k % std::max(perCol, 1);
-		auto area = juce::Rectangle<int>(c * colW + 6, 6 + r * (rowH + 2), colW - 12, rowH);
+		const int r = (int)k / cols;
+		const int c = (int)k % cols;
+		auto area = juce::Rectangle<int>(c * colW + margin, margin + r * (rowH + rowSpacing), colW - (margin * 2), rowH);
 		visible[k]->label->setBounds(area.removeFromLeft(std::min(150, area.getWidth() / 2)));
 		visible[k]->control->setBounds(area.reduced(0, 1));
 	}
@@ -321,7 +356,7 @@ void ParamPanel::updateForSensor()
 	}
 	lastSensor = sensor;
 	if (anyChanged)
-		resized();
+		layoutContent();
 }
 
 NetworksView::NetworksView(GRMGuitarProcessor& p) : processor(p)
@@ -661,7 +696,7 @@ GRMGuitarEditor::GRMGuitarEditor(GRMGuitarProcessor& p)
 
 	setResizable(true, true);
 	setResizeLimits(1000, 680, 2400, 1600);
-	setSize(1280, 820);
+	setSize(1380, 820);
 	vblank = std::make_unique<juce::VBlankAttachment>(this, [this] { updateEditor(); });
 }
 
@@ -735,16 +770,22 @@ void GRMGuitarEditor::rebuildGuitars()
 			panel.showOnlyForSensor(processor.paramId("pickup_neck_type"), { 3 });
 		});
 	addTab("Amp & Feedback",
-		{ "amp_on", "amp_model", "amp_gain", "amp_master",
-		 "amp_bass", "amp_middle", "amp_treble", "amp_presence", "amp_tight",
-		 "feedback_amount", "feedback_distance", "feedback_target" },
+		{ "amp_on", "amp_channel_mix",
+		  "amp_clean_model", "amp_clean_gain", "amp_clean_master", "amp_clean_bass", "amp_clean_middle",
+		  "amp_clean_treble", "amp_clean_presence", "amp_clean_tight", "amp_clean_ts_boost", "amp_clean_stages",
+		  "amp_lead_model", "amp_lead_gain", "amp_lead_master", "amp_lead_bass", "amp_lead_middle",
+		  "amp_lead_treble", "amp_lead_presence", "amp_lead_tight", "amp_lead_ts_boost", "amp_lead_stages",
+		  "feedback_amount", "feedback_distance", "feedback_target" },
 		true,
 		[this](ParamPanel& panel)
 		{
 			panel.setSensorId(processor.paramId("sensor"));
-			for (auto* id : { "amp_on", "amp_model", "amp_gain", "amp_master",
-							 "amp_bass", "amp_middle", "amp_treble", "amp_presence", "amp_tight",
-							 "feedback_amount", "feedback_distance", "feedback_target" })
+			for (auto* id : { "amp_on", "amp_channel_mix",
+							  "amp_clean_model", "amp_clean_gain", "amp_clean_master", "amp_clean_bass", "amp_clean_middle",
+							  "amp_clean_treble", "amp_clean_presence", "amp_clean_tight", "amp_clean_ts_boost", "amp_clean_stages",
+							  "amp_lead_model", "amp_lead_gain", "amp_lead_master", "amp_lead_bass", "amp_lead_middle",
+							  "amp_lead_treble", "amp_lead_presence", "amp_lead_tight", "amp_lead_ts_boost", "amp_lead_stages",
+							  "feedback_amount", "feedback_distance", "feedback_target" })
 			{
 				panel.showOnlyForSensor(processor.paramId(id), { 1, 3 });
 			}

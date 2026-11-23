@@ -44,7 +44,6 @@ namespace
 	}
 
 	// a guitar's parameters, in the order of the layout (copied from slot to slot when a guitar is removed)
-	// a guitar's parameters, in the order of the layout (copied from slot to slot when a guitar is removed)
 	const char* const GUITAR_PARAMS[] = {
 		"tuning", "string_age", "brightness", "core", "stiff", "attack", "pluck", "force", "pick", "palm_mm",
 		"palm_intensity", "live_palm", "body_size", "top_mm", "coupling", "braces_g", "body_q", "body_amount", "wood",
@@ -53,10 +52,13 @@ namespace
 		"pickup_bridge_on", "pickup_middle_on", "pickup_neck_on", "pickup_bridge_split",
 		"pickup_bridge_type", "pickup_middle_type", "pickup_neck_type",
 
-		"amp_on", "amp_model", "amp_gain", "amp_master", "amp_bass", "amp_middle",
-		"amp_treble", "amp_presence", "amp_tight",
-		"feedback_amount", "feedback_distance", "feedback_target",
+		"amp_on", "amp_channel_mix",
+		"amp_clean_model", "amp_clean_gain", "amp_clean_master", "amp_clean_bass", "amp_clean_middle",
+		"amp_clean_treble", "amp_clean_presence", "amp_clean_tight", "amp_clean_ts_boost", "amp_clean_stages",
+		"amp_lead_model", "amp_lead_gain", "amp_lead_master", "amp_lead_bass", "amp_lead_middle",
+		"amp_lead_treble", "amp_lead_presence", "amp_lead_tight", "amp_lead_ts_boost", "amp_lead_stages",
 
+		"feedback_amount", "feedback_distance", "feedback_target",
 		"sympathy", "room_on", "room_size", "room_material", "room_distance",
 		"human", "human_amount", "swing_cm", "finger_noises", "finger_force",
 		"mix_gain", "mix_level", "mix_pan", "mix_mute", "mix_solo", "mix_out" };
@@ -215,16 +217,33 @@ juce::AudioProcessorValueTreeState::ParameterLayout GRMGuitarProcessor::createLa
 		choice("pickup_middle_type", "Middle pickup type", pickupNames(), 0);
 		choice("pickup_neck_type", "Neck pickup type", pickupNames(), 0);
 
-		// amp & distortion
+		// amp & distortion (DUAL CHANNEL)
 		flag("amp_on", "Amp & Distortion", false);
-		choice("amp_model", "Amp model", StringArray{ "5150 High Gain", "JCM800 Crunch", "American Clean" }, 0);
-		real("amp_gain", "Amp Gain", 0.0f, 10.0f, 7.5f);
-		real("amp_master", "Master Volume", 0.0f, 1.0f, 0.7f);
-		real("amp_bass", "Bass", 0.0f, 1.0f, 0.5f);
-		real("amp_middle", "Middle", 0.0f, 1.0f, 0.6f);
-		real("amp_treble", "Treble", 0.0f, 1.0f, 0.7f);
-		real("amp_presence", "Presence", 0.0f, 1.0f, 0.5f);
-		flag("amp_tight", "Tight low-cut", true);
+		real("amp_channel_mix", "Channel Mix (0: Clean, 1: Lead)", 0.0f, 1.0f, 1.0f);
+
+		// --- CLEAN ---
+		choice("amp_clean_model", "Clean Amp Model", StringArray{ "5150 High Gain", "JCM800 Crunch", "American Clean" }, 2);
+		real("amp_clean_gain", "Clean Gain", 0.0f, 10.0f, 2.0f);
+		real("amp_clean_master", "Clean Master", 0.0f, 1.0f, 0.9f);
+		real("amp_clean_bass", "Clean Bass", 0.0f, 1.0f, 0.5f);
+		real("amp_clean_middle", "Clean Middle", 0.0f, 1.0f, 0.5f);
+		real("amp_clean_treble", "Clean Treble", 0.0f, 1.0f, 0.5f);
+		real("amp_clean_presence", "Clean Presence", 0.0f, 1.0f, 0.4f);
+		flag("amp_clean_tight", "Clean Tight low-cut", false);
+		flag("amp_clean_ts_boost", "Clean TS Boost", false);
+		real("amp_clean_stages", "Clean Stages", 1.0f, 4.0f, 2.0f, 0.0f, 1.0f);
+
+		// --- LEAD ---
+		choice("amp_lead_model", "Lead Amp Model", StringArray{ "5150 High Gain", "JCM800 Crunch", "American Clean" }, 0);
+		real("amp_lead_gain", "Lead Gain", 0.0f, 10.0f, 7.5f);
+		real("amp_lead_master", "Lead Master", 0.0f, 1.0f, 0.7f);
+		real("amp_lead_bass", "Lead Bass", 0.0f, 1.0f, 0.55f);
+		real("amp_lead_middle", "Lead Middle", 0.0f, 1.0f, 0.45f);
+		real("amp_lead_treble", "Lead Treble", 0.0f, 1.0f, 0.55f);
+		real("amp_lead_presence", "Lead Presence", 0.0f, 1.0f, 0.45f);
+		flag("amp_lead_tight", "Lead Tight low-cut", true);
+		flag("amp_lead_ts_boost", "Lead TS Boost", true);
+		real("amp_lead_stages", "Lead Stages", 1.0f, 4.0f, 4.0f, 0.0f, 1.0f);
 
 		// acoustic feedback (larsen)
 		real("feedback_amount", "Feedback intensity", 0.0f, 1.0f, 0.0f);
@@ -288,6 +307,8 @@ void GRMGuitarProcessor::addGuitar()
 			p->setValueNotifyingHost(p->getDefaultValue());
 	grmg::Song empty;
 	empty.bars = 4;
+	empty.key = getPersistentSongKey();
+	empty.scale = getPersistentSongScale();
 	tracks[(size_t)count]->setPatterns({ empty }, 0);
 	guitarCount.store(count + 1);
 	selected.store(count);
@@ -385,6 +406,9 @@ bool GRMGuitarProcessor::pastePattern()
 		n.selected = false;
 	for (auto& t : s.strums)
 		t.selected = false;
+	const auto cur = current().getSong();
+	if (s.key == 0 && cur.key != 0)     s.key = cur.key;
+	if (s.scale == 0 && cur.scale != 0) s.scale = cur.scale;
 	current().insertPattern(s);
 	solver.notify();
 	return true;
@@ -626,12 +650,24 @@ void GRMGuitarProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
 	if (auto* ph = getPlayHead())
 		if (auto pos = ph->getPosition())
 			hostNow = pos->getIsPlaying();
+
 	if (hostWasPlaying && !hostNow)
+	{
 		for (int g = 0; g < count; ++g)
 		{
 			tracks[(size_t)g]->releaseKeys();
 			tracks[(size_t)g]->engine.all_off();
 		}
+	}
+	else if (!hostWasPlaying && hostNow)
+	{
+		for (int g = 0; g < count; ++g)
+		{
+			tracks[(size_t)g]->releaseKeys();
+			tracks[(size_t)g]->engine.all_off();
+			tracks[(size_t)g]->engine.reset_strings();
+		}
+	}
 	hostWasPlaying = hostNow;
 
 	// Note-ons follow the configured route. Releases follow the notes that are still held.

@@ -13,6 +13,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <cmath>
 
 #include "feedback.hpp"
 #include "amp.hpp"
@@ -41,12 +42,12 @@ namespace grmg
 		{0.648, 0.0006834364, 70.0, false},
 		{0.648, 0.0003835658, 70.0, false},
 	};
-	constexpr const char *STRING_NAMES[NUM_STRINGS] = {"E2", "A2", "D3", "G3", "B3", "E4"};
+	constexpr const char* STRING_NAMES[NUM_STRINGS] = { "E2", "A2", "D3", "G3", "B3", "E4" };
 
 	// tunings: MIDI note of each open string, from string 6 to string 1
 	struct Tuning
 	{
-		const char *name;
+		const char* name;
 		int midi[NUM_STRINGS];
 	};
 	constexpr Tuning TUNINGS[] = {
@@ -61,10 +62,8 @@ namespace grmg
 
 	inline double midi_hz(int note) { return 440.0 * std::pow(2.0, (note - 69) / 12.0); }
 
-	// below this palm pressure the palm is lifted: palm-muted notes ring free
 	constexpr double PALM_OFF = 0.005;
 
-	// The settings of the sound, as the Python app has them (same names, same defaults)
 	struct Settings
 	{
 		// strings
@@ -116,7 +115,10 @@ namespace grmg
 		double feedback_distance = 1.0;
 		int feedback_target = 0;
 		bool amp_on = false;
-		AmpSpec amp = amp_preset_5150_lead();
+
+		double amp_channel_mix = 1.0;
+		AmpSpec amp_clean = amp_preset_clean();
+		AmpSpec amp_lead = amp_preset_5150_lead();
 
 		bool is_magnetic_pickup() const { return sensor == 1 || sensor == 3; }
 		bool amp_active() const { return amp_on && is_magnetic_pickup(); }
@@ -159,98 +161,89 @@ namespace grmg
 		bool palm_ready = false;
 		unsigned body_id = 0, room_id = 0;
 
-		AmpModel amp;
+		AmpModel amp_clean_model;
+		AmpModel amp_lead_model;
 		bool amp_active = false;
+
 		FeedbackModel feedback;
 
 		static unsigned next_id()
 		{
-			static std::atomic<unsigned> counter{0};
+			static std::atomic<unsigned> counter{ 0 };
 			return ++counter;
 		}
 
 		int open_midi(int i) const { return TUNINGS[s.tuning].midi[i]; }
 		double core_fraction(int i) const { return STRING_SPECS[i].wound ? s.core : 1.0; }
 
-		static bool same_strings(const Settings &a, const Settings &b)
+		static bool same_strings(const Settings& a, const Settings& b)
 		{
 			return a.tuning == b.tuning && std::abs(a.core - b.core) < 1e-12 && a.stiff == b.stiff;
 		}
-		static bool same_attack(const Settings &a, const Settings &b)
+		static bool same_attack(const Settings& a, const Settings& b)
 		{
 			return a.pick == b.pick && std::abs(a.pluck - b.pluck) < 1e-12 &&
-				   std::abs(a.force - b.force) < 1e-12 && std::abs(a.pick_mm - b.pick_mm) < 1e-12;
+				std::abs(a.force - b.force) < 1e-12 && std::abs(a.pick_mm - b.pick_mm) < 1e-12;
 		}
-		static bool same_palm(const Settings &a, const Settings &b)
+		static bool same_palm(const Settings& a, const Settings& b)
 		{
 			return std::abs(a.palm_mm - b.palm_mm) < 1e-9 && std::abs(a.palm_intensity - b.palm_intensity) < 1e-9;
 		}
-		static bool same_body(const Settings &a, const Settings &b)
+		static bool same_body(const Settings& a, const Settings& b)
 		{
 			return std::abs(a.body_size - b.body_size) < 1e-12 && std::abs(a.top_mm - b.top_mm) < 1e-12 &&
-				   std::abs(a.coupling - b.coupling) < 1e-12 && std::abs(a.braces_g - b.braces_g) < 1e-9 &&
-				   std::abs(a.body_q - b.body_q) < 1e-9 && a.wood == b.wood &&
-				   std::abs(a.density_pct - b.density_pct) < 1e-9 && std::abs(a.hollow - b.hollow) < 1e-9;
+				std::abs(a.coupling - b.coupling) < 1e-12 && std::abs(a.braces_g - b.braces_g) < 1e-9 &&
+				std::abs(a.body_q - b.body_q) < 1e-9 && a.wood == b.wood &&
+				std::abs(a.density_pct - b.density_pct) < 1e-9 && std::abs(a.hollow - b.hollow) < 1e-9;
 		}
-		static bool same_room(const Settings &a, const Settings &b)
+		static bool same_room(const Settings& a, const Settings& b)
 		{
 			return a.room_size == b.room_size && a.room_material == b.room_material &&
-				   std::abs(a.room_distance - b.room_distance) < 1e-9;
+				std::abs(a.room_distance - b.room_distance) < 1e-9;
 		}
-		static bool same_pickups(const Settings &a, const Settings &b)
+		static bool same_pickups(const Settings& a, const Settings& b)
 		{
 			return a.sensor == b.sensor && std::abs(a.pickup_mm - b.pickup_mm) < 1e-9 &&
-				   a.pickup_type == b.pickup_type && std::abs(a.cable_pf - b.cable_pf) < 1e-9 &&
-				   a.pickup_bridge_on == b.pickup_bridge_on && a.pickup_middle_on == b.pickup_middle_on &&
-				   a.pickup_neck_on == b.pickup_neck_on && a.pickup_bridge_split == b.pickup_bridge_split &&
-				   a.pickup_bridge_type == b.pickup_bridge_type && a.pickup_middle_type == b.pickup_middle_type &&
-				   a.pickup_neck_type == b.pickup_neck_type;
+				a.pickup_type == b.pickup_type && std::abs(a.cable_pf - b.cable_pf) < 1e-9 &&
+				a.pickup_bridge_on == b.pickup_bridge_on && a.pickup_middle_on == b.pickup_middle_on &&
+				a.pickup_neck_on == b.pickup_neck_on && a.pickup_bridge_split == b.pickup_bridge_split &&
+				a.pickup_bridge_type == b.pickup_bridge_type && a.pickup_middle_type == b.pickup_middle_type &&
+				a.pickup_neck_type == b.pickup_neck_type;
 		}
 
-		// What forces the GRM to be re-solved (expensive, ~40 Newton steps on a 9x9 system).
-		// Only what enters the DC operating point: the rail, the plate/cathode resistors, the gain
-		// (the gain moves drive_scale and the sag time constant, both derived from the solve).
-		static bool same_amp_dc(const Settings &a, const Settings &b)
+		static bool same_amp_dc(const AmpSpec& a, const AmpSpec& b)
 		{
-			return std::abs(a.amp.Vdd - b.amp.Vdd) < 1e-4 &&
-				   std::abs(a.amp.Rp - b.amp.Rp) < 1e-4 &&
-				   std::abs(a.amp.Rk - b.amp.Rk) < 1e-4 &&
-				   std::abs(a.amp.gain - b.amp.gain) < 1e-4;
+			return std::abs(a.Vdd - b.Vdd) < 1e-4 &&
+				std::abs(a.Rp - b.Rp) < 1e-4 &&
+				std::abs(a.Rk - b.Rk) < 1e-4 &&
+				std::abs(a.gain - b.gain) < 1e-4;
 		}
 
-		// What only needs the freshly solved AmpModel to be *published* with a new
-		// `spec` (cheap � just recopies the tone knobs into the model the audio
-		// thread reads; `AmpProcessor::update_coefficients()` then rebuilds the
-		// biquads and the sag coefficients from it).
-		static bool same_amp_params(const Settings &a, const Settings &b)
+		static bool same_amp_params(const AmpSpec& a, const AmpSpec& b)
 		{
-			if (a.amp_on != b.amp_on)
-				return false;
-			if (!a.amp_on)
-				return true;
-			return std::abs(a.amp.master - b.amp.master) < 1e-4 &&
-				   std::abs(a.amp.bass - b.amp.bass) < 1e-4 &&
-				   std::abs(a.amp.middle - b.amp.middle) < 1e-4 &&
-				   std::abs(a.amp.treble - b.amp.treble) < 1e-4 &&
-				   std::abs(a.amp.presence - b.amp.presence) < 1e-4 &&
-				   std::abs(a.amp.sag_amount - b.amp.sag_amount) < 1e-4 &&
-				   a.amp.tight == b.amp.tight &&
-				   a.amp.ts_boost == b.amp.ts_boost &&
-				   a.amp.stages == b.amp.stages;
+			return std::abs(a.master - b.master) < 1e-4 &&
+				std::abs(a.bass - b.bass) < 1e-4 &&
+				std::abs(a.middle - b.middle) < 1e-4 &&
+				std::abs(a.treble - b.treble) < 1e-4 &&
+				std::abs(a.presence - b.presence) < 1e-4 &&
+				std::abs(a.sag_amount - b.sag_amount) < 1e-4 &&
+				a.tight == b.tight &&
+				a.ts_boost == b.ts_boost &&
+				a.stages == b.stages;
 		}
 
-		static bool same_feedback(const Settings &a, const Settings &b)
+		static bool same_feedback(const Settings& a, const Settings& b)
 		{
 			return std::abs(a.feedback_amount - b.feedback_amount) < 1e-4 &&
-				   std::abs(a.feedback_distance - b.feedback_distance) < 1e-4 &&
-				   a.feedback_target == b.feedback_target;
+				std::abs(a.feedback_distance - b.feedback_distance) < 1e-4 &&
+				a.feedback_target == b.feedback_target;
 		}
 
 		static std::pair<double, double> palm_snap(double x, double force)
 		{
 			const double xs = std::max(0.002, std::round(x * 333.3) / 333.3);
 			const double fs = std::pow(10.0, std::round(std::log10(std::max(force, 1e-3)) / 0.05) * 0.05);
-			return {xs, fs};
+			return { xs, fs };
 		}
 		std::pair<double, double> palm_home() const
 		{
@@ -265,7 +258,7 @@ namespace grmg
 			b.coupling = s.coupling;
 			b.braces_kg = s.braces_g / 1000.0;
 			b.q = s.body_q;
-			const auto &w = WOODS[std::min(std::max(s.wood, 0), NUM_WOODS - 1)];
+			const auto& w = WOODS[std::min(std::max(s.wood, 0), NUM_WOODS - 1)];
 			b.rho = w.rho * (1.0 + s.density_pct / 100.0);
 			b.E = w.E;
 			b.hollow = s.hollow;
@@ -288,19 +281,19 @@ namespace grmg
 				pickup3[0] = pickup_network(bridge_type, s.cable_pf);
 				pickup3[1] = pickup_network(s.pickup_middle_type, s.cable_pf);
 				pickup3[2] = pickup_network(s.pickup_neck_type, s.cable_pf);
-				pickup3_on = {s.pickup_bridge_on, s.pickup_middle_on, s.pickup_neck_on};
+				pickup3_on = { s.pickup_bridge_on, s.pickup_middle_on, s.pickup_neck_on };
 			}
 		}
 
 		std::array<double, 3> pickup_xs() const
 		{
 			if (s.sensor == 1)
-				return {s.pickup_mm / 1000.0, 0.0, 0.0};
+				return { s.pickup_mm / 1000.0, 0.0, 0.0 };
 			if (s.sensor == 3)
-				return {PICKUP_POS_MM[0] / 1000.0,
+				return { PICKUP_POS_MM[0] / 1000.0,
 						PICKUP_POS_MM[1] / 1000.0,
-						PICKUP_POS_MM[2] / 1000.0};
-			return {0.0, 0.0, 0.0};
+						PICKUP_POS_MM[2] / 1000.0 };
+			return { 0.0, 0.0, 0.0 };
 		}
 
 		double pickup_x() const { return pickup_xs()[0]; }
@@ -310,11 +303,11 @@ namespace grmg
 			for (int i = 0; i < NUM_STRINGS; ++i)
 			{
 				const auto r = string_losses_network(i, s.string_age);
-				losses[(size_t)i] = {r["etaF"], r["etaA"], r["etaB"], 0.0};
+				losses[(size_t)i] = { r["etaF"], r["etaA"], r["etaB"], 0.0 };
 			}
 		}
 
-		void solve(const Settings &settings, double sr, const Model *previous, bool with_palm = true)
+		void solve(const Settings& settings, double sr, const Model* previous, bool with_palm = true)
 		{
 			s = settings;
 			sample_rate = sr;
@@ -329,12 +322,12 @@ namespace grmg
 			{
 				for (int i = 0; i < NUM_STRINGS; ++i)
 				{
-					const auto &sp = STRING_SPECS[i];
+					const auto& sp = STRING_SPECS[i];
 					tension[(size_t)i] = tune_string_model(sp.L, sp.mu, midi_hz(open_midi(i)), core_fraction(i))["T"];
 					for (int f = 0; f < NUM_FRETS; ++f)
 					{
 						const auto r = play_string_model(sp.L, sp.mu, tension[(size_t)i], f, core_fraction(i));
-						Place &p = place[(size_t)i][(size_t)f];
+						Place& p = place[(size_t)i][(size_t)f];
 						p.f1 = r["f1"];
 						p.B = s.stiff ? r["B"] : 0.0;
 						p.T = tension[(size_t)i];
@@ -351,22 +344,40 @@ namespace grmg
 
 			if (s.amp_active())
 			{
-				const bool dc_stable = previous && previous->amp_active && same_amp_dc(previous->s, s);
-				const bool spec_stable = previous && previous->amp_active && same_amp_params(previous->s, s);
+				const bool clean_dc_stable = previous && previous->amp_active && same_amp_dc(previous->s.amp_clean, s.amp_clean);
+				const bool clean_spec_stable = previous && previous->amp_active && same_amp_params(previous->s.amp_clean, s.amp_clean);
 
-				if (dc_stable)
+				if (clean_dc_stable)
 				{
-					amp = previous->amp;
-					if (!spec_stable)
+					amp_clean_model = previous->amp_clean_model;
+					if (!clean_spec_stable)
 					{
-						amp.spec = s.amp;
-						amp.sag_tau_leak = 0.060 + (1.0 - s.amp.gain / 10.0) * 0.040;
+						amp_clean_model.spec = s.amp_clean;
+						amp_clean_model.sag_tau_leak = 0.060 + (1.0 - s.amp_clean.gain / 10.0) * 0.040;
 					}
 				}
 				else
 				{
-					amp = amp_network(s.amp);
+					amp_clean_model = amp_network(s.amp_clean);
 				}
+
+				const bool lead_dc_stable = previous && previous->amp_active && same_amp_dc(previous->s.amp_lead, s.amp_lead);
+				const bool lead_spec_stable = previous && previous->amp_active && same_amp_params(previous->s.amp_lead, s.amp_lead);
+
+				if (lead_dc_stable)
+				{
+					amp_lead_model = previous->amp_lead_model;
+					if (!lead_spec_stable)
+					{
+						amp_lead_model.spec = s.amp_lead;
+						amp_lead_model.sag_tau_leak = 0.060 + (1.0 - s.amp_lead.gain / 10.0) * 0.040;
+					}
+				}
+				else
+				{
+					amp_lead_model = amp_network(s.amp_lead);
+				}
+
 				amp_active = true;
 			}
 			else
@@ -402,7 +413,7 @@ namespace grmg
 				for (int i = 0; i < NUM_STRINGS; ++i)
 					for (int f = 0; f < NUM_FRETS; ++f)
 					{
-						const auto &sp = STRING_SPECS[i];
+						const auto& sp = STRING_SPECS[i];
 						const auto a = pluck_network(sp.mu, sp.L, tension[(size_t)i], f, s.pluck, s.force, s.pick, s.pick_mm);
 						y0[(size_t)i][(size_t)f] = a["y0"];
 						tau[(size_t)i][(size_t)f] = a["tau"];
@@ -429,7 +440,7 @@ namespace grmg
 			}
 			else if (with_palm)
 			{
-				const auto &size = ROOMS[s.room_size];
+				const auto& size = ROOMS[s.room_size];
 				room = room_network(size, s.room_material);
 				for (int ear = 0; ear < 2; ++ear)
 				{
@@ -454,7 +465,7 @@ namespace grmg
 				for (int i = 0; i < NUM_STRINGS; ++i)
 					for (int f = 0; f < NUM_FRETS; ++f)
 					{
-						const auto &sp = STRING_SPECS[i];
+						const auto& sp = STRING_SPECS[i];
 						palm[(size_t)i][(size_t)f] =
 							std::make_shared<const Palm>(palm_network(sp.mu, sp.L, f, x, n, tension[(size_t)i]));
 					}

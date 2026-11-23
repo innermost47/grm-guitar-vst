@@ -6,6 +6,7 @@
 #include <cmath>
 #include <string>
 #include <vector>
+#include <cstdint>
 
 #include "physics.hpp"
 #include "grm.hpp"
@@ -20,7 +21,7 @@ namespace grmg
 
 	struct AmpSpec
 	{
-		const char *name = "5150 High Gain";
+		const char* name = "5150 High Gain";
 		double Vdd = 320.0;
 		double Rp = 100.0e3;
 		double Rk = 1.8e3;
@@ -33,6 +34,7 @@ namespace grmg
 		double sag_amount = 0.35;
 		bool tight = true;
 		bool ts_boost = true;
+		bool ensemble = false;
 		int stages = 4;
 	};
 
@@ -54,7 +56,7 @@ namespace grmg
 		AmpSpec spec;
 	};
 
-	inline AmpModel amp_network(const AmpSpec &spec)
+	inline AmpModel amp_network(const AmpSpec& spec)
 	{
 		grm::Network net;
 
@@ -77,33 +79,33 @@ namespace grmg
 		const int iVgk = net.index("Vgk"), iVpk = net.index("Vpk"), iA0 = net.index("A0");
 		const int iTr = net.index("transformer_coupling");
 
-		net.add_fn("plate_kcl", {"Vp", "Ip", "Rp", "Vdd_sag"}, [=](const grm::Values &v)
-				   { return (v[iVp] + v[iIp] * v[iRp] - v[iVdd_sag]) / 10.0; }, 1e-5);
+		net.add_fn("plate_kcl", { "Vp", "Ip", "Rp", "Vdd_sag" }, [=](const grm::Values& v)
+			{ return (v[iVp] + v[iIp] * v[iRp] - v[iVdd_sag]) / 10.0; }, 1e-5);
 
-		net.add_fn("cathode_kcl", {"Vk", "Ip", "Rk"}, [=](const grm::Values &v)
-				   { return (v[iVk] - v[iIp] * v[iRk]) * 10.0; }, 1e-5);
+		net.add_fn("cathode_kcl", { "Vk", "Ip", "Rk" }, [=](const grm::Values& v)
+			{ return (v[iVk] - v[iIp] * v[iRk]) * 10.0; }, 1e-5);
 
-		net.add_fn("power_supply_sag", {"Vdd_sag", "Vdd", "R_supply", "Ip"}, [=](const grm::Values &v)
-				   { 
-					   const double total_Ip = v[iIp] * 4.0;
-					   return (v[iVdd_sag] - (v[iVdd] - v[iR_supply] * total_Ip)) / 10.0; }, 1e-5);
+		net.add_fn("power_supply_sag", { "Vdd_sag", "Vdd", "R_supply", "Ip" }, [=](const grm::Values& v)
+			{
+				const double total_Ip = v[iIp] * 4.0;
+				return (v[iVdd_sag] - (v[iVdd] - v[iR_supply] * total_Ip)) / 10.0; }, 1e-5);
 
-		net.add_fn("transformer_warmth_rel", {"transformer_coupling", "A0"}, [=](const grm::Values &v)
-				   {
-					   const double expected_tr = 0.75 + 0.25 * std::tanh(v[iA0] / 40.0);
-					   return (v[iTr] - expected_tr) / 10.0; }, 1e-5);
+		net.add_fn("transformer_warmth_rel", { "transformer_coupling", "A0" }, [=](const grm::Values& v)
+			{
+				const double expected_tr = 0.75 + 0.25 * std::tanh(v[iA0] / 40.0);
+				return (v[iTr] - expected_tr) / 10.0; }, 1e-5);
 
-		net.add_sum("grid_bias", {{"Vgk", 1.0}, {"Vk", 1.0}}, 0.0, 1e-6);
-		net.add_sum("plate_cathode", {{"Vpk", 1.0}, {"Vp", -1.0}, {"Vk", 1.0}}, 0.0, 1e-6);
+		net.add_sum("grid_bias", { {"Vgk", 1.0}, {"Vk", 1.0} }, 0.0, 1e-6);
+		net.add_sum("plate_cathode", { {"Vpk", 1.0}, {"Vp", -1.0}, {"Vk", 1.0} }, 0.0, 1e-6);
 
-		net.add_fn("triode_characteristic", {"Ip", "Vgk", "Vpk"}, [=](const grm::Values &v)
-				   {
+		net.add_fn("triode_characteristic", { "Ip", "Vgk", "Vpk" }, [=](const grm::Values& v)
+			{
 				const double Veff = std::max(v[iVgk] + v[iVpk] / MU_12AX7, 0.0);
 				const double Ip_phys = G_12AX7 * std::pow(Veff, 1.5);
 				return (v[iIp] - Ip_phys) * 1e4; }, 1e-5);
 
-		net.add_fn("small_signal_gain", {"A0", "Ip", "Vgk", "Vpk", "Rp"}, [=](const grm::Values &v)
-				   {
+		net.add_fn("small_signal_gain", { "A0", "Ip", "Vgk", "Vpk", "Rp" }, [=](const grm::Values& v)
+			{
 				const double Veff = std::max(v[iVgk] + v[iVpk] / MU_12AX7, 1e-4);
 				const double gm = 1.5 * G_12AX7 * std::sqrt(Veff);
 				const double rp = std::max(MU_12AX7 / std::max(gm, 1e-9), 10e3);
@@ -122,7 +124,7 @@ namespace grmg
 		m.Vdd_sag0 = r["Vdd_sag"];
 		m.transformer_coupling = r["transformer_coupling"];
 
-		m.output_makeup = 1.2 + static_cast<double>(spec.stages) * 0.2 * std::log10(std::max(m.A0, 10.0));
+		m.output_makeup = 1.6 + static_cast<double>(spec.stages) * 0.25 * std::log10(std::max(m.A0, 10.0));
 
 		const double headroom_cutoff = std::max(m.Vdd_sag0 - m.Vp0, 10.0);
 		const double headroom_sat = std::max(m.Vp0 - V_SAT_TRIODE, 10.0);
@@ -145,13 +147,16 @@ namespace grmg
 		s.Rp = 100e3;
 		s.Rk = 1.8e3;
 		s.gain = 6.5;
-		s.bass = 0.55;
-		s.middle = 0.45;
-		s.treble = 0.55;
-		s.presence = 0.45;
+
+		s.bass = 0.65;
+		s.middle = 0.35;
+		s.treble = 0.70;
+		s.presence = 0.90;
+
 		s.master = 0.75;
 		s.tight = true;
 		s.ts_boost = true;
+		s.ensemble = true;
 		s.stages = 4;
 		return s;
 	}
@@ -199,7 +204,7 @@ namespace grmg
 		double up_s0 = 0.0, up_s1 = 0.0, up_s2 = 0.0, up_s3 = 0.0;
 		double dn_s0 = 0.0, dn_s1 = 0.0;
 
-		inline void up(double in, double &even, double &odd) noexcept
+		inline void up(double in, double& even, double& odd) noexcept
 		{
 			constexpr double a0 = 0.14134152, a1 = 0.58999482;
 			even = in;
@@ -250,9 +255,18 @@ namespace grmg
 			sag_envelope_ = 0.0;
 			limiter_env_ = 0.0;
 
+			noise_pink_state_ = 0.0;
+			noise_hum_phase_ = 0.0;
+			noise_seed_ = 12345;
+
 			pre_lp_state_ = 0.0;
 			pre_hp_state_ = 0.0;
 			os_lp_state_ = 0.0;
+			ts_lp_state_ = 0.0;
+
+			delay_buffer_.fill(0.0);
+			delay_write_ = 0;
+			lfo_phase_ = 0.0;
 
 			tone_bass_.reset();
 			tone_mid_.reset();
@@ -271,13 +285,18 @@ namespace grmg
 			hb_b_.reset();
 		}
 
-		void set_model(const AmpModel &m)
+		void set_model(const AmpModel& m)
 		{
 			model_ = m;
 			update_coefficients();
 		}
 
-		void process(float *buffer, int num_samples)
+		void set_noise_amount(double amount)
+		{
+			noise_amount_ = std::clamp(amount, 0.0, 2.0);
+		}
+
+		void process(float* buffer, int num_samples)
 		{
 			if (!buffer || num_samples <= 0)
 				return;
@@ -294,6 +313,13 @@ namespace grmg
 			for (int i = 0; i < num_samples; ++i)
 			{
 				double x = static_cast<double>(buffer[i]);
+
+				x += generate_noise();
+
+				if (model_.spec.ensemble)
+				{
+					x = apply_ensemble(x);
+				}
 
 				if (use_tight)
 					x = tight_bq_.process(x);
@@ -354,7 +380,7 @@ namespace grmg
 					limiter_env_ += release * (current_peak - limiter_env_);
 				}
 
-				const double threshold = 1.8;
+				const double threshold = 2.2;
 				double gain_reduction = 1.0;
 
 				if (limiter_env_ > threshold)
@@ -363,7 +389,6 @@ namespace grmg
 				}
 
 				y = y * gain_reduction;
-
 				y = std::tanh(y);
 
 				buffer[i] = static_cast<float>(y);
@@ -409,6 +434,49 @@ namespace grmg
 		Halfband2x hb_a_;
 		Halfband2x hb_b_;
 
+		uint32_t noise_seed_ = 12345;
+		double noise_pink_state_ = 0.0;
+		double noise_hum_phase_ = 0.0;
+		double noise_amount_ = 1.0;
+
+		double thermal_noise_coef_ = 0.0;
+		double shot_noise_coef_ = 0.0;
+		double flicker_noise_coef_ = 0.0;
+		double hum_noise_coef_ = 0.0;
+		double ts_lp_state_ = 0.0;
+
+		static constexpr int DELAY_BUFFER_SIZE = 512;
+		std::array<double, DELAY_BUFFER_SIZE> delay_buffer_{};
+		int delay_write_ = 0;
+		double lfo_phase_ = 0.0;
+
+		inline double generate_noise() noexcept
+		{
+			noise_seed_ = noise_seed_ * 1103515245 + 12345;
+			const double white = ((noise_seed_ >> 16) & 0x7FFF) / 16383.5 - 1.0;
+
+			noise_pink_state_ += 0.01 * (white - noise_pink_state_);
+			const double pink = noise_pink_state_;
+
+			constexpr double TWOPI = 2.0 * PI;
+			const double hum_freq = 50.0;
+			noise_hum_phase_ += TWOPI * hum_freq / sr_;
+			if (noise_hum_phase_ > TWOPI)
+				noise_hum_phase_ -= TWOPI;
+
+			const double hum = 0.4 * std::sin(noise_hum_phase_)
+				+ 0.15 * std::sin(2.0 * noise_hum_phase_)
+				+ 0.05 * std::sin(3.0 * noise_hum_phase_);
+
+			const double total_noise =
+				thermal_noise_coef_ * white +
+				shot_noise_coef_ * white +
+				flicker_noise_coef_ * pink +
+				hum_noise_coef_ * hum;
+
+			return total_noise * noise_amount_;
+		}
+
 		void update_coefficients()
 		{
 			constexpr double TWOPI = 2.0 * PI;
@@ -444,7 +512,7 @@ namespace grmg
 			tone_mid_.set_peaking(sr_, 650.0, 0.9, mid_db);
 			tone_treble_.set_highshelf(sr_, 3200.0, treb_db);
 
-			pres_.set_peaking(sr_, 2600.0, 1.0, pres_db);
+			pres_.set_peaking(sr_, 3860.0, 1.0, pres_db);
 			res_.set_lowshelf(sr_, 100.0, res_db);
 
 			cab_res_.set_peaking(sr_, 95.0, 2.2, 5.0);
@@ -455,6 +523,15 @@ namespace grmg
 			cab_lp2_.set_lowpass(sr_, 5200.0, 0.90);
 
 			cab_hp_.set_highpass(sr_, 75.0, 0.707);
+
+			shot_noise_coef_ = 0.0008 * std::sqrt(std::max(model_.Ip0 * 1000.0, 0.1));
+
+			thermal_noise_coef_ = 0.0003 * model_.spec.stages * (model_.A0 / 50.0);
+
+			flicker_noise_coef_ = 0.0015 * (model_.A0 / 40.0);
+
+			const double sag_factor = 1.0 - (model_.Vdd_sag0 / model_.spec.Vdd);
+			hum_noise_coef_ = 0.002 * (1.0 + sag_factor * 3.0) * model_.spec.sag_amount;
 		}
 
 		inline double process_ts_boost(double x) noexcept
@@ -462,10 +539,19 @@ namespace grmg
 			ts_hp_ += ts_hp_a_ * (x - ts_hp_);
 			const double x_hp = x - ts_hp_;
 
-			const double K = 0.9;
-			const double B = 0.05;
+			const double ts_gain = 8.5;
+			const double x_boosted = x_hp * ts_gain;
 
-			return biased_tanh(x_hp, K, B) + 0.08 * x_hp;
+			const double K = 1.2;
+			const double B = 0.15;
+			const double clipped = biased_tanh(x_boosted, K, B);
+
+			constexpr double TWOPI = 2.0 * PI;
+			const double lp_freq = 3500.0;
+			const double lp_coef = 1.0 - std::exp(-TWOPI * lp_freq / sr_);
+			ts_lp_state_ += lp_coef * (clipped - ts_lp_state_);
+
+			return 0.85 * ts_lp_state_ + 0.15 * x_hp;
 		}
 
 		inline double process_triode_stage(double in, int st, double sag_comp, double warmth) noexcept
@@ -485,7 +571,7 @@ namespace grmg
 				in = GRID_KNEE + e / (1.0 + e * 0.5);
 			}
 
-			double &bias = bias_shift_[st];
+			double& bias = bias_shift_[st];
 			const double v_grid = in - bias;
 
 			if (v_grid > 0.0)
@@ -563,6 +649,98 @@ namespace grmg
 			y = cab_hp_.process(y);
 			return y;
 		}
+
+		inline double apply_ensemble(double in) noexcept
+		{
+			delay_buffer_[delay_write_] = in;
+			delay_write_ = (delay_write_ + 1) & (DELAY_BUFFER_SIZE - 1);
+
+			lfo_phase_ += 2.0 * PI * 0.3 / sr_;
+			if (lfo_phase_ > 2.0 * PI) lfo_phase_ -= 2.0 * PI;
+			const double lfo = 0.5 + 0.5 * std::sin(lfo_phase_);
+
+			const double delay_ms = 1.5 + lfo * 1.0;
+			const double delay_samples = delay_ms * sr_ / 1000.0;
+
+			const int read_pos = (delay_write_ - 1 - (int)delay_samples + DELAY_BUFFER_SIZE) & (DELAY_BUFFER_SIZE - 1);
+			const int read_pos_next = (read_pos - 1 + DELAY_BUFFER_SIZE) & (DELAY_BUFFER_SIZE - 1);
+			const double frac = delay_samples - std::floor(delay_samples);
+			const double delayed = delay_buffer_[read_pos] * (1.0 - frac) + delay_buffer_[read_pos_next] * frac;
+
+			return 0.75 * in + 0.25 * delayed;
+		}
+	};
+
+	class DualChannelAmp
+	{
+	public:
+		void prepare(double sample_rate, int max_block_size = 4096)
+		{
+			clean_channel.prepare(sample_rate);
+			lead_channel.prepare(sample_rate);
+			temp_buffer_.resize(max_block_size, 0.0f);
+			current_mix_ = target_mix_;
+		}
+
+		void reset()
+		{
+			clean_channel.reset();
+			lead_channel.reset();
+			current_mix_ = target_mix_;
+		}
+
+		void set_clean_model(const AmpModel& m)
+		{
+			clean_channel.set_model(m);
+		}
+
+		void set_lead_model(const AmpModel& m)
+		{
+			lead_channel.set_model(m);
+		}
+
+		void set_noise_amount(double clean_amt, double lead_amt)
+		{
+			clean_channel.set_noise_amount(clean_amt);
+			lead_channel.set_noise_amount(lead_amt);
+		}
+
+		void set_channel_mix(double mix)
+		{
+			target_mix_ = std::clamp(mix, 0.0, 1.0);
+		}
+
+		void process(float* buffer, int num_samples)
+		{
+			if (!buffer || num_samples <= 0 || num_samples > static_cast<int>(temp_buffer_.size()))
+				return;
+
+			std::copy(buffer, buffer + num_samples, temp_buffer_.begin());
+
+			clean_channel.process(buffer, num_samples);
+
+			lead_channel.process(temp_buffer_.data(), num_samples);
+
+			const double crossfade_speed = 0.002;
+			for (int i = 0; i < num_samples; ++i)
+			{
+				current_mix_ += crossfade_speed * (target_mix_ - current_mix_);
+
+				const float clean_gain = 1.0f - static_cast<float>(current_mix_);
+				const float lead_gain = static_cast<float>(current_mix_);
+
+				buffer[i] = (clean_gain * buffer[i]) + (lead_gain * temp_buffer_[i]);
+			}
+		}
+
+	private:
+		AmpProcessor clean_channel;
+		AmpProcessor lead_channel;
+
+		double target_mix_ = 0.0;
+		double current_mix_ = 0.0;
+
+		std::vector<float> temp_buffer_;
 	};
 
 } // namespace grmg

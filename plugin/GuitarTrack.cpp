@@ -79,18 +79,35 @@ grmg::Settings GuitarTrack::readSettings() const
 	s.pickup_neck_type = juce::jlimit(0, grmg::NUM_PICKUP_TYPES - 1, c("pickup_neck_type"));
 
 	s.amp_on = param("amp_on") > 0.5f;
-	const int model = juce::jlimit(0, 2, (int)std::lround(param("amp_model")));
-	if (model == 0) s.amp = grmg::amp_preset_5150_lead();
-	else if (model == 1) s.amp = grmg::amp_preset_jcm800_crunch();
-	else s.amp = grmg::amp_preset_clean();
 
-	s.amp.gain = param("amp_gain");
-	s.amp.master = param("amp_master");
-	s.amp.bass = param("amp_bass");
-	s.amp.middle = param("amp_middle");
-	s.amp.treble = param("amp_treble");
-	s.amp.presence = param("amp_presence");
-	s.amp.tight = param("amp_tight") > 0.5f;
+	const int clean_model = juce::jlimit(0, 2, (int)std::lround(param("amp_clean_model")));
+	if (clean_model == 0) s.amp_clean = grmg::amp_preset_5150_lead();
+	else if (clean_model == 1) s.amp_clean = grmg::amp_preset_jcm800_crunch();
+	else s.amp_clean = grmg::amp_preset_clean();
+
+	s.amp_clean.gain = param("amp_clean_gain");
+	s.amp_clean.master = param("amp_clean_master");
+	s.amp_clean.bass = param("amp_clean_bass");
+	s.amp_clean.middle = param("amp_clean_middle");
+	s.amp_clean.treble = param("amp_clean_treble");
+	s.amp_clean.presence = param("amp_clean_presence");
+	s.amp_clean.tight = param("amp_clean_tight") > 0.5f;
+
+	const int lead_model = juce::jlimit(0, 2, (int)std::lround(param("amp_lead_model")));
+	if (lead_model == 0) s.amp_lead = grmg::amp_preset_5150_lead();
+	else if (lead_model == 1) s.amp_lead = grmg::amp_preset_jcm800_crunch();
+	else s.amp_lead = grmg::amp_preset_clean();
+
+	s.amp_lead.gain = param("amp_lead_gain");
+	s.amp_lead.master = param("amp_lead_master");
+	s.amp_lead.bass = param("amp_lead_bass");
+	s.amp_lead.middle = param("amp_lead_middle");
+	s.amp_lead.treble = param("amp_lead_treble");
+	s.amp_lead.presence = param("amp_lead_presence");
+	s.amp_lead.tight = param("amp_lead_tight") > 0.5f;
+
+	s.amp_channel_mix = param("amp_channel_mix");
+	// --------------------------------------
 
 	s.feedback_amount = param("feedback_amount");
 	s.feedback_distance = param("feedback_distance");
@@ -168,10 +185,21 @@ void GuitarTrack::addPattern(bool duplicate)
 	grmg::Song fresh;
 	{
 		std::lock_guard<std::mutex> lock(songLock);
-		fresh.bars = 1;
-		fresh.tempo = patterns[(size_t)editing.load()].tempo;
+		const int curIdx = juce::jlimit(0, (int)patterns.size() - 1, editing.load());
+		const auto& current = patterns[(size_t)curIdx];
+
 		if (duplicate)
-			fresh = patterns[(size_t)editing.load()];
+		{
+			fresh = current;
+		}
+		else
+		{
+			fresh.bars = 1;
+			fresh.tempo = current.tempo;
+			fresh.beats_per_bar = current.beats_per_bar;
+		}
+		fresh.key = current.key;
+		fresh.scale = current.scale;
 	}
 	insertPattern(fresh);
 }
@@ -231,8 +259,12 @@ void GuitarTrack::solveStep(double sr, unsigned seed, double tempo, bool loop, s
 	using M = grmg::Model;
 	auto sameSettings = [](const grmg::Settings& a, const grmg::Settings& b)
 		{
-			return M::same_strings(a, b) && M::same_attack(a, b) && M::same_palm(a, b) && M::same_body(a, b) && M::same_room(a, b)
-				&& M::same_amp_dc(a, b) && M::same_feedback(a, b) && M::same_amp_params(a, b);
+			return a.amp_on == b.amp_on &&
+				std::abs(a.amp_channel_mix - b.amp_channel_mix) < 1e-4 &&
+				M::same_strings(a, b) && M::same_attack(a, b) && M::same_palm(a, b) && M::same_body(a, b) && M::same_room(a, b)
+				&& M::same_feedback(a, b)
+				&& M::same_amp_dc(a.amp_clean, b.amp_clean) && M::same_amp_params(a.amp_clean, b.amp_clean)
+				&& M::same_amp_dc(a.amp_lead, b.amp_lead) && M::same_amp_params(a.amp_lead, b.amp_lead);
 		};
 	auto samePlayer = [](const grmg::Settings& a, const grmg::Settings& b)
 		{
@@ -317,6 +349,7 @@ void GuitarTrack::solveStep(double sr, unsigned seed, double tempo, bool loop, s
 			o.seed = seed + 7919u * (unsigned)index; // each guitarist plays with imprecisions of his own
 			o.loop = loop;
 			auto* set = new PerformanceSet;
+			set->model = m;
 			std::vector<std::string> texts;
 			for (size_t k = 0; k < songs.size(); ++k)
 			{
@@ -328,6 +361,7 @@ void GuitarTrack::solveStep(double sr, unsigned seed, double tempo, bool loop, s
 			}
 			compiledTexts = texts;
 			compiledPerfs = set->list;
+			compiledModelShared = m;
 			perfBox.post(set);
 		}
 		catch (const std::exception& e)
@@ -354,6 +388,12 @@ void GuitarTrack::prepare(double sr, int block)
 	out.setSize(2, block);
 	bodyMix.reset(sr, 0.05);
 	filterFr = filterQ = -1.0;
+}
+
+float GuitarTrack::param(const char* k) const
+{
+	auto* p = state.getRawParameterValue(paramId(k));
+	return p != nullptr ? p->load() : 0.0f;
 }
 
 void GuitarTrack::begin(bool patternModeNow, bool internalPlaying)

@@ -72,12 +72,17 @@ private:
 	};
 
 	void updateForSensor();
+	void layoutContent();
 
 	juce::AudioProcessorValueTreeState& state;
 	std::vector<Row> rows;
 	juce::String sensorId;
 	juce::Label warningLabel;
 	int lastSensor = -1;
+
+	juce::Viewport viewport;
+	juce::Component content;
+
 	std::unique_ptr<juce::VBlankAttachment> vblank;
 };
 
