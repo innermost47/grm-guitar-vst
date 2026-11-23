@@ -610,3 +610,11 @@ void GuitarTrack::finish(int n, double sr, bool ownRoom)
 		roomConv.process(juce::dsp::ProcessContextReplacing<float>(block));
 	}
 }
+
+grmg::Song GuitarTrack::getPattern(int k) const
+{
+	std::lock_guard<std::mutex> lock(songLock);
+	if (k >= 0 && k < (int)patterns.size())
+		return patterns[(size_t)k];
+	return {};
+}
