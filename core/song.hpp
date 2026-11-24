@@ -10,112 +10,15 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
-#include <cstdio>
 #include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "../constants/core.hpp"
+
 namespace grmg
 {
-
-    struct RollNote
-    {
-        int string = 0; // 0 = string 6 (low E) ... 5 = string 1 (high E)
-        int fret = 0;
-        double start = 0.0, length = 1.0; // beats
-        double velocity = 0.8;
-        bool palm = false;
-        // how the note ends: it rings as long as the hands let it (until its string is played again or the left hand
-        // must leave its fret); it stops at its end (the finger lifts); or a flat hand mutes it and its neighbours
-        enum End
-        {
-            ring = 0,
-            stop = 1,
-            hand = 2
-        };
-        int end = ring;
-        bool dead = false;     // a dead note ("x"): the left hand only touches the string, the pick gives a click
-        bool selected = false; // in the roll editor (not saved)
-    };
-
-    struct RollStrum
-    {
-        double start = 0.0, length = 2.0;                   // beats
-        std::array<int, 6> frets{{-1, -1, -1, -1, -1, -1}}; // -1: string not played
-        bool up = false;
-        double velocity = 0.8;
-        bool palm = false;
-        std::string chord = "";
-        bool selected = false; // in the roll editor (not saved)
-    };
-
-    // chord shapes, from string 6 to string 1; -1 = string not played (CHORDS of grm_guitar.py, and a few more)
-    struct ChordShape
-    {
-        const char *name;
-        int frets[6];
-    };
-    constexpr ChordShape CHORD_SHAPES[] = {
-        {"Open", {0, 0, 0, 0, 0, 0}},
-        {"Em", {0, 2, 2, 0, 0, 0}},
-        {"E", {0, 2, 2, 1, 0, 0}},
-        {"Am", {-1, 0, 2, 2, 1, 0}},
-        {"A", {-1, 0, 2, 2, 2, 0}},
-        {"D", {-1, -1, 0, 2, 3, 2}},
-        {"C", {-1, 3, 2, 0, 1, 0}},
-        {"G", {3, 2, 0, 0, 0, 3}},
-        {"Dm", {-1, -1, 0, 2, 3, 1}},
-        {"F", {1, 3, 3, 2, 1, 1}},
-        {"Bm", {-1, 2, 4, 4, 3, 2}},
-        {"E7", {0, 2, 0, 1, 0, 0}},
-        {"A7", {-1, 0, 2, 0, 2, 0}},
-        {"D7", {-1, -1, 0, 2, 1, 2}},
-        {"G7", {3, 2, 0, 0, 0, 1}},
-        {"C7", {-1, 3, 2, 3, 1, 0}},
-        {"Cadd9", {-1, 3, 2, 0, 3, 0}},
-        {"Fmaj7", {-1, -1, 3, 2, 1, 0}},
-        {"Asus2", {-1, 0, 2, 2, 0, 0}},
-        {"Dsus4", {-1, -1, 0, 2, 3, 3}},
-        {"E5", {0, 2, 2, -1, -1, -1}},
-        {"A5", {-1, 0, 2, 2, -1, -1}},
-        {"G5", {3, 5, 5, -1, -1, -1}},
-        {"D5", {-1, 5, 7, 7, -1, -1}},
-    };
-    constexpr int NUM_CHORDS = (int)(sizeof(CHORD_SHAPES) / sizeof(CHORD_SHAPES[0]));
-
-    // strum patterns of the Python sequencer, one character per sixteenth:
-    // d = down, u = up, x = palm-muted down, . = let the strings ring
-    struct StrumPattern
-    {
-        const char *name;
-        const char *steps;
-    };
-    constexpr StrumPattern STRUM_PATTERNS[] = {
-        {"All down", "d.d.d.d.d.d.d.d."},
-        {"Folk  d du ud u", "d.du.ud.d.du.udu"},
-        {"Eighths du", "dudududududududu"},
-        {"Reggae (off-beat)", ".x.d.x.d.x.d.x.d"},
-        {"Palm-muted rock", "xxxdxxxdxxxdxxdu"},
-        {"Quarter notes", "d...d...d...d..."},
-    };
-    constexpr int NUM_STRUM_PATTERNS = (int)(sizeof(STRUM_PATTERNS) / sizeof(STRUM_PATTERNS[0]));
-
-    // arpeggio slots, one per eighth: B = bass (lowest string of the chord), B2 = next bass string,
-    // 3 / 2 / 1 = treble strings (G, B, E); several = played together (a pinch)  (ARPEGGIOS of grm_guitar.py)
-    struct ArpeggioPattern
-    {
-        const char *name;
-        const char *slots[8];
-    };
-    constexpr ArpeggioPattern ARPEGGIO_PATTERNS[] = {
-        {"Up and down", {"B", "3", "2", "1", "2", "3", "2", "1"}},
-        {"Travis (alternating bass)", {"B", "2", "B2", "1", "B", "2", "B2", "3"}},
-        {"Bass + chord", {"B", "321", "B2", "321", "B", "321", "B2", "321"}},
-        {"Ballad", {"B", "3", "2", "3", "1", "3", "2", "3"}},
-        {"Pinch (bass + treble)", {"B1", "3", "2", "3", "B21", "3", "2", "3"}},
-    };
-    constexpr int NUM_ARPEGGIO_PATTERNS = (int)(sizeof(ARPEGGIO_PATTERNS) / sizeof(ARPEGGIO_PATTERNS[0]));
 
     class Song
     {
@@ -123,8 +26,8 @@ namespace grmg
         int bars = 4;
         int beats_per_bar = 4;
         double tempo = 90.0; // used when the host gives none (standalone)
-        std::vector<RollNote> notes;
-        std::vector<RollStrum> strums;
+        std::vector<models::RollNote> notes;
+        std::vector<models::RollStrum> strums;
         // hand stops: at these beats a hand is laid flat on every string, whatever rings stops there
         std::vector<double> stops;
 
@@ -211,10 +114,10 @@ namespace grmg
 
         void remove_range(double from, double to)
         {
-            notes.erase(std::remove_if(notes.begin(), notes.end(), [&](const RollNote &n)
+            notes.erase(std::remove_if(notes.begin(), notes.end(), [&](const models::RollNote &n)
                                        { return n.start >= from - 1e-9 && n.start < to - 1e-9; }),
                         notes.end());
-            strums.erase(std::remove_if(strums.begin(), strums.end(), [&](const RollStrum &s)
+            strums.erase(std::remove_if(strums.begin(), strums.end(), [&](const models::RollStrum &s)
                                         { return s.start >= from - 1e-9 && s.start < to - 1e-9; }),
                          strums.end());
         }
@@ -250,7 +153,7 @@ namespace grmg
             std::vector<std::pair<std::array<int, 6>, std::string>> shapes;
             const char *steps = STRUM_PATTERNS[pattern].steps;
             const size_t n = std::char_traits<char>::length(steps);
-            std::vector<RollStrum> made;
+            std::vector<models::RollStrum> made;
             for (double b = from; b < to - 1e-9; b += 4.0)
             {
                 for (size_t k = 0; k < n; ++k)
@@ -258,7 +161,7 @@ namespace grmg
                     const char c = steps[k];
                     if (c == '.')
                         continue;
-                    RollStrum s;
+                    models::RollStrum s;
                     s.start = b + 0.25 * (double)k;
                     if (s.start >= to - 1e-9)
                         break;
@@ -291,7 +194,7 @@ namespace grmg
         // an arpeggio from `from` to `to`: one slot per eighth, on the chord written there (or `fallback`)
         void fill_arpeggio_range(double from, double to, int pattern, const std::array<int, 6> &fallback, double ring_beats)
         {
-            std::vector<RollNote> made;
+            std::vector<models::RollNote> made;
             int k = 0;
             for (double b = from; b < to - 1e-9; b += 0.5, ++k)
             {
@@ -302,7 +205,7 @@ namespace grmg
                 const auto frets = any ? here.first : fallback;
                 for (int i : arpeggio_slot(frets.data(), ARPEGGIO_PATTERNS[pattern].slots[k % 8]))
                 {
-                    RollNote nn;
+                    models::RollNote nn;
                     nn.string = i;
                     nn.fret = frets[(size_t)i];
                     nn.start = b;
@@ -331,7 +234,7 @@ namespace grmg
                     const char c = steps[k];
                     if (c == '.')
                         continue;
-                    RollStrum s;
+                    models::RollStrum s;
                     s.start = b + 0.25 * (double)k;
                     if (s.start >= to - 1e-9)
                         break;
@@ -365,7 +268,7 @@ namespace grmg
             {
                 for (int i : arpeggio_slot(frets, ARPEGGIO_PATTERNS[pattern].slots[k % 8]))
                 {
-                    RollNote n;
+                    models::RollNote n;
                     n.string = i;
                     n.fret = frets[i];
                     n.start = b;
@@ -379,9 +282,9 @@ namespace grmg
 
         void sort()
         {
-            std::sort(notes.begin(), notes.end(), [](const RollNote &a, const RollNote &b)
+            std::sort(notes.begin(), notes.end(), [](const models::RollNote &a, const models::RollNote &b)
                       { return a.start < b.start - 1e-9 || (std::abs(a.start - b.start) <= 1e-9 && a.string < b.string); });
-            std::sort(strums.begin(), strums.end(), [](const RollStrum &a, const RollStrum &b)
+            std::sort(strums.begin(), strums.end(), [](const models::RollStrum &a, const models::RollStrum &b)
                       { return a.start < b.start; });
             std::sort(stops.begin(), stops.end());
             stops.erase(std::unique(stops.begin(), stops.end(), [](double a, double b)
@@ -446,7 +349,7 @@ namespace grmg
                 }
                 else if (word == "note")
                 {
-                    RollNote n;
+                    models::RollNote n;
                     int palm = 0;
                     in >> n.string >> n.fret >> n.start >> n.length >> n.velocity >> palm;
                     n.palm = palm != 0;
@@ -469,7 +372,7 @@ namespace grmg
                 }
                 else if (word == "strum")
                 {
-                    RollStrum t;
+                    models::RollStrum t;
                     int up = 0, palm = 0;
                     in >> t.start >> t.length >> up >> t.velocity >> palm;
                     for (auto &f : t.frets)

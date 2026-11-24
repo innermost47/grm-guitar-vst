@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 Anthony Charretier
 cmake_minimum_required(VERSION 3.22)
-project(GRMGuitar VERSION 0.3.7 LANGUAGES C CXX)
+project(GRMGuitar VERSION 0.3.8 LANGUAGES C CXX)
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the build type" FORCE)
@@ -61,11 +61,36 @@ if(GRMG_BUILD_PLUGIN)
         IS_MIDI_EFFECT FALSE
         COPY_PLUGIN_AFTER_BUILD FALSE)
 
+    juce_add_binary_data(GRMGuitarBinaryData
+        SOURCES
+            assets/fonts/michroma.ttf
+            assets/fonts/noto-bold.ttf
+            assets/fonts/noto-italic.ttf
+            assets/fonts/noto-regular.ttf
+            assets/icons/caret-down.svg
+            assets/icons/caret-left.svg
+            assets/icons/caret-right.svg
+            assets/icons/caret-up.svg
+    )
+
     target_sources(GRMGuitar PRIVATE
         plugin/PluginProcessor.cpp
         plugin/GuitarTrack.cpp
         plugin/PluginEditor.cpp
-        plugin/RollView.cpp)
+        plugin/solver/SolverThread.cpp
+        plugin/style/CustomLookAndFeel.cpp
+        plugin/views/MixerView.cpp
+        plugin/views/NeckView.cpp
+        plugin/views/NetworksView.cpp
+        plugin/views/ParamPanel.cpp
+        plugin/views/RollView.cpp
+        plugin/views/ScopeView.cpp)
+
+    target_include_directories(GRMGuitar PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/plugin
+        ${CMAKE_CURRENT_SOURCE_DIR}/plugin/solver
+        ${CMAKE_CURRENT_SOURCE_DIR}/plugin/views
+        ${CMAKE_CURRENT_SOURCE_DIR}/plugin/style)
 
     target_compile_definitions(GRMGuitar PUBLIC
         JUCE_WEB_BROWSER=0
@@ -105,6 +130,7 @@ if(GRMG_BUILD_PLUGIN)
     target_link_libraries(GRMGuitar
         PRIVATE
             grm_core
+            GRMGuitarBinaryData
             juce::juce_audio_utils
             juce::juce_dsp
             juce::juce_audio_formats

@@ -12,20 +12,15 @@
 #include <set>
 #include <vector>
 
+#include "../constants/core.hpp"
 #include "playability.hpp"
 #include "song.hpp"
 
 namespace grmg
 {
 
-    struct Ringing
-    {
-        std::vector<double> note_end;                 // beats, per note of the song
-        std::vector<std::array<double, 6>> strum_end; // beats, per strum and string (-1: not played)
-    };
-
     // length: the beats the song lasts; loop: its end leads into its start (a note may ring into the next cycle)
-    inline Ringing ringing(const Song &song, double length, bool loop, bool thumb = false)
+    inline models::Ringing ringing(const Song &song, double length, bool loop, bool thumb = false)
     {
         constexpr double FAR = 1e6;
         struct Item
@@ -47,7 +42,7 @@ namespace grmg
                 items.push_back({n.string, 0, n.start, n.start + std::min(n.length, 0.1), false, (int)k, -1, n.start + std::min(n.length, 0.1)});
                 continue;
             }
-            items.push_back({n.string, n.fret, n.start, n.start + n.length, n.end == RollNote::ring, (int)k, -1, n.start + n.length});
+            items.push_back({n.string, n.fret, n.start, n.start + n.length, n.end == models::RollNote::ring, (int)k, -1, n.start + n.length});
         }
         for (size_t k = 0; k < song.strums.size(); ++k)
         {
@@ -135,7 +130,7 @@ namespace grmg
                     if (at > it.start + 1e-9 && at < it.end - 1e-9)
                         it.end = at;
                 }
-        Ringing r;
+        models::Ringing r;
         r.note_end.assign(song.notes.size(), 0.0);
         r.strum_end.assign(song.strums.size(), {-1, -1, -1, -1, -1, -1});
         for (const auto &it : items)

@@ -17,7 +17,6 @@
 #include <cmath>
 #include <complex>
 
-#include "constants.hpp"
 #include "model.hpp"
 
 namespace grmg
@@ -40,30 +39,11 @@ namespace grmg
 
 	inline double sinc(double x) { return std::abs(x) < 1e-12 ? 1.0 : std::sin(PI * x) / (PI * x); }
 
-	enum class Kind
-	{
-		strike,
-		lift,
-		land
-	};
-
-	// what starts a string: the networks' results for this note
-	struct Pluck
-	{
-		int string = 0, fret = 0;
-		Place place;
-		double gain = 0;	 // release height / Y_REF
-		double tau = 0;		 // s, release time
-		double pluck = 0.22; // apex of the triangle, share of the vibrating length
-		Kind kind = Kind::strike;
-		const Palm *palm = nullptr;
-	};
-
 	class StringVoice
 	{
 	public:
 		bool active = false;
-		Pluck what;
+		models::Pluck what;
 		int note = -1; // MIDI note that holds it (live playing), -1 otherwise
 		int note_channel = 0;
 
@@ -73,7 +53,7 @@ namespace grmg
 		}
 
 		// pickup_x > 0: a magnetic pickup listens at that distance from the saddle (render's `pickup` output)
-		void start(const Pluck &p, const Body &body, const StringLosses &losses, double brightness, double sr,
+		void start(const models::Pluck &p, const models::Body &body, const models::StringLosses &losses, double brightness, double sr,
 				   const std::array<double, 3> &pickup_xs = std::array<double, 3>{0.0, 0.0, 0.0})
 		{
 			what = p;
@@ -83,8 +63,8 @@ namespace grmg
 			t_ = 0;
 			fade_ = 1.0;
 			fade_step_ = 0.0;
-			const Place &pl = p.place;
-			const bool regain = p.palm && p.kind == Kind::strike;
+			const models::Place &pl = p.place;
+			const bool regain = p.palm && p.kind == models::Kind::strike;
 			std::array<double, MAX_MODES> amp{};
 			double peak = 0.0;
 			int count = 0;
@@ -307,7 +287,7 @@ namespace grmg
 		int fret = 0;
 		bool palm = false;
 
-		void set(const Place &pl, const Palm *palm_net, const Body &body, const StringLosses &losses, double sr,
+		void set(const models::Place &pl, const models::Palm *palm_net, const models::Body &body, const models::StringLosses &losses, double sr,
 				 const std::array<double, 3> &pickup_xs = std::array<double, 3>{0.0, 0.0, 0.0})
 		{
 			sr_ = sr;

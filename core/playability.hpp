@@ -21,7 +21,7 @@
 #include <string>
 #include <vector>
 
-#include "constants.hpp"
+#include "../constants/core.hpp"
 #include "grm.hpp"
 #include "model.hpp"
 #include "song.hpp"
@@ -33,18 +33,10 @@ namespace grmg
         return L * (1.0 - std::pow(2.0, -fret / 12.0));
     }
 
-    struct HandResult
-    {
-        bool possible = true;
-        int fingers = 0;
-        double tension = 0.0; // strain of the hand network (0: at ease)
-        std::string why;
-    };
-
     // the left hand for the fretted notes {string, fret} held at the same moment
-    inline HandResult left_hand(std::vector<std::pair<int, int>> held, bool thumb = false)
+    inline models::HandResult left_hand(std::vector<std::pair<int, int>> held, bool thumb = false)
     {
-        HandResult r;
+        models::HandResult r;
         held.erase(std::remove_if(held.begin(), held.end(), [](auto h)
                                   { return h.second <= 0; }),
                    held.end());
@@ -53,14 +45,8 @@ namespace grmg
         std::sort(held.begin(), held.end(), [](auto a, auto b)
                   { return a.second != b.second ? a.second < b.second : a.first < b.first; });
         const int low = held.front().second;
-        // fingers: the lowest fret is one finger (a barre if several strings); at another fret, neighbouring strings
-        // share a finger; a bass note at the lowest fret can be the thumb
-        struct Finger
-        {
-            int fret;
-            int number;
-        };
-        std::vector<Finger> fingers;
+
+        std::vector<models::Finger> fingers;
         fingers.push_back({low, 1});
         bool thumb_used = false;
         for (size_t k = 0; k < held.size(); ++k)
@@ -131,16 +117,10 @@ namespace grmg
         return "";
     }
 
-    struct Problem
-    {
-        double beat;
-        std::string why;
-    };
-
     // every moment of the song one guitarist cannot play
-    inline std::vector<Problem> impossible_moments(const Song &song, bool pick, bool thumb = false)
+    inline std::vector<models::Problem> impossible_moments(const Song &song, bool pick, bool thumb = false)
     {
-        std::vector<Problem> out;
+        std::vector<models::Problem> out;
         std::set<long> starts;
         for (const auto &n : song.notes)
             starts.insert(std::lround(n.start * 960.0));
@@ -200,7 +180,7 @@ namespace grmg
 
     // Would one more note be playable? Only the moments it touches are checked (its start and every start while it
     // rings), with only the notes and strums sounding then: the roll greys the places the hands cannot reach.
-    inline bool playable_with(const Song &song, const RollNote &extra, bool pick, bool thumb = false)
+    inline bool playable_with(const Song &song, const models::RollNote &extra, bool pick, bool thumb = false)
     {
         const double a = extra.start, b = extra.start + extra.length;
         Song local;
@@ -212,7 +192,7 @@ namespace grmg
         for (const auto &t : song.strums)
             if (t.start < b - 1e-9 && t.start + t.length > a + 1e-9)
                 local.strums.push_back(t);
-        auto inside = [&](const std::vector<Problem> &ps)
+        auto inside = [&](const std::vector<models::Problem> &ps)
         {
             int k = 0;
             for (const auto &p : ps)

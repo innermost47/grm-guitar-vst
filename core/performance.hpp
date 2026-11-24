@@ -26,7 +26,7 @@
 #include <utility>
 #include <vector>
 
-#include "constants.hpp"
+#include "../constants/core.hpp"
 #include "model.hpp"
 #include "ringing.hpp"
 #include "song.hpp"
@@ -35,32 +35,13 @@
 namespace grmg
 {
 
-	enum class EventType
-	{
-		pluck,
-		damp,
-		squeak,
-		palm_on,
-		palm_off
-	};
-
-	struct Event
-	{
-		double beat = 0.0;
-		EventType type = EventType::pluck;
-		int string = 0;
-		Pluck pluck;		 // pluck: what starts the string
-		int squeak = -1;	 // squeak: index of the sound
-		double extra = 40.0; // damp: extra losses per second (at the fundamental; more for the higher modes)
-	};
-
 	class Performance
 	{
 	public:
-		std::shared_ptr<const Model> model;				// the networks it was compiled with
-		std::vector<Event> events;						// sorted by beat
-		std::vector<std::vector<float>> squeaks;		// force on the bridge (N), at the model's sample rate
-		std::vector<std::shared_ptr<const Palm>> palms; // the palms its plucks point to
+		std::shared_ptr<const Model> model;						// the networks it was compiled with
+		std::vector<models::Event> events;						// sorted by beat
+		std::vector<std::vector<float>> squeaks;				// force on the bridge (N), at the model's sample rate
+		std::vector<std::shared_ptr<const models::Palm>> palms; // the palms its plucks point to
 		double length_beats = 16.0;
 		double origin = 0.0; // beat of the song where this performance starts (the loop's start flag)
 		double tempo = 90.0;
@@ -68,7 +49,7 @@ namespace grmg
 		size_t first_at(double beat) const
 		{
 			return (size_t)(std::lower_bound(events.begin(), events.end(), beat,
-											 [](const Event &e, double b)
+											 [](const models::Event &e, double b)
 											 { return e.beat < b; }) -
 							events.begin());
 		}
@@ -78,7 +59,7 @@ namespace grmg
 	class PalmCache
 	{
 	public:
-		std::shared_ptr<const Palm> get(const Model &m, int i, int fret, double x_stroke, double n_stroke)
+		std::shared_ptr<const models::Palm> get(const Model &m, int i, int fret, double x_stroke, double n_stroke)
 		{
 			const double home = m.s.palm_mm / 1000.0;
 			if (m.s.palm_intensity < PALM_OFF)
@@ -95,22 +76,15 @@ namespace grmg
 			if (it != cache_.end())
 				return it->second;
 			const auto &sp = STRING_SPECS[i];
-			const Palm *ref = m.palm_ready ? m.palm[(size_t)i][(size_t)fret].get() : nullptr;
-			auto p = std::make_shared<const Palm>(palm_network(sp.mu, sp.L, fret, x, n, m.tension[(size_t)i], 4, ref));
+			const models::Palm *ref = m.palm_ready ? m.palm[(size_t)i][(size_t)fret].get() : nullptr;
+			auto p = std::make_shared<const models::Palm>(palm_network(sp.mu, sp.L, fret, x, n, m.tension[(size_t)i], 4, ref));
 			cache_[key] = p;
 			return p;
 		}
 
 	private:
-		std::map<std::tuple<int, int, long, long, long>, std::shared_ptr<const Palm>> cache_;
+		std::map<std::tuple<int, int, long, long, long>, std::shared_ptr<const models::Palm>> cache_;
 		std::pair<int, double> cache_key_{-1, 0.0};
-	};
-
-	struct CompileOptions
-	{
-		double tempo = 90.0;
-		unsigned seed = 1;
-		bool loop = false; // the song plays in a loop: its end leads into its start (hands, ringing notes)
 	};
 
 	class Compiler
@@ -119,11 +93,11 @@ namespace grmg
 		PalmCache palms;
 
 		// length: the beats it lasts (0: the song's bars)
-		std::unique_ptr<Performance> compile(const Song &song, std::shared_ptr<const Model> model_ptr, const CompileOptions &o,
+		std::unique_ptr<Performance> compile(const Song &song, std::shared_ptr<const Model> model_ptr, const models::CompileOptions &o,
 											 double length = 0.0)
 		{
 			const Model &m = *model_ptr;
-			const Settings &s = m.s;
+			const models::Settings &s = m.s;
 			auto perf = std::make_unique<Performance>();
 			perf->model = model_ptr;
 			perf->length_beats = length > 0 ? length : song.length_beats();
@@ -137,25 +111,9 @@ namespace grmg
 
 			// ---------------------------------------------------------------- 1) the strokes of the right hand
 			// how long each note and strum string rings (as long as the hands let it, see ringing.hpp)
-			const Ringing rings = ringing(song, perf->length_beats, o.loop);
-			struct Strike
-			{
-				double beat;
-				int string, fret;
-				double velocity, length;
-				bool palm, up;
-				int strum;
-				double ring;
-				int end;
-				bool dead;
-			};
-			struct Moment
-			{
-				double beat;
-				std::vector<Strike> strikes;
-				int strum = -1;
-			};
-			std::map<long, Moment> moments; // by start, to the 1/960 beat
+			const models::Ringing rings = ringing(song, perf->length_beats, o.loop);
+
+			std::map<long, models::Moment> moments; // by start, to the 1/960 beat
 			auto key = [](double beat)
 			{ return std::lround(beat * 960.0); };
 			for (size_t q = 0; q < song.notes.size(); ++q)
@@ -177,10 +135,10 @@ namespace grmg
 				mo.beat = st.start;
 				mo.strum = (int)k;
 			}
-			std::vector<Moment> order;
+			std::vector<models::Moment> order;
 			for (auto &[k, mo] : moments)
 				order.push_back(mo);
-			std::vector<Stroke> strokes = run_player(order, step, spb, s, rng);
+			std::vector<models::Stroke> strokes = run_player(order, step, spb, s, rng);
 			muscle(strokes, step);
 
 			if (!strokes.empty() && order.front().beat <= 1e-4)
@@ -189,29 +147,13 @@ namespace grmg
 			}
 
 			// ---------------------------------------------------------------- 2) the strokes meet the strings
-			struct Played
-			{
-				double t;
-				int string, fret;
-				double factor, pluck, length;
-				const Palm *palm;
-				Stroke stroke;
-				bool palm_on;
-				int chord_order;
-			}; // place of the string in its strum (-1: a single note)
-			std::vector<Played> played;
+			std::vector<models::Played> played;
 			std::vector<std::pair<double, double>> palm_spans; // seconds
-			struct Touch
-			{
-				double t;
-				int string;
-				double extra;
-			};
-			std::vector<Touch> touches; // the palm lands on strings that ring
+			std::vector<models::Touch> touches;				   // the palm lands on strings that ring
 			for (size_t k = 0; k < order.size(); ++k)
 			{
 				const auto &mo = order[k];
-				const Stroke &stroke = strokes[k];
+				const models::Stroke &stroke = strokes[k];
 				// the palm is one hand: one band of neighbouring strings, around the ones asked, pressing less on its
 				// edges, a little harder when the stroke is harder
 				int lo = NUM_STRINGS, hi = -1;
@@ -242,7 +184,7 @@ namespace grmg
 						return 0.0;
 					return (i >= lo && i <= hi) ? 1.0 : PALM_EDGE;
 				};
-				auto palm_for = [&](int i, int fret) -> const Palm *
+				auto palm_for = [&](int i, int fret) -> const models::Palm *
 				{
 					const double share = palm_share(i);
 					if (share <= 0)
@@ -262,7 +204,7 @@ namespace grmg
 				if (!mo.strikes.empty())
 				{
 					const bool up = s.pick && (std::lround(mo.beat * 4.0) % 2 != 0);
-					std::vector<const Strike *> by_string;
+					std::vector<const models::Strike *> by_string;
 					for (const auto &st : mo.strikes)
 						by_string.push_back(&st);
 					std::sort(by_string.begin(), by_string.end(), [&](auto a, auto b)
@@ -290,7 +232,7 @@ namespace grmg
 						if (st->dead)
 							touches.push_back({stroke.t + early + contacts[q].delay + DEAD_TOUCH, st->string, RELEASE_DEAD});
 						// a flat hand stops the note at its end, and the strings beside it
-						if (st->end == RollNote::hand)
+						if (st->end == models::RollNote::hand)
 							for (int j = st->string - 1; j <= st->string + 1; ++j)
 								if (j >= 0 && j < NUM_STRINGS)
 									touches.push_back({stroke.t + early + contacts[q].delay + st->length * spb, j, RELEASE_HAND});
@@ -309,7 +251,7 @@ namespace grmg
 						continue;
 					// which strings the arc of the wrist reaches, and how deep (strum_contacts); then the sweep: each
 					// string takes some of the arm's energy, so the pick slows and the later strings get less
-					const auto reach = crossing.size() == 1 ? std::vector<Contact>{{crossing[0], 0.0, 1.0}}
+					const auto reach = crossing.size() == 1 ? std::vector<models::Contact>{{crossing[0], 0.0, 1.0}}
 															: strum_contacts(crossing, stroke, st.up);
 					if (reach.empty())
 						continue;
@@ -339,11 +281,11 @@ namespace grmg
 					// palm network of that string at that pressure and place), not a fixed one
 					for (int i = 0; i < NUM_STRINGS && palm_down; ++i)
 						if (!struck[(size_t)i] && palm_share(i) > 0)
-							if (const Palm *pp = palm_for(i, 0))
+							if (const models::Palm *pp = palm_for(i, 0))
 								touches.push_back({stroke.t - 0.03, i, std::min(PALM_LAND_DAMP, pp->sigma_at(0) * PALM_LAND_SPREAD)});
 				}
 			}
-			std::stable_sort(played.begin(), played.end(), [](const Played &a, const Played &b)
+			std::stable_sort(played.begin(), played.end(), [](const models::Played &a, const models::Played &b)
 							 { return a.t < b.t; });
 
 			// ---------------------------------------------------------------- 3) and 4) string by string
@@ -369,7 +311,7 @@ namespace grmg
 			};
 			// how a note ends: the finger relaxes (fretted) or a hand touches the string (open); the strings of a
 			// chord are left one after the other, a few milliseconds apart
-			auto release = [&](const Played &p, double t)
+			auto release = [&](const models::Played &p, double t)
 			{
 				const double spread = p.chord_order >= 0 ? p.chord_order * RELEASE_SPREAD + std::abs(jitter(0.004)) : 0.0;
 				return std::make_pair(t + spread, p.fret > 0 ? RELEASE_FRETTED : RELEASE_OPEN);
@@ -377,7 +319,7 @@ namespace grmg
 			for (int i = 0; i < NUM_STRINGS; ++i)
 			{
 				const auto &sp = STRING_SPECS[i];
-				std::vector<Played> mine;
+				std::vector<models::Played> mine;
 				for (const auto &p : played)
 					if (p.string == i)
 						mine.push_back(p);
@@ -421,9 +363,9 @@ namespace grmg
 							}
 							if (s.finger_noises)
 							{
-								const Action &a = m.action[(size_t)held];
-								Pluck lift = make_pluck(m, i, 0, a.h / Y_REF, TAU_LIFT, std::max(a.xf / sp.L, 0.02), Kind::lift,
-														palm_now ? keep(*perf, palms.get(m, i, 0, p.stroke.palm_x, p.stroke.palm_N)) : nullptr);
+								const models::Action &a = m.action[(size_t)held];
+								models::Pluck lift = make_pluck(m, i, 0, a.h / Y_REF, TAU_LIFT, std::max(a.xf / sp.L, 0.02), models::Kind::lift,
+																palm_now ? keep(*perf, palms.get(m, i, 0, p.stroke.palm_x, p.stroke.palm_N)) : nullptr);
 								add_pluck(*perf, to_beat(t_lift), lift);
 								ringing_until = t_lift + 1.5;
 								end_of_note = ringing_until;
@@ -434,9 +376,9 @@ namespace grmg
 						}
 						if (p.fret > 0 && s.finger_noises)
 						{
-							const Action &a = m.action[(size_t)p.fret];
-							Pluck land = make_pluck(m, i, p.fret, LAND_SHARE * a.h / Y_REF, TAU_LAND, 0.03, Kind::land,
-													palm_now ? keep(*perf, palms.get(m, i, p.fret, p.stroke.palm_x, p.stroke.palm_N)) : nullptr);
+							const models::Action &a = m.action[(size_t)p.fret];
+							models::Pluck land = make_pluck(m, i, p.fret, LAND_SHARE * a.h / Y_REF, TAU_LAND, 0.03, models::Kind::land,
+															palm_now ? keep(*perf, palms.get(m, i, p.fret, p.stroke.palm_x, p.stroke.palm_N)) : nullptr);
 							settle(t_land);
 							add_pluck(*perf, to_beat(t_land), land);
 							ringing_until = t_land + 1.5;
@@ -449,7 +391,7 @@ namespace grmg
 					// the stroke itself: attack network at the stroke's force and pluck point
 					const double force = s.force * std::max(p.factor, 0.02);
 					const auto a = pluck_network(sp.mu, sp.L, m.tension[(size_t)i], p.fret, p.pluck, force, s.pick, s.pick_mm);
-					Pluck pl = make_pluck(m, i, p.fret, a["y0"] / Y_REF, a["tau"], p.pluck, Kind::strike, p.palm);
+					models::Pluck pl = make_pluck(m, i, p.fret, a["y0"] / Y_REF, a["tau"], p.pluck, models::Kind::strike, p.palm);
 					add_pluck(*perf, to_beat(p.t), pl);
 					ringing_until = p.t + p.length;
 					last_t = p.t;
@@ -467,20 +409,20 @@ namespace grmg
 				add_damp(*perf, t.string, to_beat(t.t), false, t.extra);
 			for (auto [a, b] : palm_spans)
 			{
-				Event on, off;
-				on.type = EventType::palm_on;
+				models::Event on, off;
+				on.type = models::EventType::palm_on;
 				on.beat = to_beat(a);
-				off.type = EventType::palm_off;
+				off.type = models::EventType::palm_off;
 				off.beat = to_beat(b);
 				perf->events.push_back(on);
 				perf->events.push_back(off);
 			}
 			// a damp written for a note that the string has already left (struck again first) does nothing: the
 			// engine only damps the note that rings. Order: at the same beat, a damp comes before a pluck.
-			std::stable_sort(perf->events.begin(), perf->events.end(), [](const Event &x, const Event &y)
+			std::stable_sort(perf->events.begin(), perf->events.end(), [](const models::Event &x, const models::Event &y)
 							 {
 				if (std::abs(x.beat - y.beat) > 1e-12) return x.beat < y.beat;
-				return (x.type == EventType::damp) && (y.type != EventType::damp); });
+				return (x.type == models::EventType::damp) && (y.type != models::EventType::damp); });
 			return perf;
 		}
 
@@ -491,10 +433,10 @@ namespace grmg
 		// so w_{j+1} = (1 - c_j) w_j, with w the share of the energy left and c_j that energy over the hand's. The
 		// pick slows (delays grow), the later strings get less: a slow, soft strum fades across the chord, a fast
 		// one hardly. The delays start at `first` (the first string the arc of the wrist reaches).
-		static std::vector<Contact> sweep(const Model &m, const std::vector<int> &strings, const std::vector<double> &base,
-										  const std::vector<int> &frets, const Stroke &stroke, double first)
+		static std::vector<models::Contact> sweep(const Model &m, const std::vector<int> &strings, const std::vector<double> &base,
+												  const std::vector<int> &frets, const models::Stroke &stroke, double first)
 		{
-			std::vector<Contact> out;
+			std::vector<models::Contact> out;
 			if (strings.empty())
 				return out;
 			const double v0 = std::max(stroke.v, 0.05);
@@ -530,10 +472,10 @@ namespace grmg
 		// fingers plucking together (a pinch): each finger its own force and timing; the thumb (the bass) a little
 		// ahead of the others
 		template <class Rng>
-		static std::vector<Contact> pinch(const std::vector<int> &strings, const std::vector<double> &base, Rng *rng,
-										  double amount = 1.0)
+		static std::vector<models::Contact> pinch(const std::vector<int> &strings, const std::vector<double> &base, Rng *rng,
+												  double amount = 1.0)
 		{
-			std::vector<Contact> out;
+			std::vector<models::Contact> out;
 			if (strings.empty())
 				return out;
 			const int bass = *std::min_element(strings.begin(), strings.end());
@@ -557,7 +499,7 @@ namespace grmg
 		// carries the fatigue F along the strokes, F_k = e^{-dt/RECOVER} F_{k-1} + EFFORT force_k^2, and a tired arm
 		// strikes softer and slower. Measured against the arm playing eighths at force 1 (the player's ordinary
 		// effort): a stroke after a rest comes out a little stronger, the end of a long run of sixteenths weaker.
-		static void muscle(std::vector<Stroke> &strokes, double step)
+		static void muscle(std::vector<models::Stroke> &strokes, double step)
 		{
 			if (strokes.empty())
 				return;
@@ -598,15 +540,15 @@ namespace grmg
 		}
 
 	private:
-		static const Palm *keep(Performance &perf, std::shared_ptr<const Palm> p)
+		static const models::Palm *keep(Performance &perf, std::shared_ptr<const models::Palm> p)
 		{
 			perf.palms.push_back(p);
 			return p.get();
 		}
 
-		static Pluck make_pluck(const Model &m, int i, int fret, double gain, double tau, double pluck, Kind kind, const Palm *palm)
+		static models::Pluck make_pluck(const Model &m, int i, int fret, double gain, double tau, double pluck, models::Kind kind, const models::Palm *palm)
 		{
-			Pluck p;
+			models::Pluck p;
 			p.string = i;
 			p.fret = fret;
 			p.place = m.place[(size_t)i][(size_t)fret];
@@ -618,10 +560,10 @@ namespace grmg
 			return p;
 		}
 
-		static void add_pluck(Performance &perf, double beat, const Pluck &p)
+		static void add_pluck(Performance &perf, double beat, const models::Pluck &p)
 		{
-			Event e;
-			e.type = EventType::pluck;
+			models::Event e;
+			e.type = models::EventType::pluck;
 			e.beat = beat;
 			e.string = p.string;
 			e.pluck = p;
@@ -631,8 +573,8 @@ namespace grmg
 		// damp: the end of a note. `left`: the finger leaves the fret (the lift pluck takes over)
 		static void add_damp(Performance &perf, int i, double beat, bool left, double extra)
 		{
-			Event e;
-			e.type = EventType::damp;
+			models::Event e;
+			e.type = models::EventType::damp;
 			e.beat = beat;
 			e.string = i;
 			e.squeak = left ? 1 : 0;
@@ -643,7 +585,7 @@ namespace grmg
 		void add_squeak(Performance &perf, const Model &m, int i, int from, int to, double beat, double dur, unsigned seed)
 		{
 			const auto &sp = STRING_SPECS[i];
-			const Squeak v = squeak_network(sp.mu, sp.L, m.core_fraction(i), from, to, dur, m.s.finger_force);
+			const models::Squeak v = squeak_network(sp.mu, sp.L, m.core_fraction(i), from, to, dur, m.s.finger_force);
 			std::vector<double> bumps;
 			if (from > 0 && to > 0)
 			{
@@ -661,8 +603,8 @@ namespace grmg
 			const double mid = (from + (to > 0 ? to : from)) / 2.0;
 			const auto sound = synthesize_squeak(v.fsq, v.P, dur, v.fL, 1 - std::pow(2.0, -mid / 12.0), v.v, m.sample_rate, seed, bumps, v.N);
 			perf.squeaks.emplace_back(sound.begin(), sound.end());
-			Event e;
-			e.type = EventType::squeak;
+			models::Event e;
+			e.type = models::EventType::squeak;
 			e.beat = beat;
 			e.string = i;
 			e.squeak = (int)perf.squeaks.size() - 1;
@@ -672,14 +614,14 @@ namespace grmg
 		// the player network over the moments, in windows (one network per window, each starting where the
 		// last one left the arm): what the arm does at one stroke depends on the strokes around it
 		template <class Rng>
-		static std::vector<Stroke> run_player(const std::vector<std::pair<double, int>> &grid, double step, const Settings &s,
-											  Rng &rng)
+		static std::vector<models::Stroke> run_player(const std::vector<std::pair<double, int>> &grid, double step, const models::Settings &s,
+													  Rng &rng)
 		{
-			PlayerNoise noise;
+			models::PlayerNoise noise;
 			noise.exact = !s.human;
 			noise.amount = s.human_amount;
 			noise.rng.seed(rng());
-			std::vector<Stroke> out;
+			std::vector<models::Stroke> out;
 			const size_t window = 32;
 			for (size_t a = 0; a < grid.size(); a += window)
 			{
@@ -692,7 +634,7 @@ namespace grmg
 		}
 
 		template <class Moments, class Rng>
-		static std::vector<Stroke> run_player(const Moments &order, double step, double spb, const Settings &s, Rng &rng)
+		static std::vector<models::Stroke> run_player(const Moments &order, double step, double spb, const models::Settings &s, Rng &rng)
 		{
 			std::vector<std::pair<double, int>> grid;
 			for (const auto &mo : order)
@@ -703,7 +645,7 @@ namespace grmg
 
 	// what plays: the whole song, or (in a loop) the part between the loop's flags, its end leading into its start
 	inline std::unique_ptr<Performance> compile_song(Compiler &compiler, const Song &song, std::shared_ptr<const Model> model,
-													 CompileOptions o)
+													 models::CompileOptions o)
 	{
 		if (!o.loop)
 			return compiler.compile(song, std::move(model), o);

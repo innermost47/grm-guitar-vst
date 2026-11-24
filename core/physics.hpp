@@ -15,7 +15,7 @@
 #include <string>
 #include <vector>
 
-#include "constants.hpp"
+#include "../constants/core.hpp"
 #include "fft.hpp"
 #include "guitar_networks.hpp"
 
@@ -31,72 +31,12 @@ namespace grmg
         return std::sqrt(std::max((s + sign * d) / 2.0, 1e-12));
     }
 
-    struct Body
-    {
-        std::array<double, 7> f{}, gain{}, q{};
-        double Mm = 0, Zp = 0, mb = 0, fT = 0, frad = 0, fH = 0, f_lo = 0, f_hi = 0, fb = 0;
-
-        // velocity of the bridge per newton of string force (s/kg)
-        cplx admittance(double freq) const
-        {
-            const double w = 2 * PI * freq;
-            cplx Y = 0.0;
-            for (int m = 0; m < 7; ++m)
-            {
-                if (gain[(size_t)m] <= 1e-9)
-                    continue;
-                const double wm = 2 * PI * f[(size_t)m];
-                Y += cplx(0, w) / ((Mm / gain[(size_t)m]) * cplx(wm * wm - w * w, w * wm / q[(size_t)m]));
-            }
-            Y += freq * freq / (freq * freq + fT * fT) / cplx(Zp, w * mb);
-            return Y;
-        }
-        // added decay rate of a partial: sigma = (c / L) Zs Re Y(f)
-        double loss(double freq, double c, double Leff, double Zs) const
-        {
-            return (c / Leff) * Zs * std::max(admittance(freq).real(), 0.0);
-        }
-        // coupling rate of a mode to the bridge: kappa = (c / L) Zs |Y|
-        double coupling(double freq, double c, double Leff, double Zs) const
-        {
-            return (c / Leff) * Zs * std::abs(admittance(freq));
-        }
-    };
-
-    // braces_kg < 0: the network of the Python app (the bare plate is the moving top, the Q of each mode fixed);
-    // braces_kg >= 0: the top carries its braces and the bridge (a top with them weighs about 200 g, Woodhouse et al.,
-    // Acta Acustica 2021), and every mode has the measured Q `q` (about 50 for a guitar, same source)
-    constexpr double BRACES_KG = 0.064, BODY_Q = 50.0; // defaults: 64 g of braces make the default top about 200 g
-
-    // the woods of a top or a body: density at 12 % moisture (specific gravity x 1120 kg/m^3) and modulus of
-    // elasticity along the grain, from the Wood Handbook (USDA Forest Products Laboratory), tables 5-3b and 5-5b
-    struct Wood
-    {
-        const char *name;
-        double rho, E;
-    };
-    constexpr Wood WOODS[] = {
-        {"Sitka spruce", 0.40 * 1120, 1.57 * 6.894757e9}, {"Engelmann spruce", 0.35 * 1120, 1.30 * 6.894757e9}, {"Western red cedar", 0.32 * 1120, 1.11 * 6.894757e9}, {"Mahogany", 0.45 * 1120, 1.50 * 6.894757e9}, {"Sugar maple", 0.63 * 1120, 1.83 * 6.894757e9}, {"Red alder", 0.41 * 1120, 1.38 * 6.894757e9}, {"Basswood", 0.37 * 1120, 1.46 * 6.894757e9}, {"Black walnut", 0.55 * 1120, 1.68 * 6.894757e9}};
-    constexpr int NUM_WOODS = (int)(sizeof(WOODS) / sizeof(WOODS[0]));
-    constexpr double SLAB_M = 0.0445; // thickness of a solid body (a Stratocaster's: 1 3/4 inch)
-
-    // What the body is made of and how hollow it is. hollow = 1: a flat-top acoustic (the cavity, a thin top);
-    // hollow = 0: a solid body (no cavity, the top is the whole slab). In between, a path chosen between the two
-    // (not measured): the cavity's volume and the air / top coupling shrink with `hollow`, the top thickens
-    // geometrically from the top to the slab.
-    struct BodySpec
-    {
-        double size = 1.0, top_mm = 2.8, coupling = 0.35, braces_kg = -1.0, q = BODY_Q;
-        double rho = 430.0, E = 1.0e10; // the Python app's top (Sitka spruce in the WOODS table)
-        double hollow = 1.0;
-    };
-
-    inline grm::Result body_network_result(const BodySpec &b);
+    inline grm::Result body_network_result(const models::BodySpec &b);
 
     inline grm::Result body_network_result(double size = 1.0, double top_mm = 2.8, double k = 0.35, double braces_kg = -1.0,
                                            double q = BODY_Q)
     {
-        BodySpec b;
+        models::BodySpec b;
         b.size = size;
         b.top_mm = top_mm;
         b.coupling = k;
@@ -105,7 +45,7 @@ namespace grmg
         return body_network_result(b);
     }
 
-    inline grm::Result body_network_result(const BodySpec &spec)
+    inline grm::Result body_network_result(const models::BodySpec &spec)
     {
         const double size = std::max(spec.size, 0.01);
         const double braces_kg = spec.braces_kg;
@@ -166,11 +106,11 @@ namespace grmg
         return net.solve(m);
     }
 
-    inline Body body_network(const BodySpec &spec)
+    inline models::Body body_network(const models::BodySpec &spec)
     {
         const auto r = body_network_result(spec);
         const double hollow = std::min(std::max(spec.hollow, 0.0), 1.0);
-        Body b;
+        models::Body b;
         b.f = {r["f_lo"], r["f_hi"], r["f3"], r["f4"], r["f5"], r["f6"], r["f7"]};
         for (int m = 0; m < 7; ++m)
         {
@@ -192,10 +132,10 @@ namespace grmg
         return b;
     }
 
-    inline Body body_network(double size = 1.0, double top_mm = 2.8, double coupling = 0.35, double braces_kg = -1.0,
-                             double q = BODY_Q)
+    inline models::Body body_network(double size = 1.0, double top_mm = 2.8, double coupling = 0.35, double braces_kg = -1.0,
+                                     double q = BODY_Q)
     {
-        BodySpec b;
+        models::BodySpec b;
         b.size = size;
         b.top_mm = top_mm;
         b.coupling = coupling;
@@ -206,7 +146,7 @@ namespace grmg
 
     // Impulse response of the body seen as radiation: Y(f) * i ka / (1 + i ka). Normalised so that its
     // response is 1 on average over 100 Hz - 5 kHz (the Python version matches the dry level by RMS).
-    inline std::vector<double> body_impulse(const Body &b, double sr, size_t length = 8192)
+    inline std::vector<double> body_impulse(const models::Body &b, double sr, size_t length = 8192)
     {
         const size_t n = next_pow2(length * 2);
         std::vector<cplx> H(n);
@@ -237,33 +177,7 @@ namespace grmg
         return ir;
     }
 
-    // ============================================================ magnetic pickup
-    // The coil (inductance L, resistance R, its own capacitance) loaded by the cable and the volume pot with the
-    // amplifier: V_out / V_coil = 1 / (L C s^2 + (R C + L / Rload) s + 1 + R / Rload), C = coil + cable.
-    // Measured pickups (ozvalveamps.org, after H. Lemme): a 1970s Stratocaster single coil 2.2 H, 6.5 kOhm, 110 pF;
-    // the average of 21 pickups measured by Lemme 4.1 H, 12 kOhm, 130 pF (a hotter, humbucker-like pickup).
-    struct PickupType
-    {
-        const char *name;
-        double L, R, C;
-    };
-    constexpr PickupType PICKUP_TYPES[] = {{"Single coil (Strat 70s)", 2.2, 6.5e3, 110e-12},
-                                           {"Hot (Lemme average)", 4.1, 12e3, 130e-12}};
-    constexpr double PICKUP_LOAD = 1.0 / (1.0 / 250e3 + 1.0 / 1e6); // a 250k volume pot and a 1M amplifier input
-
-    // a pickup's output (string velocity in m/s through the circuit) against the force on the bridge (N): a level
-    // match so that switching sensor does not jump in loudness (calibrated on the demo song; not physics)
-    constexpr double PICKUP_LEVEL = 1.0, PIEZO_LEVEL = 2.8;
-    // three magnetic pickups (HSS): their positions from the saddle, in metres
-    constexpr double PICKUP_POS_MM[3] = {65.0, 160.0, 255.0}; // bridge, middle, neck
-    constexpr int NUM_PICKUP_TYPES = (int)(sizeof(PICKUP_TYPES) / sizeof(PICKUP_TYPES[0]));
-
-    struct PickupCircuit
-    {
-        double L = 2.2, R = 6.5e3, C = 610e-12, Rload = PICKUP_LOAD, fr = 4000.0, Q = 1.0;
-    };
-
-    inline PickupCircuit pickup_network(int type, double cable_pf)
+    inline models::PickupCircuit pickup_network(int type, double cable_pf)
     {
         const auto &t = PICKUP_TYPES[std::min(std::max(type, 0), NUM_PICKUP_TYPES - 1)];
         grm::Network net;
@@ -279,7 +193,7 @@ namespace grmg
         const double q = std::sqrt(v[iL] * v[iC] * (1 + v[iR] / v[iRl])) / (v[iR] * v[iC] + v[iL] / v[iRl]);
         return std::log10(v[iQ]) - std::log10(q); }, 1e-9);
         const auto r = net.solve({{"L", {t.L, 0.02}}, {"R", {t.R, 0.01}}, {"Cc", {t.C, 0.05}}, {"Ck", {std::max(cable_pf, 1.0) * 1e-12, 0.05}}, {"Rl", {PICKUP_LOAD, 0.02}}});
-        PickupCircuit c;
+        models::PickupCircuit c;
         c.L = r["L"];
         c.R = r["R"];
         c.C = r["C"];
@@ -289,104 +203,14 @@ namespace grmg
         return c;
     }
 
-    struct Biquad
-    {
-        double b0 = 1.0, b1 = 0.0, b2 = 0.0, a1 = 0.0, a2 = 0.0;
-        double z1 = 0.0, z2 = 0.0;
-
-        inline double process(double x) noexcept
-        {
-            const double y = b0 * x + z1;
-            z1 = b1 * x - a1 * y + z2;
-            z2 = b2 * x - a2 * y;
-            return y;
-        }
-
-        void reset() noexcept
-        {
-            z1 = 0.0;
-            z2 = 0.0;
-        }
-
-        void set_lowpass(double sr, double fc, double q) noexcept
-        {
-            const double w0 = 2.0 * 3.14159265358979323846 * fc / sr;
-            const double cw = std::cos(w0), sw = std::sin(w0);
-            const double alpha = sw / (2.0 * q);
-            const double a0 = 1.0 + alpha;
-            b0 = ((1.0 - cw) * 0.5) / a0;
-            b1 = (1.0 - cw) / a0;
-            b2 = b0;
-            a1 = -2.0 * cw / a0;
-            a2 = (1.0 - alpha) / a0;
-        }
-
-        void set_highpass(double sr, double fc, double q) noexcept
-        {
-            const double w0 = 2.0 * 3.14159265358979323846 * fc / sr;
-            const double cw = std::cos(w0), sw = std::sin(w0);
-            const double alpha = sw / (2.0 * q);
-            const double a0 = 1.0 + alpha;
-            b0 = ((1.0 + cw) * 0.5) / a0;
-            b1 = -(1.0 + cw) / a0;
-            b2 = b0;
-            a1 = -2.0 * cw / a0;
-            a2 = (1.0 - alpha) / a0;
-        }
-
-        void set_peaking(double sr, double fc, double q, double gain_db) noexcept
-        {
-            const double A = std::pow(10.0, gain_db / 40.0);
-            const double w0 = 2.0 * 3.14159265358979323846 * fc / sr;
-            const double cw = std::cos(w0), sw = std::sin(w0);
-            const double alpha = sw / (2.0 * q);
-            const double a0 = 1.0 + alpha / A;
-            b0 = (1.0 + alpha * A) / a0;
-            b1 = -2.0 * cw / a0;
-            b2 = (1.0 - alpha * A) / a0;
-            a1 = -2.0 * cw / a0;
-            a2 = (1.0 - alpha / A) / a0;
-        }
-
-        void set_lowshelf(double sr, double fc, double gain_db) noexcept
-        {
-            const double A = std::pow(10.0, gain_db / 40.0);
-            const double w0 = 2.0 * 3.14159265358979323846 * fc / sr;
-            const double cw = std::cos(w0), sw = std::sin(w0);
-            const double alpha = sw * 0.5 * std::sqrt(2.0);
-            const double sqA = std::sqrt(A);
-            const double a0 = (A + 1.0) + (A - 1.0) * cw + 2.0 * sqA * alpha;
-            b0 = A * ((A + 1.0) - (A - 1.0) * cw + 2.0 * sqA * alpha) / a0;
-            b1 = 2.0 * A * ((A - 1.0) - (A + 1.0) * cw) / a0;
-            b2 = A * ((A + 1.0) - (A - 1.0) * cw - 2.0 * sqA * alpha) / a0;
-            a1 = -2.0 * ((A - 1.0) + (A + 1.0) * cw) / a0;
-            a2 = ((A + 1.0) + (A - 1.0) * cw - 2.0 * sqA * alpha) / a0;
-        }
-
-        void set_highshelf(double sr, double fc, double gain_db) noexcept
-        {
-            const double A = std::pow(10.0, gain_db / 40.0);
-            const double w0 = 2.0 * 3.14159265358979323846 * fc / sr;
-            const double cw = std::cos(w0), sw = std::sin(w0);
-            const double alpha = sw * 0.5 * std::sqrt(2.0); // S = 1
-            const double sqA = std::sqrt(A);
-            const double a0 = (A + 1.0) - (A - 1.0) * cw + 2.0 * sqA * alpha;
-            b0 = A * ((A + 1.0) + (A - 1.0) * cw + 2.0 * sqA * alpha) / a0;
-            b1 = -2.0 * A * ((A - 1.0) + (A + 1.0) * cw) / a0;
-            b2 = A * ((A + 1.0) + (A - 1.0) * cw - 2.0 * sqA * alpha) / a0;
-            a1 = 2.0 * ((A - 1.0) - (A + 1.0) * cw) / a0;
-            a2 = ((A + 1.0) - (A - 1.0) * cw - 2.0 * sqA * alpha) / a0;
-        }
-    };
-
-    inline Biquad pickup_filter(const PickupCircuit &c, double sr)
+    inline models::Biquad pickup_filter(const models::PickupCircuit &c, double sr)
     {
         // H(s) = 1 / (A2 s^2 + A1 s + A0)
         const double A2 = c.L * c.C, A1 = c.R * c.C + c.L / c.Rload, A0 = 1.0 + c.R / c.Rload;
         const double w = 2 * PI * std::min(c.fr, 0.45 * sr);
         const double K = w / std::tan(w / (2 * sr));
         const double d0 = A2 * K * K + A1 * K + A0, d1 = 2 * (A0 - A2 * K * K), d2 = A2 * K * K - A1 * K + A0;
-        Biquad f;
+        models::Biquad f;
         f.b0 = 1.0 / d0;
         f.b1 = 2.0 / d0;
         f.b2 = 1.0 / d0;
@@ -394,10 +218,6 @@ namespace grmg
         f.a2 = d2 / d0;
         return f;
     }
-
-    // ============================================================ palm
-    constexpr double PALM_X = 0.03, PALM_WIDTH = 0.025, PALM_FORCE = 1.0, R_SKIN = 1.0;
-    constexpr double PALM_DROP = 0.5, PALM_RECOVER = 0.03, PALM_F_MAX = 2000.0;
 
     inline cplx palm_shape(cplx w, double c, double mu, double T, double x, double width, double length, double rp)
     {
@@ -417,13 +237,8 @@ namespace grmg
         return y * k;
     }
 
-    struct PalmMode
-    {
-        double F, S, cost;
-    };
-
-    inline PalmMode palm_mode(double c, double mu, double T, double x, double width, double length, double rp, double f_guess,
-                              double s_guess)
+    inline models::PalmMode palm_mode(double c, double mu, double T, double x, double width, double length, double rp, double f_guess,
+                                      double s_guess)
     {
         grm::Network net;
         const int iF = net.add_node("F", f_guess), iS = net.add_node("S", std::max(s_guess, 1e-3));
@@ -437,16 +252,8 @@ namespace grmg
         return {r["F"], r["S"], r.cost};
     }
 
-    struct Palm
-    {
-        double f1 = 0, r = 0, w = 0, x = 0;
-        std::vector<double> ratio, sigma; // per mode n = 1, 2, ...
-        double ratio_at(size_t n) const { return n < ratio.size() ? ratio[n] : 1.0; }
-        double sigma_at(size_t n) const { return n < sigma.size() ? sigma[n] : (sigma.empty() ? 0.0 : sigma.back()); }
-    };
-
-    inline Palm palm_network(double mu, double L, int fret, double x_hand = PALM_X, double force = PALM_FORCE, double T = 73.0,
-                             int steps = 4, const Palm *start = nullptr)
+    inline models::Palm palm_network(double mu, double L, int fret, double x_hand = PALM_X, double force = PALM_FORCE, double T = 73.0,
+                                     int steps = 4, const models::Palm *start = nullptr)
     {
         grm::Network net;
         const std::pair<const char *, double> g[] = {{"mu", 1e-3}, {"L", 0.65}, {"Leff", 0.6}, {"x", 0.02}, {"N", 1.0}, {"r", 3.0}, {"w", 0.025}, {"rp", 100.0}, {"q", 0.03}, {"T", 70.0}, {"c", 100.0}, {"Zs", 0.5}};
@@ -460,7 +267,7 @@ namespace grmg
         net.add_log("wave speed", {{"c", 2}, {"T", -1}, {"mu", 1}}, 0.0, 1e-9);
         net.add_log("impedance", {{"Zs", 2}, {"T", -1}, {"mu", -1}}, 0.0, 1e-9);
         const auto v = net.solve({{"mu", {mu, 0.004}}, {"L", {L, 3e-4}}, {"x", {x_hand, 0.05}}, {"N", {force, 0.05}}, {"T", {T, 0.003}}});
-        Palm p;
+        models::Palm p;
         const double c = v["c"], Leff = v["Leff"], rp = v["rp"];
         p.f1 = c / (2 * Leff);
         p.r = v["r"];
@@ -474,7 +281,7 @@ namespace grmg
             for (int st = 1; st <= stages; ++st)
             {
                 const double s = (double)st / stages;
-                PalmMode m;
+                models::PalmMode m;
                 try
                 {
                     m = palm_mode(c, vmu, vT, vx, vw, Leff, rp * s, F, S);
@@ -564,30 +371,7 @@ namespace grmg
         return p;
     }
 
-    // ============================================================ room
-    constexpr double ROOM_BANDS[6] = {125.0, 250.0, 500.0, 1000.0, 2000.0, 4000.0};
-    constexpr double C_ROOM = 343.0;
-    struct Material
-    {
-        const char *name;
-        double alpha[6];
-    };
-    constexpr Material MATERIALS[6] = {
-        {"Painted brick", {0.01, 0.01, 0.02, 0.02, 0.02, 0.03}}, {"Plaster", {0.013, 0.015, 0.02, 0.03, 0.04, 0.05}}, {"Wood panels", {0.28, 0.22, 0.17, 0.09, 0.10, 0.11}}, {"Glass", {0.35, 0.25, 0.18, 0.12, 0.07, 0.04}}, {"Curtains", {0.14, 0.35, 0.55, 0.72, 0.70, 0.65}}, {"Carpet", {0.02, 0.06, 0.14, 0.37, 0.60, 0.65}}};
-    struct RoomSize
-    {
-        const char *name;
-        double L, W, H;
-    };
-    constexpr RoomSize ROOMS[4] = {{"Small room", 3.5, 3.0, 2.5}, {"Living room", 6.0, 4.5, 2.6}, {"Studio", 9.0, 7.0, 3.5}, {"Church", 30.0, 15.0, 14.0}};
-
-    struct Room
-    {
-        double V = 0, S = 0, rc = 0, fs = 0;
-        std::array<double, 6> RT{}, alpha{};
-    };
-
-    inline Room room_network(const RoomSize &size, int material, int floor = 2)
+    inline models::Room room_network(const models::RoomSize &size, int material, int floor = 2)
     {
         const double L = size.L, W = size.W, H = size.H;
         const auto &walls = MATERIALS[material].alpha;
@@ -600,7 +384,7 @@ namespace grmg
         net.add_log("volume", {{"V", 1}, {"L", -1}, {"W", -1}, {"H", -1}}, 0.0, 1e-9);
         net.add_fn("surface", {"S", "L", "W", "H"}, [=](const grm::Values &v)
                    { return std::log10(v[iS]) - std::log10(2 * (v[iL] * v[iW] + v[iL] * v[iH] + v[iW] * v[iH])); }, 1e-9);
-        Room room;
+        models::Room room;
         const double floor_share = (L * W) / (2 * (L * W + L * H + W * H));
         for (int b = 0; b < 6; ++b)
         {
@@ -624,7 +408,7 @@ namespace grmg
     }
 
     // direct sound, image sources up to the second order, a diffuse tail decaying band by band
-    inline std::vector<double> room_impulse(const Room &room, const RoomSize &size, double distance, double sr, unsigned seed = 3)
+    inline std::vector<double> room_impulse(const models::Room &room, const models::RoomSize &size, double distance, double sr, unsigned seed = 3)
     {
         const double L = size.L, W = size.W, H = size.H;
         const double src[3] = {0.35 * L, 0.5 * W, 1.0};
@@ -709,17 +493,7 @@ namespace grmg
         return h;
     }
 
-    // ============================================================ finger on a wound string, finger on a fret
-    constexpr double WIND_FILL = 0.8, MU_FRICTION = 0.3, LIFT_DX = 0.02;
-    constexpr double H_NUT = 0.0005, H_12 = 0.0022, TAU_LIFT = 0.003, TAU_LAND = 0.001, LAND_SHARE = 0.4;
-    constexpr double LONG_COUPLING = 0.3, LONG_TAU = 0.04, V_REF = 0.3, PAD_EDGE = 0.001, FRET_CROWN = 0.002, FRET_BUMP = 0.3;
-
-    struct Squeak
-    {
-        double fsq = 0, P = 0, fL = 0, v = 0, N = 0, L = 0, p = 0, cL = 0;
-    };
-
-    inline Squeak squeak_network(double mu, double L, double core_fraction, int fret_from, int fret_to, double dt, double force)
+    inline models::Squeak squeak_network(double mu, double L, double core_fraction, int fret_from, int fret_to, double dt, double force)
     {
         grm::Network net;
         const std::pair<const char *, double> g[] = {{"mu", 1e-3}, {"deq", 5e-4}, {"dcore", 3e-4}, {"D", 6e-4}, {"p", 2e-4}, {"L", 0.65}, {"L1", 0.6}, {"dx", 0.03}, {"dt", 0.1}, {"v", 0.3}, {"fsq", 1500.0}, {"N", 0.5}, {"P", 0.05}, {"A", 1e-7}, {"cL", 2000.0}, {"fL", 1500.0}};
@@ -754,12 +528,7 @@ namespace grmg
         return {r["fsq"], r["P"], r["fL"], r["v"], r["N"], r["L"], r["p"], r["cL"]};
     }
 
-    struct Action
-    {
-        double xf, h;
-    };
-
-    inline Action action_network(double L, int fret)
+    inline models::Action action_network(double L, int fret)
     {
         grm::Network net;
         net.add_node("L", 0.65);
@@ -873,37 +642,13 @@ namespace grmg
     }
 
     // ============================================================ the player
-    constexpr double TIMING_SIGMA = 0.015, ARM_SIGMA = 0.015, AMPLITUDE_SIGMA = 0.07, PLUCK_SIGMA = 0.06,
-                     DEPTH_SIGMA = 0.0008, PALM_X_SIGMA = 0.003, PALM_N_SIGMA = 0.12, SWING = 0.10, PICK_DEPTH = 0.003,
-                     WRIST_RADIUS = 0.25, STRING_SPACING = 0.0105, FULL_DEPTH = 0.0015, UP_FORCE = 0.8;
-    constexpr double ACCENT_DEX[8] = {0.06, -0.04, 0.0, -0.04, 0.03, -0.04, 0.0, -0.04};
-
-    struct Stroke
-    {
-        double t, A, v, force, p, d, palm_x, palm_N;
-    };
-
-    // a source of the player's imprecision: normal(mean, sd); `exact` gives the intents themselves
-    struct PlayerNoise
-    {
-        bool exact = false;
-        double amount = 1.0; // how loose the player is: 1 the default imprecision, 0 none, 2 twice as much
-        std::mt19937 rng{1};
-        double normal(double sd)
-        {
-            if (exact || amount <= 0)
-                return 0.0;
-            std::normal_distribution<double> d(0.0, sd);
-            return amount * d(rng);
-        }
-    };
 
     // strokes: (grid time in s, step index in the bar). One network for the whole sequence: what the arm does at
     // one stroke depends on the strokes around it.
-    inline std::vector<Stroke> player_network(const std::vector<std::pair<double, int>> &strokes, double step, double pluck,
-                                              PlayerNoise &noise, double swing = SWING)
+    inline std::vector<models::Stroke> player_network(const std::vector<std::pair<double, int>> &strokes, double step, double pluck,
+                                                      models::PlayerNoise &noise, double swing = SWING)
     {
-        std::vector<Stroke> out;
+        std::vector<models::Stroke> out;
         if (strokes.empty())
             return out;
         grm::Network net;
@@ -949,17 +694,11 @@ namespace grmg
         return out;
     }
 
-    struct Contact
-    {
-        int string;
-        double delay, share;
-    };
-
     // which strings of `order` (in the order the pick crosses them) the pick reaches, when, with what share of the force
-    inline std::vector<Contact> strum_contacts(const std::vector<int> &order, const Stroke &stroke, bool up)
+    inline std::vector<models::Contact> strum_contacts(const std::vector<int> &order, const models::Stroke &stroke, bool up)
     {
         const double centre = (up ? 4.5 : 2.5) * STRING_SPACING;
-        std::vector<Contact> out;
+        std::vector<models::Contact> out;
         bool have_first = false;
         double first = 0;
         for (int i : order)

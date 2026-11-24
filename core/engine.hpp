@@ -26,6 +26,8 @@
 #include "feedback.hpp"
 #include "performance.hpp"
 #include "voice.hpp"
+#include "../constants/ui.hpp"
+#include "../constants/core.hpp"
 
 namespace grmg
 {
@@ -42,35 +44,27 @@ namespace grmg
 			delete trash_.load();
 			delete current_;
 		}
-		void post(T* p)
+		void post(T *p)
 		{ // worker
 			collect();
 			delete pending_.exchange(p);
 		}
 		void collect() { delete trash_.exchange(nullptr); } // worker
-		T* take()
+		T *take()
 		{ // audio thread
 			if (trash_.load() == nullptr)
-				if (T* p = pending_.exchange(nullptr))
+				if (T *p = pending_.exchange(nullptr))
 				{
 					trash_.store(current_);
 					current_ = p;
 				}
 			return current_;
 		}
-		T* current() const { return current_; }
+		T *current() const { return current_; }
 
 	private:
-		std::atomic<T*> pending_{ nullptr }, trash_{ nullptr };
-		T* current_ = nullptr;
-	};
-
-	struct Transport
-	{
-		bool playing = false;
-		double beat = 0.0;
-		double beats_per_sample = 0.0;
-		bool loop = true;
+		std::atomic<T *> pending_{nullptr}, trash_{nullptr};
+		T *current_ = nullptr;
 	};
 
 	class Engine
@@ -87,26 +81,26 @@ namespace grmg
 
 		std::array<std::atomic<int>, NUM_STRINGS> shown_fret{};
 		std::array<std::atomic<float>, NUM_STRINGS> shown_level{};
-		std::atomic<double> shown_beat{ -1.0 };
+		std::atomic<double> shown_beat{-1.0};
 
 		void prepare(double sample_rate)
 		{
 			sr_ = sample_rate;
-			for (auto& b : string_force_)
+			for (auto &b : string_force_)
 				b.assign(BLOCK, 0.0);
 			total_.assign(BLOCK, 0.0);
 			others_.assign(BLOCK, 0.0);
 			mix_.assign(BLOCK, 0.0);
-			for (auto& v : voices_)
+			for (auto &v : voices_)
 				v.active = false;
-			for (auto& v : fading_)
+			for (auto &v : fading_)
 				v.active = false;
-			for (auto& s : squeaks_)
+			for (auto &s : squeaks_)
 				s.clear();
-			for (auto& bq : pickup_filter_)
-				bq = Biquad{};
-			pickup_gain_ = { 0.0f, 0.0f, 0.0f };
-			pickup_target_gain_ = { 0.0f, 0.0f, 0.0f };
+			for (auto &bq : pickup_filter_)
+				bq = models::Biquad{};
+			pickup_gain_ = {0.0f, 0.0f, 0.0f};
+			pickup_target_gain_ = {0.0f, 0.0f, 0.0f};
 			sym_set_ = false;
 
 			amp_proc_.prepare(sample_rate, BLOCK);
@@ -115,11 +109,11 @@ namespace grmg
 			fb_force_.fill(0.0);
 		}
 
-		void set_model(const Model* m)
+		void set_model(const Model *m)
 		{
 			if (m == model_)
 				return;
-			const Model* prev = model_;
+			const Model *prev = model_;
 			model_ = m;
 
 			if (model_ && model_->s.sensor == 3)
@@ -129,7 +123,7 @@ namespace grmg
 				{
 					if (pickups_changed)
 					{
-						Biquad bq = pickup_filter(model_->pickup3[k], sr_);
+						models::Biquad bq = pickup_filter(model_->pickup3[k], sr_);
 						bq.z1 = pickup_filter_[k].z1;
 						bq.z2 = pickup_filter_[k].z2;
 						pickup_filter_[k] = bq;
@@ -139,7 +133,7 @@ namespace grmg
 			}
 			else
 			{
-				pickup_target_gain_ = { 0.0f, 0.0f, 0.0f };
+				pickup_target_gain_ = {0.0f, 0.0f, 0.0f};
 			}
 
 			if (model_ && !sym_set_)
@@ -164,29 +158,29 @@ namespace grmg
 			}
 		}
 
-		void set_performance(const Performance* p, bool carry = false)
+		void set_performance(const Performance *p, bool carry = false)
 		{
 			if (p == perf_)
 				return;
 			pending_count_ = 0;
 			if (carry && perf_ && expected_beat_ >= 0)
 			{
-				for (const auto& e : perf_->events)
+				for (const auto &e : perf_->events)
 				{
-					if (e.type != EventType::damp || e.beat <= expected_beat_ || e.beat > expected_beat_ + CARRY_BEATS)
+					if (e.type != models::EventType::damp || e.beat <= expected_beat_ || e.beat > expected_beat_ + CARRY_BEATS)
 						continue;
 					if (!voices_[(size_t)e.string].active || pending_count_ >= (int)pending_.size())
 						continue;
-					pending_[(size_t)pending_count_++] = { e, e.beat - expected_beat_ };
+					pending_[(size_t)pending_count_++] = {e, e.beat - expected_beat_};
 				}
 			}
-			for (auto& s : squeaks_)
+			for (auto &s : squeaks_)
 				s.clear();
 			perf_ = p;
 			relocate_ = true;
 		}
-		const Model* model() const { return model_; }
-		const Performance* performance() const { return perf_; }
+		const Model *model() const { return model_; }
+		const Performance *performance() const { return perf_; }
 
 		void note_on(int midi, double velocity, int channel = 1)
 		{
@@ -219,18 +213,18 @@ namespace grmg
 			if (fret < 0 || fret >= NUM_FRETS)
 				return;
 			pluck_string(best, fret, velocity);
-			auto& voice = voices_[(size_t)best];
+			auto &voice = voices_[(size_t)best];
 			voice.note = midi;
 			voice.note_channel = channel;
 		}
 		bool holds_midi_note(int channel, int pitch) const
 		{
-			return std::any_of(voices_.begin(), voices_.end(), [=](const auto& voice)
-				{ return voice.holds_midi_note(channel, pitch); });
+			return std::any_of(voices_.begin(), voices_.end(), [=](const auto &voice)
+							   { return voice.holds_midi_note(channel, pitch); });
 		}
 		void note_off(int midi, int channel = 0)
 		{
-			for (auto& voice : voices_)
+			for (auto &voice : voices_)
 				if (voice.holds_midi_note(channel, midi))
 					voice.damp();
 		}
@@ -238,14 +232,14 @@ namespace grmg
 
 		void all_off()
 		{
-			for (auto& v : voices_)
+			for (auto &v : voices_)
 			{
 				v.active = false;
 				v.note = -1;
 			}
-			for (auto& v : fading_)
+			for (auto &v : fading_)
 				v.active = false;
-			for (auto& s : sym_)
+			for (auto &s : sym_)
 				s.on = false;
 
 			feedback_proc_.reset();
@@ -255,11 +249,11 @@ namespace grmg
 
 		void reset_strings()
 		{
-			for (auto& v : voices_)
+			for (auto &v : voices_)
 				v.active = false;
-			for (auto& v : fading_)
+			for (auto &v : fading_)
 				v.active = false;
-			for (auto& s : sym_)
+			for (auto &s : sym_)
 				s.on = false;
 			sym_set_ = false;
 		}
@@ -267,26 +261,26 @@ namespace grmg
 		{
 			if (!model_)
 				return;
-			const Model& m = *model_;
-			Pluck p;
+			const Model &m = *model_;
+			models::Pluck p;
 			p.string = i;
 			p.fret = fret;
 			p.place = m.place[(size_t)i][(size_t)fret];
 			p.gain = m.y0[(size_t)i][(size_t)fret] / Y_REF * std::pow(std::max(velocity, 0.0) / 0.8, live_velocity_curve);
 			p.tau = m.tau[(size_t)i][(size_t)fret];
 			p.pluck = m.s.pluck;
-			p.kind = Kind::strike;
+			p.kind = models::Kind::strike;
 			p.palm = (live_palm && m.palm_ready) ? m.palm[(size_t)i][(size_t)fret].get() : nullptr;
 			start(p);
 		}
 
-		void render(float* out, int samples, const Transport& tr, float* pickup = nullptr)
+		void render(float *out, int samples, const models::Transport &tr, float *pickup = nullptr)
 		{
 			if (live_palm != live_palm_was_)
 			{
 				live_palm_was_ = live_palm;
 				if (live_palm && model_ && model_->palm_ready)
-					for (auto& v : voices_)
+					for (auto &v : voices_)
 						if (v.active)
 							v.damp(LIVE_PALM_DAMP);
 				set_palm(live_palm || song_palm_);
@@ -313,13 +307,13 @@ namespace grmg
 	private:
 		static constexpr int BLOCK = 256;
 		double sr_ = 48000.0;
-		const Model* model_ = nullptr;
-		const Performance* perf_ = nullptr;
+		const Model *model_ = nullptr;
+		const Performance *perf_ = nullptr;
 		std::array<StringVoice, NUM_STRINGS> voices_{}, fading_{};
 		std::array<SympatheticString, NUM_STRINGS> sym_{};
 		struct SqueakPlay
 		{
-			const std::vector<float>* sound = nullptr;
+			const std::vector<float> *sound = nullptr;
 			size_t at = 0;
 			int string = 0;
 			void clear() { sound = nullptr; }
@@ -329,9 +323,9 @@ namespace grmg
 		std::vector<double> total_, others_, mix_;
 		std::array<double, 256> pickup_{};
 		std::array<std::array<double, 256>, 3> pickup3_{};
-		std::array<Biquad, 3> pickup_filter_{};
-		std::array<float, 3> pickup_gain_{ 0.0f, 0.0f, 0.0f };
-		std::array<float, 3> pickup_target_gain_{ 0.0f, 0.0f, 0.0f };
+		std::array<models::Biquad, 3> pickup_filter_{};
+		std::array<float, 3> pickup_gain_{0.0f, 0.0f, 0.0f};
+		std::array<float, 3> pickup_target_gain_{0.0f, 0.0f, 0.0f};
 		bool sym_set_ = false, relocate_ = true, was_playing_ = false, palm_down_ = false;
 		bool song_palm_ = false, live_palm_was_ = false;
 		static constexpr double LIVE_PALM_DAMP = 60.0;
@@ -342,13 +336,8 @@ namespace grmg
 		FeedbackProcessor feedback_proc_;
 		std::array<double, BLOCK> fb_force_{};
 
-		struct Pending
-		{
-			Event e;
-			double beats;
-		};
 		static constexpr double CARRY_BEATS = 16.0;
-		std::array<Pending, 64> pending_{};
+		std::array<models::Pending, 64> pending_{};
 		int pending_count_ = 0;
 
 		void set_palm(bool down)
@@ -365,22 +354,22 @@ namespace grmg
 		{
 			if (!model_)
 				return;
-			const Model& m = *model_;
-			const Palm* palm = (palm_down_ && m.palm_ready) ? m.palm[(size_t)i][(size_t)fret].get() : nullptr;
-			auto& s = sym_[(size_t)i];
+			const Model &m = *model_;
+			const models::Palm *palm = (palm_down_ && m.palm_ready) ? m.palm[(size_t)i][(size_t)fret].get() : nullptr;
+			auto &s = sym_[(size_t)i];
 			s.fret = fret;
 			s.palm = palm != nullptr;
 			s.set(m.place[(size_t)i][(size_t)fret], palm, m.body, m.losses[(size_t)i], sr_, m.pickup_xs());
 			s.free_from_now(fade);
 		}
 
-		void start(const Pluck& p0)
+		void start(const models::Pluck &p0)
 		{
-			const Model& m = *model_;
-			Pluck p = p0;
-			if (live_palm && !p.palm && p.kind == Kind::strike && m.palm_ready)
+			const Model &m = *model_;
+			models::Pluck p = p0;
+			if (live_palm && !p.palm && p.kind == models::Kind::strike && m.palm_ready)
 				p.palm = m.palm[(size_t)p.string][(size_t)p.fret].get();
-			auto& v = voices_[(size_t)p.string];
+			auto &v = voices_[(size_t)p.string];
 			if (v.active)
 			{
 				fading_[(size_t)p.string] = v;
@@ -391,24 +380,24 @@ namespace grmg
 			shown_fret[(size_t)p.string].store(p.fret);
 			if (!m.s.sympathy)
 				return;
-			if (p.kind == Kind::strike)
+			if (p.kind == models::Kind::strike)
 				sym_[(size_t)p.string].hold();
 			else
 				free_string(p.string, p.fret, 0.005);
 		}
 
-		void apply(const Event& e)
+		void apply(const models::Event &e)
 		{
 			switch (e.type)
 			{
-			case EventType::pluck:
+			case models::EventType::pluck:
 				start(e.pluck);
 				break;
-			case EventType::damp:
+			case models::EventType::damp:
 				voices_[(size_t)e.string].damp(e.extra);
 				break;
-			case EventType::squeak:
-				for (auto& s : squeaks_)
+			case models::EventType::squeak:
+				for (auto &s : squeaks_)
 					if (!s.sound)
 					{
 						s.sound = &perf_->squeaks[(size_t)e.squeak];
@@ -417,15 +406,15 @@ namespace grmg
 						break;
 					}
 				break;
-			case EventType::palm_on:
-			case EventType::palm_off:
-				song_palm_ = e.type == EventType::palm_on;
+			case models::EventType::palm_on:
+			case models::EventType::palm_off:
+				song_palm_ = e.type == models::EventType::palm_on;
 				set_palm(song_palm_ || live_palm);
 				break;
 			}
 		}
 
-		void render_part(float* out, int n, const Transport& tr, int offset, float* pk)
+		void render_part(float *out, int n, const models::Transport &tr, int offset, float *pk)
 		{
 			int pos = 0;
 			if (pending_count_ > 0 && tr.playing)
@@ -434,7 +423,7 @@ namespace grmg
 				int keep = 0;
 				for (int k = 0; k < pending_count_; ++k)
 				{
-					auto& pd = pending_[(size_t)k];
+					auto &pd = pending_[(size_t)k];
 					pd.beats -= advance;
 					if (pd.beats <= 0)
 						apply(pd.e);
@@ -506,13 +495,13 @@ namespace grmg
 			}
 		}
 
-		void synth(float* out, int n, float* pk = nullptr)
+		void synth(float *out, int n, float *pk = nullptr)
 		{
 			if (n <= 0)
 				return;
 
 			const bool hss = pk && model_ && model_->s.sensor == 3;
-			std::array<double*, 3> heard = { nullptr, nullptr, nullptr };
+			std::array<double *, 3> heard = {nullptr, nullptr, nullptr};
 
 			if (pk)
 			{
@@ -536,7 +525,7 @@ namespace grmg
 			}
 
 			const bool fb_on = pk && model_ && model_->s.feedback_amount > 1e-4 && model_->s.is_magnetic_pickup();
-			const double* fb_ptr = nullptr;
+			const double *fb_ptr = nullptr;
 			if (fb_on)
 			{
 				for (int t = 0; t < n; ++t)
@@ -548,7 +537,7 @@ namespace grmg
 				total_[(size_t)t] = 0.0;
 			for (int i = 0; i < NUM_STRINGS; ++i)
 			{
-				auto& f = string_force_[(size_t)i];
+				auto &f = string_force_[(size_t)i];
 				for (int t = 0; t < n; ++t)
 					f[(size_t)t] = 0.0;
 
@@ -556,12 +545,12 @@ namespace grmg
 				fading_[(size_t)i].render(f.data(), n, heard, fb_ptr);
 			}
 
-			for (auto& s : squeaks_)
+			for (auto &s : squeaks_)
 			{
 				if (!s.sound)
 					continue;
-				const auto& snd = *s.sound;
-				auto& f = string_force_[(size_t)s.string];
+				const auto &snd = *s.sound;
+				auto &f = string_force_[(size_t)s.string];
 				for (int t = 0; t < n && s.at < snd.size(); ++t)
 					f[(size_t)t] += snd[s.at++];
 				if (s.at >= snd.size())
@@ -570,7 +559,7 @@ namespace grmg
 			float level[NUM_STRINGS] = {};
 			for (int i = 0; i < NUM_STRINGS; ++i)
 			{
-				const auto& f = string_force_[(size_t)i];
+				const auto &f = string_force_[(size_t)i];
 				for (int t = 0; t < n; ++t)
 				{
 					total_[(size_t)t] += f[(size_t)t];
@@ -585,7 +574,7 @@ namespace grmg
 				{
 					if (!sym_[(size_t)i].on)
 						continue;
-					const auto& f = string_force_[(size_t)i];
+					const auto &f = string_force_[(size_t)i];
 					for (int t = 0; t < n; ++t)
 						others_[(size_t)t] = total_[(size_t)t] - f[(size_t)t];
 					sym_[(size_t)i].render(others_.data(), mix_.data(), n, heard);

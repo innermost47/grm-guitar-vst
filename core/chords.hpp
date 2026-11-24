@@ -19,23 +19,17 @@
 #include <string>
 #include <vector>
 
-#include "constants.hpp"
+#include "../constants/core.hpp"
 #include "playability.hpp"
 #include "song.hpp"
 
 namespace grmg
 {
-    struct ChordQuality
-    {
-        const char *suffix;
-        const char *label;
-        std::vector<int> tones;
-        std::vector<int> needed;
-    };
+
     // tones: intervals above the root (semitones); needed: the ones a shape must contain (the fifth may go)
-    inline const std::vector<ChordQuality> &chord_qualities()
+    inline const std::vector<models::ChordQuality> &chord_qualities()
     {
-        static const std::vector<ChordQuality> q = {
+        static const std::vector<models::ChordQuality> q = {
             {"", "major", {0, 4, 7}, {0, 4}},
             {"m", "minor", {0, 3, 7}, {0, 3}},
             {"7", "7", {0, 4, 7, 10}, {0, 4, 10}},
@@ -55,12 +49,6 @@ namespace grmg
         };
         return q;
     }
-
-    struct Chord
-    {
-        std::string name;
-        std::array<int, 6> frets{{-1, -1, -1, -1, -1, -1}};
-    };
 
     inline std::string chord_name(int root, int quality)
     {
@@ -94,11 +82,11 @@ namespace grmg
     }
 
     // the shape the hand chooses for this chord on this tuning
-    inline Chord voice_chord(int root, int quality, const int *open_midi)
+    inline models::Chord voice_chord(int root, int quality, const int *open_midi)
     {
         root = ((root % 12) + 12) % 12;
         const auto &q = chord_qualities()[(size_t)quality];
-        Chord best;
+        models::Chord best;
         best.name = chord_name(root, quality);
         // the built-in open shapes, in standard tuning
         const bool standard = open_midi[0] == 40 && open_midi[1] == 45 && open_midi[2] == 50 && open_midi[3] == 55 && open_midi[4] == 59 && open_midi[5] == 64;
@@ -188,10 +176,10 @@ namespace grmg
     }
 
     // the same with a cache (shapes are asked often by the roll)
-    inline Chord chord_for(int root, int quality, int tuning)
+    inline models::Chord chord_for(int root, int quality, int tuning)
     {
         static std::mutex lock;
-        static std::map<std::tuple<int, int, int>, Chord> cache;
+        static std::map<std::tuple<int, int, int>, models::Chord> cache;
         std::lock_guard<std::mutex> g(lock);
         const auto key = std::make_tuple(((root % 12) + 12) % 12, quality, tuning);
         auto it = cache.find(key);
@@ -202,15 +190,9 @@ namespace grmg
         return c;
     }
 
-    // ------------------------------------------------------------------ scales (harmonizing)
-    struct Scale
+    inline const std::vector<models::Scale> &scales()
     {
-        const char *name;
-        std::vector<int> steps;
-    };
-    inline const std::vector<Scale> &scales()
-    {
-        static const std::vector<Scale> s = {
+        static const std::vector<models::Scale> s = {
             {"Major", {0, 2, 4, 5, 7, 9, 11}},
             {"Natural minor", {0, 2, 3, 5, 7, 8, 10}},
             {"Harmonic minor", {0, 2, 3, 5, 7, 8, 11}},

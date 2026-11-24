@@ -9,7 +9,6 @@
 #include <cmath>
 #include <string>
 
-#include "constants.hpp"
 #include "grm.hpp"
 
 namespace grmg
@@ -51,24 +50,6 @@ namespace grmg
         auto net = string_network(0, core_fraction);
         return net.solve({{"L", {L, dex(SIGMA_L / L)}}, {"mu", {mu, dex(SIGMA_MU_REL)}}, {"f1", {target, 1e-9}}});
     }
-
-    // ---------------------------------------------------------------- the losses of a string
-    // Woodhouse, "Perceptual thresholds for acoustical guitar models", Acta Acustica 2012, Table I: steel strings,
-    // a new set and the same set played. Three losses per string, each with a physical cause:
-    //   etaF  inside the string (friction of the steel, of the windings), a loss factor
-    //   etaA  the air around the string (viscous drag), in 1/s: it weighs on the low partials
-    //   etaB  inside the steel when it bends: it weighs on the high partials, through the stiffness B n^2
-    // loss factor of mode n:  eta_n = (etaF + etaA / w_n + etaB B n^2) / (1 + B n^2),  decay rate  w_n eta_n / 2
-    // Index 0 = string 6 (low E). Woodhouse's G was wound; the G here is plain, so it takes his B string (plain,
-    // the nearest gauge).
-    struct MeasuredLosses
-    {
-        double etaF, etaA, etaB;
-    };
-    constexpr MeasuredLosses LOSSES_NEW[6] = {{5e-5, 1.7, 0.3e-2}, {11e-5, 1.2, 0.4e-2}, {9e-5, 1.3, 1.1e-2}, {6e-5, 1.0, 1.1e-2}, {6e-5, 1.0, 1.1e-2}, {7e-5, 2.5, 0.7e-2}};
-    constexpr MeasuredLosses LOSSES_PLAYED[6] = {{10e-5, 1.4, 3.8e-2}, {17e-5, 0.6, 2.9e-2}, {33e-5, 0.7, 4.1e-2}, {7e-5, 1.0, 1.1e-2}, {7e-5, 1.0, 1.1e-2}, {6e-5, 1.5, 0.7e-2}};
-    // their spread: the fits of Table I, and a factor 2 to 3 between listeners' thresholds (about 0.1 dex)
-    constexpr double LOSS_SIGMA_DEX = 0.1;
 
     // the losses of string i at an age between new (0) and played (1): each loss moves geometrically from one state
     // to the other, a GRM relation per loss between the two measured states

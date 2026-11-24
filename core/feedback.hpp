@@ -11,40 +11,13 @@
 #include <cmath>
 #include <vector>
 
-#include "constants.hpp"
+#include "../constants/core.hpp"
 #include "grm.hpp"
 
 namespace grmg
 {
-	enum class FeedbackTarget
-	{
-		Auto = 0,		 // phase-constructive harmonic chosen naturally by the distance
-		Fundamental = 1, // 1st harmonic (f1)
-		Octave = 2,		 // 2nd harmonic (2 * f1)
-		Fifth = 3,		 // 3rd harmonic (3 * f1)
-		DoubleOctave = 4 // 4th harmonic (4 * f1)
-	};
-
-	struct FeedbackSpec
-	{
-		double amount = 0.0;		  // feedback intensity (0.0: off, up to 1.0: screaming)
-		double distance = 1.0;		  // distance from speaker to guitar (metres, 0.2 to 5.0)
-		int target = 0;				  // 0: Auto, 1: Fundamental, 2: Octave, 3: Octave+5th, 4: 2nd Octave
-		double c_air = C_AIR_DEFAULT; // speed of sound (m/s)
-	};
-
-	struct FeedbackModel
-	{
-		double tau = 0.003;		  // acoustic propagation delay (s)
-		double attenuation = 1.0; // 1/d geometric sound pressure decay
-		double coupling = 0.0;	  // effective loop gain
-		double target_freq = 0.0; // Hz, bandpass filter center (0: wideband auto)
-		double target_q = 2.0;	  // Q of harmonic targeting filter
-		FeedbackSpec spec;
-	};
-
 	// ------------------------------------------------------------ GRM network solver
-	inline FeedbackModel feedback_network(const FeedbackSpec &spec, double string_f1 = 0.0)
+	inline models::FeedbackModel feedback_network(const models::FeedbackSpec &spec, double string_f1 = 0.0)
 	{
 		grm::Network net;
 
@@ -78,7 +51,7 @@ namespace grmg
 
 		const auto r = net.solve({}, 25, 1e-3, 1e-12, false);
 
-		FeedbackModel m;
+		models::FeedbackModel m;
 		m.spec = spec;
 		m.tau = r["tau"];
 		m.attenuation = r["att"];
@@ -129,7 +102,7 @@ namespace grmg
 			update_coefficients();
 		}
 
-		void set_model(const FeedbackModel &m)
+		void set_model(const models::FeedbackModel &m)
 		{
 			model_ = m;
 			update_coefficients();
@@ -188,7 +161,7 @@ namespace grmg
 
 	private:
 		double sr_ = 48000.0;
-		FeedbackModel model_{};
+		models::FeedbackModel model_{};
 		std::vector<double> buffer_;
 		int write_pos_ = 0;
 

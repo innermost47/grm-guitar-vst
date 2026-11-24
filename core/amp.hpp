@@ -8,50 +8,77 @@
 #include <vector>
 #include <cstdint>
 
-#include "constants.hpp"
+#include "../constants/core.hpp"
 #include "physics.hpp"
 #include "grm.hpp"
 
+namespace grmg::models
+{
+	constexpr double PI = 3.14159265358979323846;
+
+	inline AmpSpec amp_preset_5150_lead()
+	{
+		AmpSpec spec;
+		spec.name = "5150 High Gain";
+		spec.Vdd = 330.0;
+		spec.Rp = 100e3;
+		spec.Rk = 1.8e3;
+		spec.gain = 6.5;
+		spec.bass = 0.65;
+		spec.middle = 0.35;
+		spec.treble = 0.70;
+		spec.presence = 0.90;
+		spec.master = 0.75;
+		spec.tight = true;
+		spec.ts_boost = true;
+		spec.ensemble = true;
+		spec.stages = 4;
+		return spec;
+	}
+
+	inline AmpSpec amp_preset_jcm800_crunch()
+	{
+		AmpSpec spec;
+		spec.name = "JCM800 Crunch";
+		spec.Vdd = 300.0;
+		spec.Rp = 100e3;
+		spec.Rk = 2.7e3;
+		spec.gain = 4.5;
+		spec.bass = 0.60;
+		spec.middle = 0.65;
+		spec.treble = 0.55;
+		spec.presence = 0.50;
+		spec.master = 0.80;
+		spec.tight = true;
+		spec.ts_boost = true;
+		spec.stages = 2;
+		return spec;
+	}
+
+	inline AmpSpec amp_preset_clean()
+	{
+		AmpSpec spec;
+		spec.name = "American Clean";
+		spec.Vdd = 280.0;
+		spec.Rp = 100e3;
+		spec.Rk = 1.5e3;
+		spec.gain = 2.0;
+		spec.bass = 0.50;
+		spec.middle = 0.50;
+		spec.treble = 0.50;
+		spec.presence = 0.40;
+		spec.master = 0.90;
+		spec.tight = false;
+		spec.ts_boost = false;
+		spec.stages = 2;
+		return spec;
+	}
+}
+
 namespace grmg
 {
-	struct AmpSpec
-	{
-		const char *name = "5150 High Gain";
-		double Vdd = 320.0;
-		double Rp = 100.0e3;
-		double Rk = 1.8e3;
-		double gain = 6.5;
-		double bass = 0.55;
-		double middle = 0.45;
-		double treble = 0.55;
-		double presence = 0.45;
-		double master = 0.75;
-		double sag_amount = 0.35;
-		bool tight = true;
-		bool ts_boost = true;
-		bool ensemble = false;
-		int stages = 4;
-	};
 
-	struct AmpModel
-	{
-		double Ip0 = 0.0;
-		double Vp0 = 0.0;
-		double Vk0 = 0.0;
-		double Vgk0 = 0.0;
-		double A0 = 0.0;
-		double Vdd_sag0 = 320.0;
-		double transformer_coupling = 0.9;
-		double output_makeup = 1.0;
-		double knee_pos = 1.0;
-		double knee_neg = 1.0;
-		double drive_scale = 1.0;
-		double sag_tau_charge = 0.001;
-		double sag_tau_leak = 0.070;
-		AmpSpec spec;
-	};
-
-	inline AmpModel amp_network(const AmpSpec &spec)
+	inline models::AmpModel amp_network(const models::AmpSpec &spec)
 	{
 		grm::Network net;
 
@@ -109,7 +136,7 @@ namespace grmg
 
 		const auto r = net.solve({}, 40, 1e-3, 1e-12, false);
 
-		AmpModel m;
+		models::AmpModel m;
 		m.spec = spec;
 		m.Ip0 = r["Ip"];
 		m.Vp0 = r["Vp"];
@@ -133,100 +160,6 @@ namespace grmg
 		m.sag_tau_leak = 0.060 + (1.0 - spec.gain / 10.0) * 0.040;
 		return m;
 	}
-
-	inline AmpSpec amp_preset_5150_lead()
-	{
-		AmpSpec s;
-		s.name = "5150 High Gain";
-		s.Vdd = 330.0;
-		s.Rp = 100e3;
-		s.Rk = 1.8e3;
-		s.gain = 6.5;
-
-		s.bass = 0.65;
-		s.middle = 0.35;
-		s.treble = 0.70;
-		s.presence = 0.90;
-
-		s.master = 0.75;
-		s.tight = true;
-		s.ts_boost = true;
-		s.ensemble = true;
-		s.stages = 4;
-		return s;
-	}
-
-	inline AmpSpec amp_preset_jcm800_crunch()
-	{
-		AmpSpec s;
-		s.name = "JCM800 Crunch";
-		s.Vdd = 300.0;
-		s.Rp = 100e3;
-		s.Rk = 2.7e3;
-		s.gain = 4.5;
-		s.bass = 0.60;
-		s.middle = 0.65;
-		s.treble = 0.55;
-		s.presence = 0.50;
-		s.master = 0.80;
-		s.tight = true;
-		s.ts_boost = true;
-		s.stages = 2;
-		return s;
-	}
-
-	inline AmpSpec amp_preset_clean()
-	{
-		AmpSpec s;
-		s.name = "American Clean";
-		s.Vdd = 280.0;
-		s.Rp = 100e3;
-		s.Rk = 1.5e3;
-		s.gain = 2.0;
-		s.bass = 0.50;
-		s.middle = 0.50;
-		s.treble = 0.50;
-		s.presence = 0.40;
-		s.master = 0.90;
-		s.tight = false;
-		s.ts_boost = false;
-		s.stages = 2;
-		return s;
-	}
-
-	struct Halfband2x
-	{
-		double up_s0 = 0.0, up_s1 = 0.0, up_s2 = 0.0, up_s3 = 0.0;
-		double dn_s0 = 0.0, dn_s1 = 0.0;
-
-		inline void up(double in, double &even, double &odd) noexcept
-		{
-			constexpr double a0 = 0.14134152, a1 = 0.58999482;
-			even = in;
-			const double y1 = a0 * (in - up_s1) + up_s0;
-			up_s0 = in;
-			up_s1 = y1;
-			const double y2 = a1 * (y1 - up_s3) + up_s2;
-			up_s2 = y1;
-			up_s3 = y2;
-			odd = y2;
-		}
-
-		inline double down(double even, double odd) noexcept
-		{
-			constexpr double a0 = 0.14134152;
-			const double y = a0 * (odd - dn_s1) + dn_s0;
-			dn_s0 = odd;
-			dn_s1 = y;
-			return 0.5 * (even + y);
-		}
-
-		void reset() noexcept
-		{
-			up_s0 = up_s1 = up_s2 = up_s3 = 0.0;
-			dn_s0 = dn_s1 = 0.0;
-		}
-	};
 
 	class AmpProcessor
 	{
@@ -280,7 +213,7 @@ namespace grmg
 			hb_b_.reset();
 		}
 
-		void set_model(const AmpModel &m)
+		void set_model(const models::AmpModel &m)
 		{
 			model_ = m;
 			update_coefficients();
@@ -399,7 +332,7 @@ namespace grmg
 
 	private:
 		double sr_ = 48000.0, os_sr_ = 192000.0;
-		AmpModel model_{};
+		models::AmpModel model_{};
 
 		double sag_charge_coef_ = 0.0;
 		double sag_leak_coef_ = 0.0;
@@ -421,13 +354,13 @@ namespace grmg
 		std::array<double, 4> miller_state_{};
 		std::array<double, 4> interstage_hp_{};
 
-		Biquad tight_bq_;
-		Biquad tone_bass_, tone_mid_, tone_treble_;
-		Biquad pres_, res_;
-		Biquad cab_res_, cab_mid_, cab_cone_, cab_lp1_, cab_lp2_, cab_hp_;
+		models::Biquad tight_bq_;
+		models::Biquad tone_bass_, tone_mid_, tone_treble_;
+		models::Biquad pres_, res_;
+		models::Biquad cab_res_, cab_mid_, cab_cone_, cab_lp1_, cab_lp2_, cab_hp_;
 
-		Halfband2x hb_a_;
-		Halfband2x hb_b_;
+		models::Halfband2x hb_a_;
+		models::Halfband2x hb_b_;
 
 		uint32_t noise_seed_ = 12345;
 		double noise_pink_state_ = 0.0;
@@ -683,12 +616,12 @@ namespace grmg
 			current_mix_ = target_mix_;
 		}
 
-		void set_clean_model(const AmpModel &m)
+		void set_clean_model(const models::AmpModel &m)
 		{
 			clean_channel.set_model(m);
 		}
 
-		void set_lead_model(const AmpModel &m)
+		void set_lead_model(const models::AmpModel &m)
 		{
 			lead_channel.set_model(m);
 		}
