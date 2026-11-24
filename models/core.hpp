@@ -6,6 +6,8 @@
 #include <random>
 #include <complex>
 
+#include "amp.hpp"
+
 namespace grmg::models
 {
     using cplx = std::complex<double>;
@@ -508,80 +510,6 @@ namespace grmg::models
         std::vector<int> steps;
     };
 
-    struct AmpSpec
-    {
-        const char *name = "5150 High Gain";
-        double Vdd = 320.0;
-        double Rp = 100.0e3;
-        double Rk = 1.8e3;
-        double gain = 6.5;
-        double bass = 0.55;
-        double middle = 0.45;
-        double treble = 0.55;
-        double presence = 0.45;
-        double master = 0.75;
-        double sag_amount = 0.35;
-        bool tight = true;
-        bool ts_boost = true;
-        bool ensemble = false;
-        int stages = 4;
-    };
-
-    struct AmpModel
-    {
-        double Ip0 = 0.0;
-        double Vp0 = 0.0;
-        double Vk0 = 0.0;
-        double Vgk0 = 0.0;
-        double A0 = 0.0;
-        double Vdd_sag0 = 320.0;
-        double transformer_coupling = 0.9;
-        double output_makeup = 1.0;
-        double knee_pos = 1.0;
-        double knee_neg = 1.0;
-        double drive_scale = 1.0;
-        double sag_tau_charge = 0.001;
-        double sag_tau_leak = 0.070;
-        AmpSpec spec;
-    };
-
-    struct Halfband2x
-    {
-        double up_s0 = 0.0, up_s1 = 0.0, up_s2 = 0.0, up_s3 = 0.0;
-        double dn_s0 = 0.0, dn_s1 = 0.0;
-
-        inline void up(double in, double &even, double &odd) noexcept
-        {
-            constexpr double a0 = 0.14134152, a1 = 0.58999482;
-            even = in;
-            const double y1 = a0 * (in - up_s1) + up_s0;
-            up_s0 = in;
-            up_s1 = y1;
-            const double y2 = a1 * (y1 - up_s3) + up_s2;
-            up_s2 = y1;
-            up_s3 = y2;
-            odd = y2;
-        }
-
-        inline double down(double even, double odd) noexcept
-        {
-            constexpr double a0 = 0.14134152;
-            const double y = a0 * (odd - dn_s1) + dn_s0;
-            dn_s0 = odd;
-            dn_s1 = y;
-            return 0.5 * (even + y);
-        }
-
-        void reset() noexcept
-        {
-            up_s0 = up_s1 = up_s2 = up_s3 = 0.0;
-            dn_s0 = dn_s1 = 0.0;
-        }
-    };
-
-    inline AmpSpec amp_preset_5150_lead();
-    inline AmpSpec amp_preset_clean();
-
     struct Settings
     {
         int tuning = 0;
@@ -632,14 +560,10 @@ namespace grmg::models
         double feedback_amount = 0.0;
         double feedback_distance = 1.0;
         int feedback_target = 0;
-        bool amp_on = false;
-        double amp_room_mix = 0.2;
-        double amp_channel_mix = 1.0;
-        AmpSpec amp_clean = amp_preset_clean();
-        AmpSpec amp_lead = amp_preset_5150_lead();
+        AmpSettings amp;
 
         bool is_magnetic_pickup() const { return sensor == 1 || sensor == 3; }
-        bool amp_active() const { return amp_on && is_magnetic_pickup(); }
+        bool amp_active() const { return amp.on && is_magnetic_pickup(); }
     };
 
     // A setting exposed as a slider to tune the sound by ear: one line of a table makes its parameter, reads it, compares

@@ -2,6 +2,8 @@
 // Copyright (C) 2026 Anthony Charretier
 #pragma once
 #include <cmath>
+#include <string>
+#include <vector>
 #include "../models/core.hpp"
 
 namespace grmg
@@ -16,14 +18,12 @@ namespace grmg
     constexpr double FINGER_BEHIND = 0.010;
     constexpr double FINGER_CONTACT = 0.012;
     constexpr double FINGER_SPREAD = 0.022;
-    constexpr double G_12AX7 = 2.24e-6;
     constexpr double GAMMA_AIR = 1.4;
     constexpr double HAND_MASS = 0.04;
     constexpr double HAND_SIGMA = 0.015;
     constexpr double HAND_TENSION_MAX = 4.0;
     constexpr double K_FLESH = 2.0e3;
     constexpr double M_AIR = 0.028965;
-    constexpr double MU_12AX7 = 100.0;
     constexpr double MUSCLE_EFFORT = 0.04;
     constexpr double MUSCLE_RECOVER = 2.0;
     constexpr double MUSCLE_WEAKEN = 0.3;
@@ -41,7 +41,6 @@ namespace grmg
     constexpr double PINCH_SPREAD = 0.004;
     constexpr double R_GAS = 8.314462618;
     constexpr double R_GRID_COND = 1.2e3;
-    constexpr double R_GRID_LEAK = 1.0e6;
     constexpr double RELEASE_DEAD = 400.0;
     constexpr double RELEASE_FRETTED = 32.0;
     constexpr double RELEASE_HAND = 45.0;
@@ -56,7 +55,6 @@ namespace grmg
     constexpr double T_AIR = 293.15;
     constexpr double THUMB_LEAD = 0.003;
     constexpr double TIP_SIGMA = 0.003;
-    constexpr double V_SAT_TRIODE = 45.0;
     constexpr double Y_REF = 0.003;
 
     constexpr double MODE_GAINS[7] = {0.9, 1.0, 0.55, 0.45, 0.35, 0.25, 0.18};
@@ -243,6 +241,82 @@ namespace grmg
 
     inline constexpr float OUTPUT_SCALE = 0.018f;
 
+    // ---- the amplifier (core/amp)
+    // the 12AX7 after Koren: Ip = (E1^EX / KG1) (1 + sgn E1), E1 = Vpk / KP ln(1 + exp(KP (1 / MU + Vgk / sqrt(KVB + Vpk^2))))
+    constexpr double KOREN_MU = 100.0, KOREN_EX = 1.4, KOREN_KG1 = 1060.0, KOREN_KP = 600.0, KOREN_KVB = 300.0;
+    constexpr double TRIODE_CGP = 1.7e-12, TRIODE_CGK = 1.6e-12; // grid to plate, grid to cathode (F)
+    constexpr double GRID_ONSET_V = -0.3;                        // the grid starts to conduct this far below the cathode
+    constexpr double BOLTZMANN = 1.380649e-23;
+    constexpr int MAX_TRIODES = 6;
+    constexpr int TRIODE_CURVE_POINTS = 1024;
+    constexpr int AMP_OVERSAMPLE = 4;              // two halfband stages
+    constexpr int HALFBAND_TAPS[2] = {63, 23};     // the first stage (sharp, at the original Nyquist), the second
+    constexpr double HALFBAND_KAISER_BETA = 9.0;   // about -90 dB of stopband
+    constexpr double TRIODE_LAST_LOAD = 1.0e6;     // what loads the last preamp stage (tone stack, phase inverter)
+    constexpr double FULL_POWER_VOLTS = 20.0;      // the speaker's peak volts at full power
+    // the cabinet heard by a close microphone, moved from the cone's centre to its edge: the top falls, the peak too
+    constexpr double CAB_MIC_TOP_DROP = 0.45, CAB_MIC_PEAK_DROP = 0.6;
+    constexpr double CAB_NOTCH_Q = 1.4, CAB_BREAKUP_Q = 1.8, CAB_TOP_Q = 0.9, CAB_TOP2_RATIO = 1.3, CAB_TOP2_Q = 0.6;
+    constexpr double PICKUP_VOLTS = 0.02;          // a magnetic pickup's volts per unit of the engine's pickup signal
+    constexpr double AMP_OUTPUT_UNITS = 30.0;      // the speaker at full power, in units of the engine's pickup signal
+    constexpr double AUDIO_TAPER_DECADES = 2.0;    // an audio pot: (10^(2 p) - 1) / 99 of its track at position p
+    constexpr double TONE_BASS_TAPER = 3.4;        // the bass pot of a tone stack: exp((p - 1) 3.4) (Yeh)
+    constexpr double BRIGHT_MAX = 4.0;             // the bright capacitor lifts the highs at most this much
+    constexpr double SAG_ATTACK_S = 0.01;          // the supply drops this fast when the power tubes draw more
+    constexpr double LEVEL_SMOOTH_S = 0.02;        // gains moved by a knob glide over this
+    // the overdrive pedal (a Tube Screamer's circuit): gain 1 + (R_DRIVE p + R_FIXED) / R_GAIN above 1 / (2 pi R_GAIN C_GAIN)
+    constexpr double OD_R_GAIN = 4.7e3, OD_C_GAIN = 0.047e-6, OD_R_FIXED = 51e3, OD_R_DRIVE = 500e3;
+    constexpr double OD_C_FEEDBACK = 51e-12;       // across the diodes: the clipped part's low-pass
+    constexpr double OD_DIODE_V = 0.3;             // the knee of the silicon diodes in the feedback loop
+    constexpr double OD_TONE_LO_HZ = 700.0, OD_TONE_HI_HZ = 7000.0;
+    constexpr double OD_LEVEL_MAX = 2.0;
+    // the noise gate (keyed by the guitar)
+    constexpr double GATE_OFF_DB = -90.0;          // at this threshold the gate is off
+    constexpr double GATE_DETECT_S = 0.004;        // the envelope's release
+    constexpr double GATE_ATTACK_S = 0.0005, GATE_HOLD_S = 0.015, GATE_RELEASE_S = 0.04;
+    constexpr double GATE_HYSTERESIS = 0.5;        // it closes below this share of the threshold
+
+    inline const std::vector<models::AmpVoicing> AMP_VOICINGS = {
+        // a blackface-style clean: the tone stack right after the first stage, the volume pot before the second
+        {"American Clean", 300.0, 10e3,
+         {{100e3, 1.5e3, 25e-6, 34e3, 1e-6, 1e6, 1.0},
+          {100e3, 1.5e3, 22e-6, 100e3, 0.02e-6, 1e6, 1.0}},
+         1, 0, 0.0,
+         {250e3, 250e3, 10e3, 100e3, 250e-12, 0.1e-6, 0.047e-6},
+         {460.0, 52.0, 0.15, 25.0, 4.0, 60.0, 70e-6, 0.35, 0.12, 4000.0, 120.0, 35.0, 12000.0}},
+        // a plexi-to-800 crunch: partly bypassed first stage, the gain pot with its bright cap, a cold second stage
+        {"British Crunch", 300.0, 10e3,
+         {{100e3, 2.7e3, 0.68e-6, 68e3, 1e-6, 1e6, 1.0},
+          {100e3, 10e3, 0.0, 470e3, 0.022e-6, 1e6, 1.0}},
+         1, 1, 400.0,
+         {220e3, 1e6, 25e3, 33e3, 470e-12, 0.022e-6, 0.022e-6},
+         {460.0, 38.0, 0.1, 25.0, 2.0, 150.0, 50e-6, 0.4, 0.1, 5000.0, 100.0, 40.0, 11000.0}},
+        // the same, hot-rodded: one more stage cascaded before the tone stack
+        {"British Lead", 300.0, 10e3,
+         {{100e3, 2.7e3, 0.68e-6, 68e3, 1e-6, 1e6, 1.0},
+          {100e3, 10e3, 0.0, 470e3, 0.022e-6, 1e6, 1.0},
+          {100e3, 1.5e3, 0.68e-6, 470e3, 0.022e-6, 1e6, 0.4}},
+         1, 2, 400.0,
+         {220e3, 1e6, 25e3, 33e3, 470e-12, 0.022e-6, 0.022e-6},
+         {460.0, 38.0, 0.1, 25.0, 2.0, 150.0, 50e-6, 0.4, 0.1, 5000.0, 100.0, 40.0, 11000.0}},
+        // a modern high gain: five cascaded stages, small coupling caps between them (tight lows), a cold clipper
+        {"Modern High Gain", 330.0, 10e3,
+         {{100e3, 1.8e3, 1e-6, 34e3, 1e-6, 1e6, 1.0},
+          {100e3, 2.7e3, 1e-6, 470e3, 0.0022e-6, 1e6, 1.0},
+          {100e3, 39e3, 0.0, 100e3, 0.022e-6, 1e6, 0.5},
+          {100e3, 1.5e3, 1e-6, 470e3, 0.001e-6, 1e6, 0.6},
+          {100e3, 10e3, 0.0, 470e3, 0.022e-6, 470e3, 0.5}},
+         1, 4, 0.0,
+         {250e3, 1e6, 25e3, 47e3, 470e-12, 0.022e-6, 0.022e-6},
+         {470.0, 50.0, 0.15, 25.0, 4.0, 100.0, 100e-6, 0.4, 0.15, 3500.0, 90.0, 30.0, 10000.0}},
+    };
+
+    inline constexpr models::CabinetSpec CABINETS[] = {
+        {"1x12 open back", 1, 75.0, 0.6, 0.08, 0.0, 0.25, 2500.0, 4.0, 1300.0, -3.0, 5500.0},
+        {"2x12 closed", 2, 75.0, 0.5, 0.08, 0.07, 0.0, 2700.0, 5.0, 1400.0, -4.0, 5200.0},
+        {"4x12 closed", 4, 75.0, 0.45, 0.09, 0.14, 0.0, 2600.0, 6.0, 1500.0, -5.0, 5000.0},
+    };
+
     inline constexpr const char *NOTE_NAMES[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
     inline constexpr const char *STRING_LABELS[6] = {"6  E", "5  A", "4  D", "3  G", "2  B", "1  e"};
 
@@ -253,12 +327,7 @@ namespace grmg
         "sensor", "pickup_mm", "pickup_type", "cable_pf",
         "pickup_bridge_on", "pickup_middle_on", "pickup_neck_on", "pickup_bridge_split",
         "pickup_bridge_type", "pickup_middle_type", "pickup_neck_type",
-        "amp_on", "amp_channel_mix",
-        "amp_clean_model", "amp_clean_gain", "amp_clean_master", "amp_clean_bass", "amp_clean_middle",
-        "amp_clean_treble", "amp_clean_presence", "amp_clean_tight", "amp_clean_ts_boost", "amp_clean_stages",
-        "amp_lead_model", "amp_lead_gain", "amp_lead_master", "amp_lead_bass", "amp_lead_middle",
-        "amp_lead_treble", "amp_lead_presence", "amp_lead_tight", "amp_lead_ts_boost", "amp_lead_stages",
-        "amp_room_mix",
+        "amp_on", "amp_clean_model", "amp_lead_model", "amp_od_on", "amp_cab",
         "feedback_amount", "feedback_distance", "feedback_target",
         "sympathy", "room_on", "room_size", "room_material", "room_distance",
         "human", "human_amount", "swing_cm", "finger_noises", "finger_force",
@@ -288,16 +357,56 @@ namespace grmg
         {"tension_pull", "Tension pull on bridge", 0.0f, 2.0f, 0.5f, &models::Voicing::longitudinal},
     };
 
+    // the knobs of the amplifier (Amp tab): each channel has the same, its id and name prefixed (amp_clean_gain)
+    inline constexpr models::Tunable<models::AmpChannelSettings> AMP_CHANNEL_TUNABLES[] = {
+        {"gain", "Gain", 0.0f, 10.0f, 0.0f, &models::AmpChannelSettings::gain},
+        {"bass", "Bass", 0.0f, 1.0f, 0.0f, &models::AmpChannelSettings::bass},
+        {"middle", "Middle", 0.0f, 1.0f, 0.0f, &models::AmpChannelSettings::middle},
+        {"treble", "Treble", 0.0f, 1.0f, 0.0f, &models::AmpChannelSettings::treble},
+        {"presence", "Presence", 0.0f, 1.0f, 0.0f, &models::AmpChannelSettings::presence},
+        {"resonance", "Resonance", 0.0f, 1.0f, 0.0f, &models::AmpChannelSettings::resonance},
+        {"master", "Master", 0.0f, 1.0f, 0.0f, &models::AmpChannelSettings::master},
+    };
+    inline constexpr models::AmpChannelParams AMP_CHANNELS[] = {
+        {"amp_clean_", "Clean ", "amp_clean_model", &models::AmpSettings::clean},
+        {"amp_lead_", "Lead ", "amp_lead_model", &models::AmpSettings::lead},
+    };
+    inline constexpr models::Tunable<models::OverdriveSettings> OVERDRIVE_TUNABLES[] = {
+        {"amp_od_drive", "Overdrive drive", 0.0f, 1.0f, 0.0f, &models::OverdriveSettings::drive},
+        {"amp_od_tone", "Overdrive tone", 0.0f, 1.0f, 0.0f, &models::OverdriveSettings::tone},
+        {"amp_od_level", "Overdrive level", 0.0f, 1.0f, 0.0f, &models::OverdriveSettings::level},
+    };
+    inline constexpr models::Tunable<models::CabinetSettings> CABINET_TUNABLES[] = {
+        {"amp_cab_mic", "Mic: centre to edge", 0.0f, 1.0f, 0.0f, &models::CabinetSettings::mic},
+    };
+    inline constexpr models::Tunable<models::AmpSettings> AMP_TUNABLES[] = {
+        {"amp_channel_mix", "Channel mix (0: clean, 1: lead)", 0.0f, 1.0f, 0.0f, &models::AmpSettings::mix},
+        {"amp_gate", "Noise gate (dB, bottom: off)", (float)GATE_OFF_DB, -20.0f, 0.0f, &models::AmpSettings::gate_db},
+        {"amp_room_mix", "Amp room mix", 0.0f, 1.0f, 0.0f, &models::AmpSettings::room_mix},
+    };
+
+    // the id of a channel's knob
+    inline std::string amp_channel_id(const models::AmpChannelParams &channel, const char *knob) { return std::string(channel.prefix) + knob; }
+
     // every parameter a guitar has (its slot is copied, reset or moved as a whole)
     template <class Visit>
     void for_each_guitar_param(Visit &&visit)
     {
         for (const char *id : GUITAR_PARAMS)
-            visit(id);
+            visit(std::string(id));
         for (const auto &t : HAND_TUNABLES)
-            visit(t.id);
+            visit(std::string(t.id));
         for (const auto &t : VOICE_TUNABLES)
-            visit(t.id);
+            visit(std::string(t.id));
+        for (const auto &channel : AMP_CHANNELS)
+            for (const auto &t : AMP_CHANNEL_TUNABLES)
+                visit(amp_channel_id(channel, t.id));
+        for (const auto &t : OVERDRIVE_TUNABLES)
+            visit(std::string(t.id));
+        for (const auto &t : CABINET_TUNABLES)
+            visit(std::string(t.id));
+        for (const auto &t : AMP_TUNABLES)
+            visit(std::string(t.id));
     }
 
     inline float dbToGain(float db) { return std::pow(10.0f, db / 20.0f); }

@@ -22,7 +22,7 @@
 #include <memory>
 #include <vector>
 
-#include "amp.hpp"
+#include "amp/amp_rig.hpp"
 #include "feedback.hpp"
 #include "performance.hpp"
 #include "voice.hpp"
@@ -103,7 +103,7 @@ namespace grmg
 			pickup_target_gain_ = {0.0f, 0.0f, 0.0f};
 			sym_set_ = false;
 
-			amp_proc_.prepare(sample_rate, BLOCK);
+			amp_proc_.prepare(sample_rate);
 
 			feedback_proc_.prepare(sample_rate);
 			fb_force_.fill(0.0);
@@ -116,6 +116,14 @@ namespace grmg
 			const Model *prev = model_;
 			model_ = m;
 
+			// one magnetic pickup: its coil, its cable and the volume pot, as the amplifier's input sees them
+			if (model_ && model_->s.sensor == 1 && (!prev || !Model::same_pickups(prev->s, model_->s)))
+			{
+				models::Biquad bq = pickup_filter(model_->pickup, sr_);
+				bq.z1 = single_filter_.z1;
+				bq.z2 = single_filter_.z2;
+				single_filter_ = bq;
+			}
 			if (model_ && model_->s.sensor == 3)
 			{
 				const bool pickups_changed = !prev || !Model::same_pickups(prev->s, model_->s);
@@ -144,13 +152,7 @@ namespace grmg
 			}
 
 			if (model_ && model_->amp_active)
-			{
-				amp_proc_.set_clean_model(model_->amp_clean_model);
-				amp_proc_.set_lead_model(model_->amp_lead_model);
-				amp_proc_.set_channel_mix(model_->s.amp_channel_mix);
-
-				amp_proc_.set_noise_amount(0.4, 1.0);
-			}
+				amp_proc_.set_model(model_->amp);
 
 			if (model_)
 			{
@@ -325,6 +327,7 @@ namespace grmg
 		std::array<double, 256> pickup_{};
 		std::array<std::array<double, 256>, 3> pickup3_{};
 		std::array<models::Biquad, 3> pickup_filter_{};
+		models::Biquad single_filter_{};
 		std::array<float, 3> pickup_gain_{0.0f, 0.0f, 0.0f};
 		std::array<float, 3> pickup_target_gain_{0.0f, 0.0f, 0.0f};
 		bool sym_set_ = false, relocate_ = true, was_playing_ = false, palm_down_ = false;
@@ -333,9 +336,10 @@ namespace grmg
 		size_t next_ = 0;
 		double expected_beat_ = -1.0;
 
-		DualChannelAmp amp_proc_;
+		AmpRig amp_proc_;
 		FeedbackProcessor feedback_proc_;
 		std::array<double, BLOCK> fb_force_{};
+		std::array<float, BLOCK> speaker_{};
 
 		static constexpr double CARRY_BEATS = 16.0;
 		std::array<models::Pending, 64> pending_{};
@@ -621,18 +625,17 @@ namespace grmg
 				else
 				{
 					for (int t = 0; t < n; ++t)
-						pk[t] = (float)pickup_[t];
+						pk[t] = (float)single_filter_.process(pickup_[t]);
 				}
 
-				if (model_ && model_->amp_active && (model_->s.sensor == 1 || model_->s.sensor == 3))
-				{
-					amp_proc_.process(pk, n);
-				}
-
+				// the amplifier; the larsen hears its speaker (or the jack's signal when there is none)
+				const bool amp = model_ && model_->amp_active;
+				if (amp)
+					amp_proc_.process(pk, n, speaker_.data());
 				if (fb_on)
 				{
 					for (int t = 0; t < n; ++t)
-						feedback_proc_.push((double)pk[t]);
+						feedback_proc_.push(amp ? (double)speaker_[(size_t)t] : (double)pk[t]);
 				}
 			}
 			for (int i = 0; i < NUM_STRINGS; ++i)

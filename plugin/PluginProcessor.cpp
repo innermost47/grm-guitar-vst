@@ -37,7 +37,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout GRMGuitarProcessor::createLa
 	std::vector<std::unique_ptr<RangedAudioParameter>> p;
 	String prefix, idPrefix; // the guitar the next parameters belong to ("G2 ", "g2_"; empty for guitar 1)
 	// centre: the value at the middle of the slider (0: linear)
-	auto real = [&](const char *id, const char *name, float lo, float hi, float def, float centre = 0.0f, float step = 0.0f)
+	auto real = [&](const String &id, const String &name, float lo, float hi, float def, float centre = 0.0f, float step = 0.0f)
 	{
 		NormalisableRange<float> r(lo, hi, step);
 		if (centre > lo && centre < hi)
@@ -49,11 +49,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout GRMGuitarProcessor::createLa
 			AudioParameterFloatAttributes().withStringFromValueFunction([decimals](float v, int)
 																		{ return String(v, decimals); })));
 	};
-	auto flag = [&](const char *id, const char *name, bool def)
+	auto flag = [&](const String &id, const String &name, bool def)
 	{
 		p.push_back(std::make_unique<AudioParameterBool>(ParameterID{idPrefix + id, 1}, prefix + name, def));
 	};
-	auto choice = [&](const char *id, const char *name, const StringArray &c, int def)
+	auto choice = [&](const String &id, const String &name, const StringArray &c, int def)
 	{
 		p.push_back(std::make_unique<AudioParameterChoice>(ParameterID{idPrefix + id, 1}, prefix + name, c, def));
 	};
@@ -100,39 +100,28 @@ juce::AudioProcessorValueTreeState::ParameterLayout GRMGuitarProcessor::createLa
 		choice("pickup_middle_type", "Middle pickup type", ui::namesOf(PICKUP_TYPES), 0);
 		choice("pickup_neck_type", "Neck pickup type", ui::namesOf(PICKUP_TYPES), 0);
 
-		// amp & distortion (DUAL CHANNEL)
-		flag("amp_on", "Amp & Distortion", false);
-		real("amp_channel_mix", "Channel Mix (0: Clean, 1: Lead)", 0.0f, 1.0f, 1.0f);
-
-		// --- CLEAN ---
-		choice("amp_clean_model", "Clean Amp Model", StringArray{"5150 High Gain", "JCM800 Crunch", "American Clean"}, 2);
-		real("amp_clean_gain", "Clean Gain", 0.0f, 10.0f, 2.0f);
-		real("amp_clean_master", "Clean Master", 0.0f, 1.0f, 0.9f);
-		real("amp_clean_bass", "Clean Bass", 0.0f, 1.0f, 0.5f);
-		real("amp_clean_middle", "Clean Middle", 0.0f, 1.0f, 0.5f);
-		real("amp_clean_treble", "Clean Treble", 0.0f, 1.0f, 0.5f);
-		real("amp_clean_presence", "Clean Presence", 0.0f, 1.0f, 0.4f);
-		flag("amp_clean_tight", "Clean Tight low-cut", false);
-		flag("amp_clean_ts_boost", "Clean TS Boost", false);
-		real("amp_clean_stages", "Clean Stages", 1.0f, 4.0f, 2.0f, 0.0f, 1.0f);
-
-		// --- LEAD ---
-		choice("amp_lead_model", "Lead Amp Model", StringArray{"5150 High Gain", "JCM800 Crunch", "American Clean"}, 0);
-		real("amp_lead_gain", "Lead Gain", 0.0f, 10.0f, 7.5f);
-		real("amp_lead_master", "Lead Master", 0.0f, 1.0f, 0.7f);
-		real("amp_lead_bass", "Lead Bass", 0.0f, 1.0f, 0.55f);
-		real("amp_lead_middle", "Lead Middle", 0.0f, 1.0f, 0.45f);
-		real("amp_lead_treble", "Lead Treble", 0.0f, 1.0f, 0.55f);
-		real("amp_lead_presence", "Lead Presence", 0.0f, 1.0f, 0.45f);
-		flag("amp_lead_tight", "Lead Tight low-cut", true);
-		flag("amp_lead_ts_boost", "Lead TS Boost", true);
-		real("amp_lead_stages", "Lead Stages", 1.0f, 4.0f, 4.0f, 0.0f, 1.0f);
+		// the amplifier: the rig, each channel's voicing and knobs, the overdrive pedal, the cabinet
+		flag("amp_on", "Amp", false);
+		for (const auto &channel : AMP_CHANNELS)
+		{
+			const auto &knobs = models::AmpSettings{}.*channel.channel;
+			choice(channel.voicing, String(channel.label) + "amp", ui::namesOf(AMP_VOICINGS), knobs.voicing);
+			for (const auto &t : AMP_CHANNEL_TUNABLES)
+				real(String(amp_channel_id(channel, t.id)), String(channel.label) + t.name, t.lo, t.hi, (float)(knobs.*t.field), t.centre);
+		}
+		flag("amp_od_on", "Overdrive", false);
+		for (const auto &t : OVERDRIVE_TUNABLES)
+			real(t.id, t.name, t.lo, t.hi, (float)(models::OverdriveSettings{}.*t.field), t.centre);
+		choice("amp_cab", "Cabinet", ui::namesOf(CABINETS), models::CabinetSettings{}.kind);
+		for (const auto &t : CABINET_TUNABLES)
+			real(t.id, t.name, t.lo, t.hi, (float)(models::CabinetSettings{}.*t.field), t.centre);
+		for (const auto &t : AMP_TUNABLES)
+			real(t.id, t.name, t.lo, t.hi, (float)(models::AmpSettings{}.*t.field), t.centre);
 
 		// acoustic feedback (larsen)
 		real("feedback_amount", "Feedback intensity", 0.0f, 1.0f, 0.0f);
 		real("feedback_distance", "Amp distance (m)", 0.2f, 4.0f, 1.0f, 1.0f, 0.05f);
 		choice("feedback_target", "Feedback harmonic", StringArray{"Auto (acoustic phase)", "Fundamental (1st)", "Octave (2nd)", "5th (3rd)", "Double Octave (4th)"}, 0);
-		real("amp_room_mix", "Amp Room Mix", 0.0f, 1.0f, 0.2f);
 		flag("sympathy", "Sympathetic strings", true);
 		// room
 		flag("room_on", "Room", true);
@@ -189,7 +178,7 @@ void GRMGuitarProcessor::addGuitar()
 	if (count >= MAX_GUITARS)
 		return;
 	// a fresh slot: its parameters at their defaults, one empty pattern
-	for_each_guitar_param([&](const char *id)
+	for_each_guitar_param([&](const std::string &id)
 						  {
 		if (auto *p = params.getParameter(GuitarTrack::paramId(count, id)))
 			p->setValueNotifyingHost(p->getDefaultValue()); });
@@ -212,7 +201,7 @@ void GRMGuitarProcessor::removeGuitar(int g)
 	// the guitars after it move down one slot: their settings and patterns with them
 	for (int k = g; k + 1 < count; ++k)
 	{
-		for_each_guitar_param([&](const char *id)
+		for_each_guitar_param([&](const std::string &id)
 							  {
 			auto *to = params.getParameter(GuitarTrack::paramId(k, id));
 			auto *from = params.getParameter(GuitarTrack::paramId(k + 1, id));

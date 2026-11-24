@@ -50,11 +50,10 @@ namespace grmg
             for (size_t t = 0; t < y.size(); ++t)
                 y[t] = SENSOR_SCALE[2] * force[t];
         }
-        else
+        else // the engine's pickup output is already the jack's (pickups, cable, amplifier)
         {
-            models::Biquad f = pickup_filter(m.pickup, m.sample_rate);
             for (size_t t = 0; t < y.size() && t < pickup.size(); ++t)
-                y[t] = SENSOR_SCALE[1] * f.process(pickup[t]);
+                y[t] = SENSOR_SCALE[1] * pickup[t];
         }
         return {y, y};
     }

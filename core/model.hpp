@@ -17,7 +17,7 @@
 
 #include "../constants/core.hpp"
 #include "feedback.hpp"
-#include "amp.hpp"
+#include "amp/amp_networks.hpp"
 #include "physics.hpp"
 
 namespace grmg
@@ -42,8 +42,7 @@ namespace grmg
 		bool palm_ready = false;
 		unsigned body_id = 0, room_id = 0;
 
-		models::AmpModel amp_clean_model;
-		models::AmpModel amp_lead_model;
+		models::AmpModel amp;
 		bool amp_active = false;
 
 		models::FeedbackModel feedback;
@@ -90,27 +89,6 @@ namespace grmg
 				   a.pickup_neck_on == b.pickup_neck_on && a.pickup_bridge_split == b.pickup_bridge_split &&
 				   a.pickup_bridge_type == b.pickup_bridge_type && a.pickup_middle_type == b.pickup_middle_type &&
 				   a.pickup_neck_type == b.pickup_neck_type;
-		}
-
-		static bool same_amp_dc(const models::AmpSpec &a, const models::AmpSpec &b)
-		{
-			return std::abs(a.Vdd - b.Vdd) < 1e-4 &&
-				   std::abs(a.Rp - b.Rp) < 1e-4 &&
-				   std::abs(a.Rk - b.Rk) < 1e-4 &&
-				   std::abs(a.gain - b.gain) < 1e-4;
-		}
-
-		static bool same_amp_params(const models::AmpSpec &a, const models::AmpSpec &b)
-		{
-			return std::abs(a.master - b.master) < 1e-4 &&
-				   std::abs(a.bass - b.bass) < 1e-4 &&
-				   std::abs(a.middle - b.middle) < 1e-4 &&
-				   std::abs(a.treble - b.treble) < 1e-4 &&
-				   std::abs(a.presence - b.presence) < 1e-4 &&
-				   std::abs(a.sag_amount - b.sag_amount) < 1e-4 &&
-				   a.tight == b.tight &&
-				   a.ts_boost == b.ts_boost &&
-				   a.stages == b.stages;
 		}
 
 		static bool same_feedback(const models::Settings &a, const models::Settings &b)
@@ -223,48 +201,10 @@ namespace grmg
 			solve_losses();
 			solve_pickup();
 
-			if (s.amp_active())
-			{
-				const bool clean_dc_stable = previous && previous->amp_active && same_amp_dc(previous->s.amp_clean, s.amp_clean);
-				const bool clean_spec_stable = previous && previous->amp_active && same_amp_params(previous->s.amp_clean, s.amp_clean);
-
-				if (clean_dc_stable)
-				{
-					amp_clean_model = previous->amp_clean_model;
-					if (!clean_spec_stable)
-					{
-						amp_clean_model.spec = s.amp_clean;
-						amp_clean_model.sag_tau_leak = 0.060 + (1.0 - s.amp_clean.gain / 10.0) * 0.040;
-					}
-				}
-				else
-				{
-					amp_clean_model = amp_network(s.amp_clean);
-				}
-
-				const bool lead_dc_stable = previous && previous->amp_active && same_amp_dc(previous->s.amp_lead, s.amp_lead);
-				const bool lead_spec_stable = previous && previous->amp_active && same_amp_params(previous->s.amp_lead, s.amp_lead);
-
-				if (lead_dc_stable)
-				{
-					amp_lead_model = previous->amp_lead_model;
-					if (!lead_spec_stable)
-					{
-						amp_lead_model.spec = s.amp_lead;
-						amp_lead_model.sag_tau_leak = 0.060 + (1.0 - s.amp_lead.gain / 10.0) * 0.040;
-					}
-				}
-				else
-				{
-					amp_lead_model = amp_network(s.amp_lead);
-				}
-
-				amp_active = true;
-			}
-			else
-			{
-				amp_active = false;
-			}
+			// the amplifier: its preamps' curves are kept while their circuit stays
+			amp_active = s.amp_active();
+			if (amp_active)
+				amp = amp_model(s.amp, previous && previous->amp_active ? &previous->amp : nullptr);
 
 			if (s.feedback_amount > 1e-4 && s.is_magnetic_pickup())
 			{

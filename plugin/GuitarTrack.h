@@ -175,8 +175,6 @@ private:
 	bool roomLoaded = false;
 	juce::AudioBuffer<float> dry, pickupBuf;
 	juce::SmoothedValue<float> bodyMix;
-	models::Biquad pickupFilter;
-	double filterFr = -1.0, filterQ = -1.0;
 	int heldKey = -1, heldChannel = 0, heldPattern = -1, shownPattern = -1;
 	double patternBeat = 0.0;
 	int pos = 0;

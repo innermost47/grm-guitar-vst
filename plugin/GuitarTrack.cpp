@@ -71,42 +71,23 @@ models::Settings GuitarTrack::readSettings() const
 	s.pickup_middle_type = juce::jlimit(0, grmg::NUM_PICKUP_TYPES - 1, c("pickup_middle_type"));
 	s.pickup_neck_type = juce::jlimit(0, grmg::NUM_PICKUP_TYPES - 1, c("pickup_neck_type"));
 
-	s.amp_on = param("amp_on") > 0.5f;
-
-	const int clean_model = juce::jlimit(0, 2, (int)std::lround(param("amp_clean_model")));
-	if (clean_model == 0)
-		s.amp_clean = grmg::models::amp_preset_5150_lead();
-	else if (clean_model == 1)
-		s.amp_clean = grmg::models::amp_preset_jcm800_crunch();
-	else
-		s.amp_clean = grmg::models::amp_preset_clean();
-
-	s.amp_clean.gain = param("amp_clean_gain");
-	s.amp_clean.master = param("amp_clean_master");
-	s.amp_clean.bass = param("amp_clean_bass");
-	s.amp_clean.middle = param("amp_clean_middle");
-	s.amp_clean.treble = param("amp_clean_treble");
-	s.amp_clean.presence = param("amp_clean_presence");
-	s.amp_clean.tight = param("amp_clean_tight") > 0.5f;
-
-	const int lead_model = juce::jlimit(0, 2, (int)std::lround(param("amp_lead_model")));
-	if (lead_model == 0)
-		s.amp_lead = grmg::models::amp_preset_5150_lead();
-	else if (lead_model == 1)
-		s.amp_lead = grmg::models::amp_preset_jcm800_crunch();
-	else
-		s.amp_lead = grmg::models::amp_preset_clean();
-
-	s.amp_lead.gain = param("amp_lead_gain");
-	s.amp_lead.master = param("amp_lead_master");
-	s.amp_lead.bass = param("amp_lead_bass");
-	s.amp_lead.middle = param("amp_lead_middle");
-	s.amp_lead.treble = param("amp_lead_treble");
-	s.amp_lead.presence = param("amp_lead_presence");
-	s.amp_lead.tight = param("amp_lead_tight") > 0.5f;
-
-	s.amp_channel_mix = param("amp_channel_mix");
-	s.amp_room_mix = param("amp_room_mix");
+	// the amplifier: each channel's voicing and knobs, the pedal, the cabinet, the rig's own knobs
+	s.amp.on = b("amp_on");
+	for (const auto &channel : grmg::AMP_CHANNELS)
+	{
+		auto &knobs = s.amp.*channel.channel;
+		knobs.voicing = juce::jlimit(0, (int)grmg::AMP_VOICINGS.size() - 1, c(channel.voicing));
+		for (const auto &t : grmg::AMP_CHANNEL_TUNABLES)
+			knobs.*t.field = v(grmg::amp_channel_id(channel, t.id).c_str());
+	}
+	s.amp.drive.on = b("amp_od_on");
+	for (const auto &t : grmg::OVERDRIVE_TUNABLES)
+		s.amp.drive.*t.field = v(t.id);
+	s.amp.cabinet.kind = juce::jlimit(0, (int)std::size(grmg::CABINETS) - 1, c("amp_cab"));
+	for (const auto &t : grmg::CABINET_TUNABLES)
+		s.amp.cabinet.*t.field = v(t.id);
+	for (const auto &t : grmg::AMP_TUNABLES)
+		s.amp.*t.field = v(t.id);
 	// --------------------------------------
 
 	s.feedback_amount = param("feedback_amount");
@@ -261,10 +242,8 @@ void GuitarTrack::solveStep(double sr, unsigned seed, double tempo, bool loop, s
 	using M = grmg::Model;
 	auto sameSettings = [](const models::Settings &a, const models::Settings &b)
 	{
-		return a.amp_on == b.amp_on &&
-			   std::abs(a.amp_channel_mix - b.amp_channel_mix) < 1e-4 &&
-			   std::abs(a.amp_room_mix - b.amp_room_mix) < 1e-4 &&
-			   M::same_strings(a, b) && M::same_attack(a, b) && M::same_palm(a, b) && M::same_body(a, b) && M::same_room(a, b) && M::same_feedback(a, b) && M::same_amp_dc(a.amp_clean, b.amp_clean) && M::same_amp_params(a.amp_clean, b.amp_clean) && M::same_amp_dc(a.amp_lead, b.amp_lead) && M::same_amp_params(a.amp_lead, b.amp_lead);
+		return a.amp == b.amp && M::same_strings(a, b) && M::same_attack(a, b) && M::same_palm(a, b) && M::same_body(a, b) &&
+			   M::same_room(a, b) && M::same_feedback(a, b);
 	};
 	auto samePlayer = [](const models::Settings &a, const models::Settings &b)
 	{
@@ -392,7 +371,6 @@ void GuitarTrack::prepare(double sr, int block)
 	out.setSize(2, block);
 	ampRoomBuf.setSize(2, block, false, false, true);
 	bodyMix.reset(sr, 0.05);
-	filterFr = filterQ = -1.0;
 }
 
 float GuitarTrack::param(const char *k) const
@@ -590,7 +568,6 @@ void GuitarTrack::finish(int n, double sr, bool ownRoom)
 			engine.reset_strings();
 			bodyConv.reset();
 			roomConv.reset();
-			pickupFilter.z1 = pickupFilter.z2 = 0.0;
 		}
 	}
 	const auto *model = engine.model();
@@ -599,31 +576,9 @@ void GuitarTrack::finish(int n, double sr, bool ownRoom)
 	out.clear();
 	if (sensor != 0)
 	{
-		if (sensor == 1 && model && (model->pickup.fr != filterFr || model->pickup.Q != filterQ))
-		{
-			const auto previous = pickupFilter;
-			pickupFilter = grmg::pickup_filter(model->pickup, sr);
-			pickupFilter.z1 = previous.z1;
-			pickupFilter.z2 = previous.z2;
-			filterFr = model->pickup.fr;
-			filterQ = model->pickup.Q;
-		}
 		const float *heard = pickupBuf.getReadPointer(0);
 		float *w0 = out.getWritePointer(0);
-		if (sensor == 1)
-		{
-			if (model && model->amp_active)
-			{
-				for (int t = 0; t < n; ++t)
-					w0[t] = OUTPUT_SCALE * (float)(grmg::PICKUP_LEVEL * heard[t]);
-			}
-			else
-			{
-				for (int t = 0; t < n; ++t)
-					w0[t] = OUTPUT_SCALE * (float)(grmg::PICKUP_LEVEL * pickupFilter.process(heard[t]));
-			}
-		}
-		else if (sensor == 3)
+		if (sensor == 1 || sensor == 3) // the engine's pickup output is the jack's: pickups, cable, amplifier
 		{
 			for (int t = 0; t < n; ++t)
 				w0[t] = OUTPUT_SCALE * (float)(grmg::PICKUP_LEVEL * heard[t]);
@@ -636,7 +591,7 @@ void GuitarTrack::finish(int n, double sr, bool ownRoom)
 
 		out.copyFrom(1, 0, out, 0, 0, n);
 
-		if (model && model->s.room_on && roomLoaded && model->s.amp_room_mix > 0.001f)
+		if (model && model->s.room_on && roomLoaded && model->s.amp.room_mix > 0.001f)
 		{
 			ampRoomBuf.copyFrom(0, 0, out, 0, 0, n);
 			ampRoomBuf.copyFrom(1, 0, out, 0, 0, n);
@@ -644,7 +599,7 @@ void GuitarTrack::finish(int n, double sr, bool ownRoom)
 			juce::dsp::AudioBlock<float> block(ampRoomBuf.getArrayOfWritePointers(), 2, (size_t)n);
 			roomConv.process(juce::dsp::ProcessContextReplacing<float>(block));
 
-			const float wet = (float)model->s.amp_room_mix;
+			const float wet = (float)model->s.amp.room_mix;
 			const float dry = 1.0f - wet;
 
 			out.applyGain(0, 0, n, dry);

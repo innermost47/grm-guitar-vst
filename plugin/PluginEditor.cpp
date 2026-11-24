@@ -312,18 +312,18 @@ void GRMGuitarEditor::rebuildGuitars()
 	const int shownTab = juce::jmax(0, tabs.getCurrentTabIndex());
 	tabs.clearTabs();
 	// the ids of a tab followed by the sliders of a table of tunables
-	auto withTunables = [](std::vector<const char *> ids, const auto &tunables)
+	auto withTunables = [](std::vector<juce::String> ids, const auto &tunables)
 	{
 		for (const auto &t : tunables)
 			ids.push_back(t.id);
 		return ids;
 	};
-	auto addTab = [&](const char *name, std::vector<const char *> ids, bool ownGuitar = true,
+	auto addTab = [&](const char *name, std::vector<juce::String> ids, bool ownGuitar = true,
 					  std::function<void(ParamPanel &)> setup = nullptr)
 	{
 		std::vector<juce::String> full;
-		for (auto *id : ids)
-			full.push_back(ownGuitar ? processor.paramId(id) : juce::String(id));
+		for (const auto &id : ids)
+			full.push_back(ownGuitar ? processor.paramId(id) : id);
 		auto *panel = new ParamPanel(processor.params, full);
 		if (setup)
 			setup(*panel);
@@ -352,26 +352,27 @@ void GRMGuitarEditor::rebuildGuitars()
 			   panel.showOnlyForSensor(processor.paramId("pickup_middle_type"), {3});
 			   panel.showOnlyForSensor(processor.paramId("pickup_neck_type"), {3});
 		   });
-	addTab("Amp & Feedback",
-		   {"amp_on", "amp_channel_mix",
-			"amp_clean_model", "amp_clean_gain", "amp_clean_master", "amp_clean_bass", "amp_clean_middle",
-			"amp_clean_treble", "amp_clean_presence", "amp_clean_tight", "amp_clean_ts_boost", "amp_clean_stages",
-			"amp_lead_model", "amp_lead_gain", "amp_lead_master", "amp_lead_bass", "amp_lead_middle",
-			"amp_lead_treble", "amp_lead_presence", "amp_lead_tight", "amp_lead_ts_boost", "amp_lead_stages",
-			"feedback_amount", "feedback_distance", "feedback_target", "amp_room_mix"},
-		   true,
-		   [this](ParamPanel &panel)
+	// the amplifier: the rig's own knobs, each channel (voicing and knobs), the pedal, the cabinet; then the larsen.
+	// All of it for a magnetic pickup only.
+	auto amp = withTunables({"amp_on"}, AMP_TUNABLES);
+	for (const auto &channel : AMP_CHANNELS)
+	{
+		amp.push_back(channel.voicing);
+		for (const auto &t : AMP_CHANNEL_TUNABLES)
+			amp.push_back(juce::String(amp_channel_id(channel, t.id)));
+	}
+	amp.push_back("amp_od_on");
+	amp = withTunables(amp, OVERDRIVE_TUNABLES);
+	amp.push_back("amp_cab");
+	amp = withTunables(amp, CABINET_TUNABLES);
+	for (const char *id : {"feedback_amount", "feedback_distance", "feedback_target"})
+		amp.push_back(id);
+	addTab("Amp & Feedback", amp, true,
+		   [this, amp](ParamPanel &panel)
 		   {
 			   panel.setSensorId(processor.paramId("sensor"));
-			   for (auto *id : {"amp_on", "amp_channel_mix",
-								"amp_clean_model", "amp_clean_gain", "amp_clean_master", "amp_clean_bass", "amp_clean_middle",
-								"amp_clean_treble", "amp_clean_presence", "amp_clean_tight", "amp_clean_ts_boost", "amp_clean_stages",
-								"amp_lead_model", "amp_lead_gain", "amp_lead_master", "amp_lead_bass", "amp_lead_middle",
-								"amp_lead_treble", "amp_lead_presence", "amp_lead_tight", "amp_lead_ts_boost", "amp_lead_stages",
-								"feedback_amount", "feedback_distance", "feedback_target", "amp_room_mix"})
-			   {
+			   for (const auto &id : amp)
 				   panel.showOnlyForSensor(processor.paramId(id), {1, 3});
-			   }
 		   });
 	addTab("Room", {"room_on", "room_size", "room_material", "room_distance"});
 	addTab("Player", withTunables({"human", "human_amount", "swing_cm", "finger_noises", "finger_force"}, HAND_TUNABLES));
