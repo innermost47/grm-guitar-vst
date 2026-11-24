@@ -2,13 +2,15 @@
 // Copyright (C) 2026 Anthony Charretier
 //
 // The whole plugin path without a host: networks -> model, guitar roll -> performance, the engine block by
-// block as a host would call it, then the body and the room. Writes a stereo WAV and prints the timings.
-// Usage: render_offline [out.wav] [song.txt]
+// block as a host would call it, then the body and the room (or a magnetic pickup into an amplifier). Writes a
+// stereo WAV and prints the timings.
+// Usage: render_offline [out.wav] [song.txt] [acoustic | clean | crunch | lead | metal]
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <fstream>
 #include <sstream>
+#include <string>
 #include <vector>
 
 #include "../core/engine.hpp"
@@ -32,6 +34,32 @@ static void write_wav(const char* path, const std::array<std::vector<double>, 2>
         }
 }
 
+// the settings of a rig to listen to: an acoustic guitar, or a magnetic pickup into the amplifier
+static grmg::models::Settings rig(const std::string& name) {
+    grmg::models::Settings s;
+    if (name.empty() || name == "acoustic") return s;
+    s.sensor = 1;
+    s.amp.on = true;
+    s.amp.gate_db = -60.0;
+    if (name == "clean") {
+        s.amp.mix = 0.0;
+        s.amp.cabinet.kind = 0;
+    } else if (name == "crunch") {
+        s.amp.lead.voicing = 1;
+        s.amp.lead.gain = 6.0;
+    } else if (name == "lead") {
+        s.amp.lead.voicing = 2;
+        s.amp.lead.gain = 7.0;
+    } else if (name == "metal") { // high gain, the pedal as a tight boost in front, the gate
+        s.amp.lead.gain = 6.5;
+        s.amp.drive.on = true;
+        s.amp.drive.drive = 0.1;
+        s.amp.drive.level = 0.9;
+        s.amp.gate_db = -50.0;
+    }
+    return s;
+}
+
 static double ms_since(std::chrono::steady_clock::time_point t0) {
     return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
 }
@@ -42,11 +70,12 @@ int main(int argc, char** argv) {
     const int sr = 48000, block = 256;
     auto t0 = std::chrono::steady_clock::now();
     auto model = std::make_shared<Model>();
-    model->solve(Settings{}, sr, nullptr, false);
+    const Settings settings = rig(argc > 3 ? argv[3] : "");
+    model->solve(settings, sr, nullptr, false);
     std::printf("model without palm and room: %.0f ms\n", ms_since(t0));
     t0 = std::chrono::steady_clock::now();
     auto full = std::make_shared<Model>();
-    full->solve(Settings{}, sr, model.get(), true);
+    full->solve(settings, sr, model.get(), true);
     std::printf("palm (120 networks) and room: %.0f ms\n", ms_since(t0));
 
     Song song = Song::demo();
@@ -72,7 +101,7 @@ int main(int argc, char** argv) {
     const double spb = 60.0 / song.tempo;
     const double seconds = song.length_beats() * spb + 3.0;
     const size_t total = (size_t) (seconds * sr);
-    std::vector<float> out(total, 0.0f);
+    std::vector<float> out(total, 0.0f), pickup(total, 0.0f);
     Transport tr;
     tr.playing = true;
     tr.loop = false;
@@ -82,7 +111,7 @@ int main(int argc, char** argv) {
         const int n = (int) std::min<size_t>(block, total - pos);
         tr.beat = (double) pos * tr.beats_per_sample;
         auto a = std::chrono::steady_clock::now();
-        engine.render(out.data() + pos, n, tr);
+        engine.render(out.data() + pos, n, tr, pickup.data() + pos);
         busy += std::chrono::duration<double>(std::chrono::steady_clock::now() - a).count();
     }
     std::printf("strings: %.1f s of sound in %.3f s (%.1f %% of one core)\n", seconds, busy, 100.0 * busy / seconds);
@@ -95,7 +124,7 @@ int main(int argc, char** argv) {
     }
     std::printf("peak force on the bridge: %.3f N%s\n", peak, finite ? "" : "  (NOT FINITE)");
     t0 = std::chrono::steady_clock::now();
-    const auto stereo = body_and_room(force, *full);
+    const auto stereo = sensor_output(force, std::vector<double>(pickup.begin(), pickup.end()), *full);
     std::printf("body and room (offline convolution): %.0f ms\n", ms_since(t0));
     write_wav(argc > 1 ? argv[1] : "render_offline.wav", stereo, sr);
     return finite ? 0 : 1;

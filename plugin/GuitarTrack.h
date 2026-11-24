@@ -113,7 +113,7 @@ public:
 	void renderTo(int at, const SongClock &clock);
 	// body (and the room if ownRoom) or pickup: the stereo `out`, before the mixer. The plugin shares one room
 	// among the guitars that have the same one (ownRoom false): it is the heaviest part of the sound.
-	void finish(int n, double sr, bool ownRoom);
+	void finish(int n, bool ownRoom);
 	// which room this guitar is in (-1: none): guitars with the same key can share one room
 	long roomKey() const;
 	// a copy of this guitar's room response for the shared room (null once taken, until the next networks)

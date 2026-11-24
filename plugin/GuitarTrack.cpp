@@ -552,7 +552,7 @@ juce::AudioBuffer<float> *GuitarTrack::roomShare()
 	return holder && holder->roomShare.getNumSamples() > 0 ? &holder->roomShare : nullptr;
 }
 
-void GuitarTrack::finish(int n, double sr, bool ownRoom)
+void GuitarTrack::finish(int n, bool ownRoom)
 {
 	// a value that is not a number would silence the convolutions for good: start the strings again instead
 	{

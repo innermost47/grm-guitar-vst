@@ -55,7 +55,13 @@ the literature on guitars (string losses, wood, pickups, hands): see [Sources](#
 - **Room.** Reverberation by band, critical distance, image sources, a tail per ear. Guitars in the same room
   going to the same output share one room (it costs as much as the strings).
 - **Sympathetic strings.** The strings nobody plays answer the others through the bridge.
-- **Amplifier & Distortion.** A physical 12AX7 tube preamp circuit solved by the GRM network, featuring dynamic bias shift (sag) for organic attack compression, an interactive tone stack, and a dedicated 4x12 cabinet simulation to dial in everything from transparent crunch to crushing modern high-gain metal.
+- **Amplifier.** A whole rig behind the magnetic pickups, its circuits solved by GRM networks: an overdrive pedal
+  (op-amp gain above its corner, soft diode clipping), clean and lead channels to blend, each a voicing (American
+  Clean, British Crunch, British Lead, Modern High Gain) of cascaded 12AX7 stages that share their supply (operating
+  points, curves on their load lines, grid conduction and blocking, cathode and coupling corners, thermal noise),
+  the exact tone stack of its circuit, a push-pull power stage (sag, negative feedback with presence and resonance),
+  a cabinet from its speaker's Thiele-Small parameters and a close microphone, and a noise gate keyed by the guitar.
+  Four times oversampled.
 - **Acoustic Feedback (Larsen).** Real-time closed-loop acoustic coupling between the virtual speaker and the strings. Sound travels through virtual air ($d/c$), exciting the string modes to create natural, self-sustaining singing feedback that responds dynamically to distance, palm mutes, and selectable harmonic targets.
 
 ## The player
@@ -143,19 +149,22 @@ Up to 8 guitars in one plugin, each with its own settings, patterns, player and 
 
 ## Tests
 
-`ctest` runs the first four:
+`ctest` runs the first five:
 - `test_core`: 210 checks that the C++ GRM gives the same numbers as the Python one (values to 1e-9).
 - `test_physics`: 153 checks of the networks (body, bridge, room, palm, finger, action, player, strum, string
   losses, loaded top) and of one string's sound against the proof of concept.
 - `test_play`: 74 checks of the playing (hands, sweep, pinch, muscle, picking, palm, loop flags, ringing, endings,
   hand stops, chords on every tuning, scales, fills, dead notes, endings across a pattern change, legato on one
   string, the string's two planes, the hard attack: frets, pick push and scrape, pitch glide).
+- `test_amp`: 38 checks of the amplifier (operating points, tone stacks against their H(s), cabinet, clean and high
+  gain, compression, aliasing, hiss and gate, presence, the overdrive's tight lows).
 - `test_icons`: every icon is embedded and drawn, every icon button of the interface has its tooltip and its
   design-system size.
 - `plugin_host_test`: the plugin called as a host would (MIDI, patterns, sensors, several guitars, own outputs,
   sessions of 0.2.0, state).
 - `plugin_cpu_test [guitars]`: the share of each audio block the plugin takes with several guitars.
-- `render_offline [out.wav] [song.txt]`: the whole path without a host.
+- `render_offline [out.wav] [song.txt] [acoustic | clean | crunch | lead | metal]`: the whole path without a host,
+  acoustic or through the amplifier.
 - `editor_snapshot out.png`: the editor drawn to a picture.
 
 Measured on the build machine (Linux, 48 kHz, 256-sample blocks): one guitar about 5 % of a block on average,

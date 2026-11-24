@@ -640,7 +640,7 @@ void GRMGuitarProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
 	for (int g = 0; g < count; ++g)
 	{
 		tracks[(size_t)g]->renderTo(n, clock);
-		tracks[(size_t)g]->finish(n, sr, roomOf[(size_t)g] == -2);
+		tracks[(size_t)g]->finish(n, roomOf[(size_t)g] == -2);
 	}
 	songBeat.store(clock.playing ? (clock.host ? clock.beat : clock.start + clock.beat) : -1.0);
 	if (!clock.host && clock.playing)
