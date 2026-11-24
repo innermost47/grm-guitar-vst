@@ -7,3 +7,5 @@ CMakeUserPresets.json
 *.wav
 __pycache__/
 CLAUDE.md
+KANBAN.md
+TO-DO.md
