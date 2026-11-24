@@ -2,7 +2,6 @@
 // Copyright (C) 2026 Anthony Charretier
 #pragma once
 #include <cmath>
-#include <JuceHeader.h>
 #include "../models/core.hpp"
 
 namespace grmg
@@ -46,7 +45,6 @@ namespace grmg
     constexpr double RELEASE_DEAD = 400.0;
     constexpr double RELEASE_FRETTED = 32.0;
     constexpr double RELEASE_HAND = 45.0;
-    constexpr double RELEASE_LIFT = 45.0;
     constexpr double RELEASE_OPEN = 14.0;
     constexpr double RELEASE_SPREAD = 0.006;
     constexpr double RHO_BRIDGE = 850.0;
@@ -70,6 +68,20 @@ namespace grmg
     constexpr int NUM_FRETS_UI = 20;
     constexpr int NUM_STRINGS = 6;
     constexpr int SYMPATHY_MODES = 40;
+
+    // ---- the hard attack (Voicing): frets, pick contact, tension
+    constexpr double FRET_RELAX_S = 0.0002;   // a string pressed onto a fret leaves it in about this (Zollner: 0.2 ms)
+    constexpr double FRET_CLICK_S = 0.0003;   // the metal knock of a string on a fret dies in this
+    constexpr double PUSH_GAIN_REF = 0.5;     // the release height (over Y_REF) the pick push time is given at
+    constexpr double PUSH_MIN_S = 0.0002, PUSH_MAX_S = 0.02;
+    constexpr double SLIP_RATE = 3000.0;      // slips per second while the string is pushed (several per millisecond)
+    constexpr double SLIP_MAX_DEPTH = 0.15;   // the deepest slip, as a share of the displacement
+    constexpr double SLIP_RECOVER_S = 0.0002; // the pick takes the string back in this
+    constexpr double SCRAPE_DEPTH = 0.1;      // the scrape noise at full slider, as a share of the displacement
+    constexpr double SCRAPE_CUTOFF_HZ = 6000.0;
+    constexpr double TENSION_SMOOTH_S = 0.005; // the pitch follows the tension averaged over this
+    constexpr int TENSION_UPDATE = 32;        // samples between two retunings of the modes
+    constexpr double TENSION_PULL_HP_HZ = 20.0;
 
     constexpr double ROOM_BANDS[6] = {125.0, 250.0, 500.0, 1000.0, 2000.0, 4000.0};
     constexpr double C_ROOM = 343.0;
@@ -122,6 +134,12 @@ namespace grmg
 
     constexpr double WIND_FILL = 0.8, MU_FRICTION = 0.3, LIFT_DX = 0.02;
     constexpr double H_NUT = 0.0005, H_12 = 0.0022, TAU_LIFT = 0.003, TAU_LAND = 0.001, LAND_SHARE = 0.4;
+    // a line of single notes: the finger moves on the ringing string at the last moment before the pick (share of the
+    // time since the last stroke, within [MIN, MAX] s). A chord whose shape changes, or a jump beyond HAND_SPAN_FRETS:
+    // the whole hand lifts, touches the strings on its way (SHIFT_TOUCH_DELAY after leaving) and lands
+    constexpr int HAND_SPAN_FRETS = 4;
+    constexpr double FINGER_LEAD_SHARE = 0.03, FINGER_LEAD_MIN = 0.004, FINGER_LEAD_MAX = 0.012, FINGER_LEAD_JITTER = 0.002;
+    constexpr double SHIFT_TOUCH_DELAY = 0.002;
     constexpr double LONG_COUPLING = 0.3, LONG_TAU = 0.04, V_REF = 0.3, PAD_EDGE = 0.001, FRET_CROWN = 0.002, FRET_BUMP = 0.3;
     constexpr double SENSOR_SCALE[3] = {1.0, PICKUP_LEVEL, PIEZO_LEVEL};
 
@@ -246,6 +264,42 @@ namespace grmg
         "human", "human_amount", "swing_cm", "finger_noises", "finger_force",
         "mix_gain", "mix_level", "mix_pan", "mix_mute", "mix_solo", "mix_out"};
 
+    // the sliders of the hand (Player tab): they change how the roll is played, not the networks of the sound
+    inline constexpr models::Tunable<models::Settings> HAND_TUNABLES[] = {
+        {"hand_mute", "Hand mute (1/s)", 20.0f, 600.0f, 150.0f, &models::Settings::hand_mute},
+    };
+
+    // the sliders of the strings' two planes of vibration (Attack tab): live, nothing to solve or compile again
+    inline constexpr models::Tunable<models::Voicing> VOICE_TUNABLES[] = {
+        {"attack_angle_down", "Downstroke angle (deg)", 0.0f, 90.0f, 0.0f, &models::Voicing::angle_down},
+        {"attack_angle_up", "Upstroke angle (deg)", 0.0f, 90.0f, 0.0f, &models::Voicing::angle_up},
+        {"plane_coupling", "Along-top bridge coupling", 0.0f, 1.0f, 0.0f, &models::Voicing::h_coupling},
+        {"plane_radiation", "Along-top radiation", 0.0f, 1.0f, 0.0f, &models::Voicing::h_radiation},
+        {"plane_pickup", "Along-top pickup", 0.0f, 1.0f, 0.0f, &models::Voicing::h_pickup},
+        {"plane_split", "Planes split (cents)", 0.0f, 20.0f, 3.0f, &models::Voicing::split_cents},
+        {"fret_action", "Action at 12th fret (mm)", 0.0f, 4.0f, 0.0f, &models::Voicing::action_mm},
+        {"fret_bounce", "Fret bounce", 0.0f, 1.0f, 0.0f, &models::Voicing::fret_bounce},
+        {"fret_click", "Fret click", 0.0f, 1.0f, 0.2f, &models::Voicing::fret_click},
+        {"pick_push", "Pick push (ms)", 0.0f, 10.0f, 2.0f, &models::Voicing::push_ms},
+        {"pick_slip", "Pick slip-stick", 0.0f, 1.0f, 0.0f, &models::Voicing::slip_stick},
+        {"pick_scrape", "Pick scrape", 0.0f, 1.0f, 0.0f, &models::Voicing::scrape},
+        {"wound_scrape", "Wound string scrape (x)", 1.0f, 10.0f, 3.0f, &models::Voicing::wound_scrape},
+        {"tension_glide", "Pitch glide", 0.0f, 4.0f, 1.0f, &models::Voicing::glide},
+        {"tension_pull", "Tension pull on bridge", 0.0f, 2.0f, 0.5f, &models::Voicing::longitudinal},
+    };
+
+    // every parameter a guitar has (its slot is copied, reset or moved as a whole)
+    template <class Visit>
+    void for_each_guitar_param(Visit &&visit)
+    {
+        for (const char *id : GUITAR_PARAMS)
+            visit(id);
+        for (const auto &t : HAND_TUNABLES)
+            visit(t.id);
+        for (const auto &t : VOICE_TUNABLES)
+            visit(t.id);
+    }
+
     inline float dbToGain(float db) { return std::pow(10.0f, db / 20.0f); }
 
     inline double positive_mod(double x, double m)
@@ -253,69 +307,4 @@ namespace grmg
         const double r = std::fmod(x, m);
         return r < 0 ? r + m : r;
     }
-
-    inline juce::StringArray materialNames()
-    {
-        juce::StringArray a;
-        for (const auto &m : MATERIALS)
-            a.add(m.name);
-        return a;
-    }
-
-    inline juce::StringArray pickupNames()
-    {
-        juce::StringArray a;
-        for (const auto &t : PICKUP_TYPES)
-            a.add(t.name);
-        return a;
-    }
-
-    inline juce::StringArray roomNames()
-    {
-        juce::StringArray a;
-        for (const auto &r : ROOMS)
-            a.add(r.name);
-        return a;
-    }
-
-    inline juce::StringArray tuningNames()
-    {
-        juce::StringArray a;
-        for (const auto &t : TUNINGS)
-            a.add(t.name);
-        return a;
-    }
-
-    inline juce::StringArray woodNames()
-    {
-        juce::StringArray a;
-        for (const auto &w : WOODS)
-            a.add(w.name);
-        return a;
-    }
-
-    class CheckedWavStream final : public juce::OutputStream
-    {
-    public:
-        CheckedWavStream(juce::FileOutputStream &stream, bool &failed) : file(stream), writeFailed(failed) {}
-
-        juce::int64 getPosition() override { return file.getPosition(); }
-        bool setPosition(juce::int64 position) override { return check(file.setPosition(position)); }
-        bool write(const void *data, size_t size) override { return check(file.write(data, size)); }
-        void flush() override
-        {
-            file.flush();
-            check(file.getStatus().wasOk());
-        }
-
-    private:
-        bool check(bool ok)
-        {
-            writeFailed |= !ok;
-            return ok;
-        }
-
-        juce::FileOutputStream &file;
-        bool &writeFailed;
-    };
 }

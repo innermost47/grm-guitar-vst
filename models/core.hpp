@@ -189,6 +189,8 @@ namespace grmg::models
     {
         std::vector<double> note_end;
         std::vector<std::array<double, 6>> strum_end;
+        // the string of a strum is left when the hand changes shape for a chord that does not play it
+        std::vector<std::array<bool, 6>> strum_lifted;
     };
 
     enum class Kind
@@ -220,6 +222,49 @@ namespace grmg::models
         double pluck = 0.22;
         Kind kind = Kind::strike;
         const Palm *palm = nullptr;
+        bool up = false;  // an upstroke (the pick comes back from the treble side)
+        bool pick = true; // struck with a pick (it slips and scrapes on the string), not with a finger
+    };
+
+    // How a string answers the attack. Set live from the sliders of the Attack tab.
+    //   - its two planes: across the top (it pushes the bridge, which moves easily that way: the energy leaves fast
+    //     into the body, the loud start of the note) and along it (the bridge hardly moves: the note rings on). The
+    //     attack's angle shares the pluck between them;
+    //   - the frets under it: struck hard, the string hits the last fret and bounces off it (Zollner 1.5.3: past
+    //     about 2 N the low partials hardly grow while the highs do, and metal hits metal);
+    //   - the pick before it lets go: it pushes the string aside for a few milliseconds (the bridge feels it), the
+    //     string sticks and slips on it and scrapes its edge (more on a wound string);
+    //   - its tension, which a large vibration raises: the note starts sharp and settles (and pulls on the bridge).
+    struct Voicing
+    {
+        double angle_down = 40.0;  // degrees from the top's plane of a downstroke (90: straight into the top)
+        double angle_up = 15.0;    // the same for an upstroke
+        double h_coupling = 0.15;  // the bridge's admittance along the top, over its admittance across it
+        double h_radiation = 0.3;  // the share of the along-the-top force that reaches the body and the room
+        double h_pickup = 0.5;     // how much a magnetic pickup hears of the motion along the top
+        double split_cents = 0.0;  // an extra distance between the two planes (beats everywhere: a chorus, by choice)
+
+        double action_mm = 1.8;    // the string's height over the 12th fret (0: no fret under it)
+        double fret_bounce = 0.6;  // the share of its speed the string keeps when it bounces off a fret
+        double fret_click = 0.15;  // the metal knock of the string on the fret, heard at the bridge
+        double push_ms = 2.0;      // how long the pick pushes the string before it lets go, at the usual force
+        double slip_stick = 0.4;   // how deep the string slips on the pick while it is pushed
+        double scrape = 0.4;       // the noise of the string skipping along the pick's edge
+        double wound_scrape = 3.0; // the same on a wound string, times this
+        double glide = 1.0;        // the pitch glide of a large vibration (1: the string's own tension change)
+        double longitudinal = 0.3; // the pull of that tension change on the bridge, heard through the body
+
+        // one plane only, across the top, nothing but the release: the string as the networks' reference model has it
+        static Voicing single_plane()
+        {
+            Voicing v;
+            v.angle_down = v.angle_up = 90.0;
+            v.action_mm = 0.0;
+            v.push_ms = 0.0;
+            v.slip_stick = v.scrape = 0.0;
+            v.glide = v.longitudinal = 0.0;
+            return v;
+        }
     };
 
     struct Event
@@ -246,6 +291,8 @@ namespace grmg::models
         Stroke stroke;
         bool palm_on;
         int chord_order;
+        bool hand_lifts = false; // it ends when the hand leaves for a new chord shape: it stops ahead of that stroke
+        bool up = false;         // struck by an upstroke
     };
 
     struct Body
@@ -278,6 +325,13 @@ namespace grmg::models
         double coupling(double freq, double c, double Leff, double Zs) const
         {
             return (c / Leff) * Zs * std::abs(admittance(freq));
+        }
+
+        // the shift (rad/s) of a string mode's frequency by the bridge it pushes (the reactive part of the coupling
+        // whose resistive part is loss): a bridge that moves like a mass raises it, like a spring lowers it
+        double detune(double freq, double c, double Leff, double Zs) const
+        {
+            return -(c / Leff) * Zs * admittance(freq).imag();
         }
     };
 
@@ -573,6 +627,7 @@ namespace grmg::models
         double swing_cm = 10.0;
         bool finger_noises = true;
         double finger_force = 0.6;
+        double hand_mute = 150.0; // 1/s: how fast the hand leaving a chord shape (or travelling) stops the strings
 
         double feedback_amount = 0.0;
         double feedback_distance = 1.0;
@@ -585,6 +640,16 @@ namespace grmg::models
 
         bool is_magnetic_pickup() const { return sensor == 1 || sensor == 3; }
         bool amp_active() const { return amp_on && is_magnetic_pickup(); }
+    };
+
+    // A setting exposed as a slider to tune the sound by ear: one line of a table makes its parameter, reads it, compares
+    // it and copies it. Its default is its Owner's own (Settings: the roll's compiler; Voicing: the strings, live).
+    template <class Owner>
+    struct Tunable
+    {
+        const char *id, *name;
+        float lo, hi, centre; // centre: the value at the middle of the slider (0: linear)
+        double Owner::*field;
     };
 
     struct Strike

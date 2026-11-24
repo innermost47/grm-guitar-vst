@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Anthony Charretier
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "audio/CheckedWavStream.h"
 
 using namespace grmg;
 
@@ -61,7 +62,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout GRMGuitarProcessor::createLa
 		prefix = g == 0 ? String() : "G" + String(g + 1) + " ";
 		idPrefix = g == 0 ? String() : "g" + String(g + 1) + "_";
 		// strings
-		choice("tuning", "Tuning", tuningNames(), 0);
+		choice("tuning", "Tuning", ui::namesOf(TUNINGS), 0);
 		real("string_age", "String age (0 new, 1 played)", 0.0f, 1.0f, 0.0f);
 		real("brightness", "Brightness", 0.0f, 1.0f, 0.6f);
 		real("core", "Wound core", 0.2f, 1.0f, 0.45f);
@@ -82,22 +83,22 @@ juce::AudioProcessorValueTreeState::ParameterLayout GRMGuitarProcessor::createLa
 		real("braces_g", "Braces (g)", 10.0f, 200.0f, 64.0f, 64.0f, 1.0f);
 		real("body_q", "Body resonance (Q)", 10.0f, 150.0f, 50.0f, 50.0f, 1.0f);
 		real("body_amount", "Body", 0.0f, 1.0f, 0.85f);
-		choice("wood", "Wood", woodNames(), 0);
+		choice("wood", "Wood", ui::namesOf(WOODS), 0);
 		real("density_pct", "Wood density (% of the species)", -30.0f, 30.0f, 0.0f, 0.0f, 1.0f);
 		real("hollow", "Body: solid (0) to hollow (1)", 0.0f, 1.0f, 1.0f);
 		// sensor
 		choice("sensor", "Sensor", StringArray{"Microphone (body and room)", "Magnetic pickup", "Piezo under the saddle", "Three pickups (HSS)"}, 0);
 		real("pickup_mm", "Pickup from the saddle (mm)", 20.0f, 200.0f, 100.0f, 0.0f, 1.0f);
-		choice("pickup_type", "Pickup", pickupNames(), 0);
+		choice("pickup_type", "Pickup", ui::namesOf(PICKUP_TYPES), 0);
 		real("cable_pf", "Cable (pF)", 100.0f, 1500.0f, 500.0f, 500.0f, 10.0f);
 		// sensor 3: three pickups (HSS), each with its own switch, the bridge may be split
 		flag("pickup_bridge_on", "Bridge pickup", true);
 		flag("pickup_middle_on", "Middle pickup", false);
 		flag("pickup_neck_on", "Neck pickup", false);
 		flag("pickup_bridge_split", "Bridge split to single", false);
-		choice("pickup_bridge_type", "Bridge pickup type", pickupNames(), 1); // humbucker-like by default
-		choice("pickup_middle_type", "Middle pickup type", pickupNames(), 0);
-		choice("pickup_neck_type", "Neck pickup type", pickupNames(), 0);
+		choice("pickup_bridge_type", "Bridge pickup type", ui::namesOf(PICKUP_TYPES), 1); // humbucker-like by default
+		choice("pickup_middle_type", "Middle pickup type", ui::namesOf(PICKUP_TYPES), 0);
+		choice("pickup_neck_type", "Neck pickup type", ui::namesOf(PICKUP_TYPES), 0);
 
 		// amp & distortion (DUAL CHANNEL)
 		flag("amp_on", "Amp & Distortion", false);
@@ -135,8 +136,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout GRMGuitarProcessor::createLa
 		flag("sympathy", "Sympathetic strings", true);
 		// room
 		flag("room_on", "Room", true);
-		choice("room_size", "Room size", roomNames(), 1);
-		choice("room_material", "Walls", materialNames(), 2);
+		choice("room_size", "Room size", ui::namesOf(ROOMS), 1);
+		choice("room_material", "Walls", ui::namesOf(MATERIALS), 2);
 		real("room_distance", "Listener (m)", 0.3f, 6.0f, 1.0f, 1.5f);
 		// player
 		flag("human", "Human feel", true);
@@ -144,6 +145,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout GRMGuitarProcessor::createLa
 		real("swing_cm", "Arm swing (cm)", 4.0f, 20.0f, 10.0f);
 		flag("finger_noises", "Finger noises", true);
 		real("finger_force", "Finger force (N)", 0.1f, 2.0f, 0.6f, 0.6f);
+		for (const auto &t : HAND_TUNABLES)
+			real(t.id, t.name, t.lo, t.hi, (float)(models::Settings{}.*t.field), t.centre);
+		for (const auto &t : VOICE_TUNABLES)
+			real(t.id, t.name, t.lo, t.hi, (float)(models::Voicing{}.*t.field), t.centre);
 		// mixer strip
 		real("mix_gain", "Gain (dB)", -24.0f, 24.0f, 0.0f, 0.0f, 0.1f);
 		real("mix_level", "Level", 0.0f, 2.0f, 1.0f, 1.0f);
@@ -184,9 +189,10 @@ void GRMGuitarProcessor::addGuitar()
 	if (count >= MAX_GUITARS)
 		return;
 	// a fresh slot: its parameters at their defaults, one empty pattern
-	for (auto *id : GUITAR_PARAMS)
+	for_each_guitar_param([&](const char *id)
+						  {
 		if (auto *p = params.getParameter(GuitarTrack::paramId(count, id)))
-			p->setValueNotifyingHost(p->getDefaultValue());
+			p->setValueNotifyingHost(p->getDefaultValue()); });
 	grmg::Song empty;
 	empty.bars = 4;
 	empty.key = getPersistentSongKey();
@@ -206,13 +212,12 @@ void GRMGuitarProcessor::removeGuitar(int g)
 	// the guitars after it move down one slot: their settings and patterns with them
 	for (int k = g; k + 1 < count; ++k)
 	{
-		for (auto *id : GUITAR_PARAMS)
-		{
+		for_each_guitar_param([&](const char *id)
+							  {
 			auto *to = params.getParameter(GuitarTrack::paramId(k, id));
 			auto *from = params.getParameter(GuitarTrack::paramId(k + 1, id));
 			if (to && from)
-				to->setValueNotifyingHost(from->getValue());
-		}
+				to->setValueNotifyingHost(from->getValue()); });
 		tracks[(size_t)k]->setPatterns(tracks[(size_t)k + 1]->getPatterns(), tracks[(size_t)k + 1]->getEditingPattern());
 	}
 	guitarCount.store(count - 1);

@@ -70,6 +70,16 @@ namespace ui
         return juce::Font(juce::FontOptions(size, bold ? juce::Font::bold : juce::Font::plain));
     }
 
+    // the names of a table of the engine (tunings, woods, rooms...), as the choices of a parameter
+    template <class Table>
+    juce::StringArray namesOf(const Table &table)
+    {
+        juce::StringArray names;
+        for (const auto &entry : table)
+            names.add(entry.name);
+        return names;
+    }
+
     inline juce::Colour soften(juce::Colour colour)
     {
         return colour.interpolatedWith(juce::Colours::black, 0.25f);

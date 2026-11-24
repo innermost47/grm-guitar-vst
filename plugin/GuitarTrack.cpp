@@ -12,6 +12,8 @@ GuitarTrack::GuitarTrack(juce::AudioProcessorValueTreeState &s, int i)
 	  bodyAmount(s.getRawParameterValue(paramId("body_amount"))),
 	  roomOn(s.getRawParameterValue(paramId("room_on")))
 {
+	for (size_t k = 0; k < voiceParams.size(); ++k)
+		voiceParams[k] = s.getRawParameterValue(paramId(VOICE_TUNABLES[k].id));
 	if (i > 0)
 	{
 		grmg::Song empty;
@@ -122,6 +124,8 @@ models::Settings GuitarTrack::readSettings() const
 	s.swing_cm = v("swing_cm");
 	s.finger_noises = b("finger_noises");
 	s.finger_force = v("finger_force");
+	for (const auto &t : HAND_TUNABLES)
+		s.*t.field = v(t.id);
 	return s;
 }
 
@@ -264,7 +268,9 @@ void GuitarTrack::solveStep(double sr, unsigned seed, double tempo, bool loop, s
 	};
 	auto samePlayer = [](const models::Settings &a, const models::Settings &b)
 	{
-		return a.human == b.human && std::abs(a.human_amount - b.human_amount) < 1e-9 && std::abs(a.swing_cm - b.swing_cm) < 1e-9 && a.finger_noises == b.finger_noises && std::abs(a.finger_force - b.finger_force) < 1e-9;
+		const bool tunables = std::all_of(std::begin(HAND_TUNABLES), std::end(HAND_TUNABLES), [&](const auto &t)
+										  { return std::abs(a.*t.field - b.*t.field) < 1e-9; });
+		return tunables && a.human == b.human && std::abs(a.human_amount - b.human_amount) < 1e-9 && std::abs(a.swing_cm - b.swing_cm) < 1e-9 && a.finger_noises == b.finger_noises && std::abs(a.finger_force - b.finger_force) < 1e-9;
 	};
 	collect();
 	const auto s = readSettings();
@@ -338,6 +344,8 @@ void GuitarTrack::solveStep(double sr, unsigned seed, double tempo, bool loop, s
 			ps.swing_cm = s.swing_cm;
 			ps.finger_noises = s.finger_noises;
 			ps.finger_force = s.finger_force;
+			for (const auto &t : HAND_TUNABLES)
+				ps.*t.field = s.*t.field;
 			auto m = std::make_shared<grmg::Model>(*model);
 			m->s = ps;
 			models::CompileOptions o;
@@ -430,6 +438,8 @@ void GuitarTrack::begin(bool patternModeNow, bool internalPlaying)
 		engine.set_performance(perfSet ? perfSet->at(heldPattern) : nullptr);
 	}
 	engine.live_palm = param("live_palm") > 0.5f;
+	for (size_t k = 0; k < voiceParams.size(); ++k)
+		engine.voicing.*VOICE_TUNABLES[k].field = voiceParams[k]->load();
 	engine.midi_strings = state.getRawParameterValue("midi_strings")->load() > 0.5f ? grmg::Engine::MidiStrings::channel_per_string
 																					: grmg::Engine::MidiStrings::automatic;
 	// strings struck on the neck

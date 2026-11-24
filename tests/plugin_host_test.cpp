@@ -132,7 +132,7 @@ int main(int argc, char** argv) {
     g->addPattern(false);                              // pattern 2: one low G, four beats
     grmg::Song two;
     two.bars = 1;
-    grmg::RollNote note;
+    grmg::models::RollNote note;
     note.string = 0;
     note.fret = 3;
     note.length = 4.0;
@@ -230,7 +230,7 @@ int main(int argc, char** argv) {
         auto old = g->params.copyState().createCopy();
         grmg::Song s1;
         s1.bars = 2;
-        grmg::RollNote a;
+        grmg::models::RollNote a;
         a.string = 2;
         a.fret = 2;
         s1.notes.push_back(a);
@@ -258,7 +258,7 @@ int main(int argc, char** argv) {
     grmg::Song lead;
     lead.bars = 1;
     for (int k = 0; k < 4; ++k) {
-        grmg::RollNote n;
+        grmg::models::RollNote n;
         n.string = 4;
         n.fret = 3 + k;
         n.start = k;

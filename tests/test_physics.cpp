@@ -30,6 +30,7 @@ static void expect(const char* test, const std::string& node, double value, doub
 
 int main() {
     using namespace grmg;
+    using namespace grmg::models;
     // body and bridge
     const auto body = body_network_result();
     for (const char* n : {"f_lo", "f_hi", "f3", "f7", "Mm", "Zp", "mb", "fT", "frad", "fb", "fH"}) expect("body", n, body[n]);

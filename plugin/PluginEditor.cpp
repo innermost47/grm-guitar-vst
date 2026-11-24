@@ -311,6 +311,13 @@ void GRMGuitarEditor::rebuildGuitars()
 
 	const int shownTab = juce::jmax(0, tabs.getCurrentTabIndex());
 	tabs.clearTabs();
+	// the ids of a tab followed by the sliders of a table of tunables
+	auto withTunables = [](std::vector<const char *> ids, const auto &tunables)
+	{
+		for (const auto &t : tunables)
+			ids.push_back(t.id);
+		return ids;
+	};
 	auto addTab = [&](const char *name, std::vector<const char *> ids, bool ownGuitar = true,
 					  std::function<void(ParamPanel &)> setup = nullptr)
 	{
@@ -323,7 +330,7 @@ void GRMGuitarEditor::rebuildGuitars()
 		tabs.addTab(name, PANEL, panel, true);
 	};
 	addTab("Strings", {"tuning", "string_age", "brightness", "core", "stiff"});
-	addTab("Attack & palm", {"attack", "pluck", "force", "pick", "palm_mm", "palm_intensity", "live_palm"});
+	addTab("Attack & palm", withTunables({"attack", "pluck", "force", "pick", "palm_mm", "palm_intensity", "live_palm"}, VOICE_TUNABLES));
 	addTab("Body", {"hollow", "wood", "density_pct", "body_size", "top_mm", "braces_g", "body_q", "coupling", "body_amount", "sympathy"});
 	addTab("Sensor",
 		   {"sensor", "pickup_mm", "pickup_type", "cable_pf",
@@ -367,7 +374,7 @@ void GRMGuitarEditor::rebuildGuitars()
 			   }
 		   });
 	addTab("Room", {"room_on", "room_size", "room_material", "room_distance"});
-	addTab("Player", {"human", "human_amount", "swing_cm", "finger_noises", "finger_force"});
+	addTab("Player", withTunables({"human", "human_amount", "swing_cm", "finger_noises", "finger_force"}, HAND_TUNABLES));
 	tabs.addTab("Mixer", PANEL, new MixerView(processor), true);
 	addTab("Playback", {"follow_host", "loop", "tempo", "midi_strings", "midi_route", "audition"}, false);
 	tabs.addTab("Networks", PANEL, new NetworksView(processor), true);

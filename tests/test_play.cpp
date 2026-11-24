@@ -12,6 +12,7 @@
 #include "../core/playability.hpp"
 
 using namespace grmg;
+using namespace grmg::models;
 static int checks = 0, failures = 0;
 static void ok(const char* name, bool cond) {
     ++checks;
@@ -465,8 +466,11 @@ int main() {
         for (const auto& e : perf->events) damped |= e.type == EventType::damp && e.string == 0 && std::abs(e.beat - 2.5) < 1e-6;
         ok("hand stop: the strings are damped there", damped);
     }
-    // ---- another pattern takes over: the old one's notes still end as they were asked
+    // ---- another pattern takes over: the old one's notes still end as they were asked (the string alone: the open
+    // strings answering it through the bridge ring on, and are not asked to stop)
     {
+        auto alone = std::make_shared<Model>(*model);
+        alone->s.sympathy = false;
         Song one, two;
         RollNote n;
         n.string = 2;
@@ -483,7 +487,7 @@ int main() {
         auto level = [&](bool carry) {
             Engine e;
             e.prepare(sr);
-            e.set_model(model.get());
+            e.set_model(alone.get());
             e.set_performance(p1.get());
             Transport tr;
             tr.playing = true;
@@ -502,6 +506,238 @@ int main() {
         };
         ok("pattern change: a note asked to stop still stops", level(true) < 0.2 * level(false));
     }
+    // ---- legato: two notes in a row on one string are joined. The string sounds until the next stroke, whether
+    // the fret changes or not: the hand changes shape at the last moment, it does not silence the string first.
+    {
+        const double beat_s = 0.5; // 120 bpm
+        const double change = beat_s;
+        auto render = [&](const Song& song, const std::shared_ptr<Model>& m) {
+            Compiler c;
+            CompileOptions o;
+            o.tempo = 120;
+            auto perf = c.compile(song, m, o);
+            Engine g;
+            g.prepare(sr);
+            g.set_model(m.get());
+            g.set_performance(perf.get());
+            Transport tr;
+            tr.playing = true;
+            tr.loop = false;
+            tr.beats_per_sample = 1.0 / (beat_s * sr);
+            std::vector<float> y(256 * 240);
+            for (size_t p = 0; p < y.size(); p += 256) {
+                tr.beat = p * tr.beats_per_sample;
+                g.render(y.data() + p, 256, tr);
+            }
+            return y;
+        };
+        struct Heard
+        {
+            double kept;  // the lowest share of the first note's level (alone) still heard before the 2nd stroke
+            double pitch; // after the 2nd stroke: how much more the sound repeats at the new note's period than at the old one's
+        };
+        auto play = [&](int from_fret, int to_fret, bool finger_noises, bool sympathy = true) {
+            auto m = std::make_shared<Model>(*model);
+            m->s.finger_noises = finger_noises;
+            m->s.sympathy = sympathy;
+            Song alone;
+            alone.bars = 1;
+            alone.notes.push_back({2, from_fret, 0.0, 1.0, 0.8, false});
+            Song both = alone;
+            both.notes.push_back({2, to_fret, 1.0, 1.0, 0.8, false});
+            const auto first = render(alone, m), y = render(both, m);
+            // 20 ms windows (two periods of the lowest note) ending before the stroke, which may come ~20 ms early
+            double kept = 1e30;
+            for (double t = change - 0.14; t + 0.02 <= change - 0.03; t += 0.005)
+                kept = std::min(kept, rms(y, sr, t, t + 0.02) / std::max(rms(first, sr, t, t + 0.02), 1e-30));
+            auto repeats = [&](int fret) { // normalised autocorrelation at the period of `fret`, 150 to 400 ms after
+                const size_t lag = (size_t) std::lround(sr / m->place[2][(size_t) fret].f1);
+                const size_t i0 = (size_t) ((change + 0.15) * sr), i1 = (size_t) ((change + 0.40) * sr);
+                double xy = 0, xx = 0, yy = 0;
+                for (size_t i = i0; i < i1 && i + lag < y.size(); ++i) {
+                    xy += (double) y[i] * y[i + lag];
+                    xx += (double) y[i] * y[i];
+                    yy += (double) y[i + lag] * y[i + lag];
+                }
+                return xy / std::sqrt(std::max(xx * yy, 1e-60));
+            };
+            const Heard h{kept, repeats(to_fret) - repeats(from_fret)};
+            std::printf("     legato %2d -> %2d%s: level kept %.3f, new pitch over old %+.3f\n", from_fret, to_fret,
+                        finger_noises ? "" : " (no finger noises)", h.kept, h.pitch);
+            return h;
+        };
+        auto joined = [&](const char* name, int from_fret, int to_fret, bool finger_noises) {
+            const Heard h = play(from_fret, to_fret, finger_noises);
+            ok(name, h.kept > 0.7 && h.pitch > 0.2);
+        };
+        joined("legato: up the neck (5 -> 7), the string rings until the stroke", 5, 7, true);
+        joined("legato: down the neck (7 -> 5), the string rings until the stroke", 7, 5, true);
+        joined("legato: open string to fret 3, the string rings until the stroke", 0, 3, true);
+        joined("legato: fret 3 to the open string, the string rings until the stroke", 3, 0, true);
+        joined("legato: without finger noises the string still rings until the stroke", 5, 7, false);
+        // a chord whose shape changes: the whole hand lifts and touches the strings, so that the next strum is heard
+        // string by string on quiet strings instead of a new chord already sounding under the left hand (heard
+        // without the finger noises, whose taps sound as the fingers land): G to a barred F, every string changes
+        {
+            auto m = std::make_shared<Model>(*model);
+            m->s.finger_noises = false;
+            Song alone;
+            alone.bars = 1;
+            RollStrum g_chord;
+            g_chord.start = 0.0;
+            g_chord.length = 2.0;
+            g_chord.frets = {{3, 2, 0, 0, 0, 3}};
+            alone.strums.push_back(g_chord);
+            Song both = alone;
+            RollStrum f_chord;
+            f_chord.start = 2.0;
+            f_chord.length = 2.0;
+            f_chord.frets = {{1, 3, 3, 2, 1, 1}};
+            both.strums.push_back(f_chord);
+            const auto first = render(alone, m), y = render(both, m);
+            const double strum = 2.0 * beat_s;
+            const double quiet = rms(y, sr, strum - 0.07, strum - 0.04) / std::max(rms(first, sr, strum - 0.07, strum - 0.04), 1e-30);
+            std::printf("     strum G -> F: level kept just before the strum %.3f\n", quiet);
+            ok("strum: a new chord shape lifts the hand, the strings are quiet before the pick", quiet < 0.3);
+        }
+        // the hand travelling along the neck touches the string: the old note stops before the new one (the string
+        // alone: without the finger noises, whose taps sound in its place, nor the other strings answering it)
+        ok("legato: a shift of the hand (2 -> 12) still stops the old note", play(2, 12, false, false).kept < 0.3);
+    }
+    // ---- the two planes of the string: across the top the energy leaves fast into the body (the loud start), along
+    // it the note rings on; the attack's angle shares the pluck between them
+    {
+        auto alone = std::make_shared<Model>(*model);
+        alone->s.sympathy = false;
+        Transport tr;
+        auto note = [&](const Voicing& v) {
+            Engine g;
+            g.prepare(sr);
+            g.set_model(alone.get());
+            g.voicing = v;
+            g.pluck_string(1, 5, 0.8);
+            std::vector<float> y(256 * 260);
+            for (size_t p = 0; p < y.size(); p += 256) g.render(y.data() + p, 256, tr);
+            return y;
+        };
+        auto db = [](double x) { return 20.0 * std::log10(std::max(x, 1e-30)); };
+        // each plane alone (no beats between them to blur the measure): the decay in dB/s over the first second
+        auto decay = [&](const std::vector<float>& y) {
+            return (db(rms(y, sr, 0.02, 0.07)) - db(rms(y, sr, 1.0, 1.05))) / 0.98;
+        };
+        Voicing across_only = Voicing::single_plane(), along_only;
+        along_only.angle_down = 0.0;
+        const double across = decay(note(across_only)), along_top = decay(note(along_only));
+        std::printf("     planes: decay %.1f dB/s across the top, %.1f dB/s along it\n", across, along_top);
+        ok("planes: across the top the energy leaves fast into the body, along it the note rings on", across > 1.3 * along_top);
+        Voicing into, along;
+        into.angle_down = 80.0;
+        along.angle_down = 5.0;
+        const auto a = note(into), b = note(along);
+        const double start_into = rms(a, sr, 0.0, 0.05), start_along = rms(b, sr, 0.0, 0.05);
+        std::printf("     planes: start into the top %.4f, along it %.4f\n", start_into, start_along);
+        ok("planes: a stroke into the top hits the body harder", start_into > 1.5 * start_along);
+        ok("planes: a stroke along the top rings longer, relative to its start",
+           rms(b, sr, 1.0, 1.2) / start_along > rms(a, sr, 1.0, 1.2) / start_into);
+    }
+    // ---- the hard attack: the string bounces off the last fret (past ~2 N the lows hardly grow, the highs do), the
+    // pick pushes and scrapes before it lets go, the tension of a wide vibration makes the note start sharp
+    {
+        auto alone = std::make_shared<Model>(*model);
+        alone->s.sympathy = false;
+        Transport tr;
+        auto note = [&](const Voicing& v, int string, double velocity, double seconds) {
+            Engine g;
+            g.prepare(sr);
+            g.set_model(alone.get());
+            g.voicing = v;
+            g.pluck_string(string, 0, velocity);
+            std::vector<float> y((size_t)(seconds * sr / 256 + 1) * 256);
+            for (size_t p = 0; p < y.size(); p += 256) g.render(y.data() + p, 256, tr);
+            return y;
+        };
+        auto db = [](double x) { return 20.0 * std::log10(std::max(x, 1e-30)); };
+        // the level below 400 Hz and above 3 kHz (one-pole filters), from a to b seconds
+        auto bands = [&](const std::vector<float>& y, double a, double b) {
+            const double cl = 1.0 - std::exp(-2 * 3.14159265358979 * 400.0 / sr);
+            const double ch = std::exp(-2 * 3.14159265358979 * 3000.0 / sr);
+            double lo = 0, hp = 0, last = 0, el = 0, eh = 0;
+            const size_t i0 = (size_t)(a * sr), i1 = std::min(y.size(), (size_t)(b * sr));
+            for (size_t i = 0; i < i1; ++i) {
+                lo += (y[i] - lo) * cl;
+                hp = ch * (hp + y[i] - last);
+                last = y[i];
+                if (i >= i0) { el += lo * lo; eh += hp * hp; }
+            }
+            return std::pair<double, double>{db(std::sqrt(el)), db(std::sqrt(eh))};
+        };
+        // the period near `f` from a to b seconds: the best normalised autocorrelation, refined by a parabola
+        auto frequency = [&](const std::vector<float>& y, double a, double b, double f) {
+            const size_t i0 = (size_t)(a * sr), i1 = (size_t)(b * sr);
+            auto corr = [&](int lag) {
+                double xy = 0, xx = 0, yy = 0;
+                for (size_t i = i0; i + lag < i1; ++i) { xy += y[i] * y[i + lag]; xx += y[i] * y[i]; yy += y[i + lag] * y[i + lag]; }
+                return xy / std::sqrt(std::max(xx * yy, 1e-30));
+            };
+            const int lo = (int)(sr / (f * 1.05)), hi = (int)(sr / (f * 0.97));
+            int best = lo;
+            for (int l = lo; l <= hi; ++l) if (corr(l) > corr(best)) best = l;
+            const double c0 = corr(best - 1), c1 = corr(best), c2 = corr(best + 1);
+            const double shift = 0.5 * (c0 - c2) / std::min(c0 - 2 * c1 + c2, -1e-12);
+            return sr / (best + shift);
+        };
+
+        Voicing frets;
+        frets.push_ms = 0.0;
+        frets.slip_stick = frets.scrape = 0.0;
+        frets.glide = frets.longitudinal = 0.0;
+        frets.angle_down = 45.0;
+        Voicing free = frets;
+        free.action_mm = 0.0;
+        auto growth = [&](const Voicing& v, double& lows, double& highs) {
+            const auto soft = bands(note(v, 0, 0.2, 0.3), 0.0, 0.3), hard = bands(note(v, 0, 2.4, 0.3), 0.0, 0.3);
+            lows = hard.first - soft.first;
+            highs = hard.second - soft.second;
+        };
+        double lows_free, highs_free, lows_frets, highs_frets;
+        growth(free, lows_free, highs_free);
+        growth(frets, lows_frets, highs_frets);
+        std::printf("     hard attack: soft -> hard, no frets lows +%.1f dB highs +%.1f dB; frets lows +%.1f dB highs +%.1f dB\n",
+                    lows_free, highs_free, lows_frets, highs_frets);
+        ok("hard attack: without frets the string is linear (a harder stroke only louder)", std::abs(highs_free - lows_free) < 1.0);
+        ok("hard attack: the frets compress the lows and open the highs", highs_frets - lows_frets > 6.0);
+        ok("hard attack: a soft stroke does not reach the frets",
+           std::abs(bands(note(frets, 0, 0.2, 0.3), 0.0, 0.3).second - bands(note(free, 0, 0.2, 0.3), 0.0, 0.3).second) < 0.5);
+
+        // the pitch glide: a hard stroke starts sharp and settles, a soft one does not move
+        Voicing glide = free;
+        glide.glide = 1.0;
+        auto settles = [&](const Voicing& v, double velocity) {
+            const auto y = note(v, 0, velocity, 1.2);
+            const double f1 = 82.4;
+            return 1200.0 * std::log2(frequency(y, 0.03, 0.13, f1) / frequency(y, 0.9, 1.1, f1));
+        };
+        const double hard_glide = settles(glide, 2.4), soft_glide = settles(glide, 0.2), no_glide = settles(free, 2.4);
+        std::printf("     hard attack: pitch glide %.2f cents (hard), %.2f (soft), %.2f (glide off)\n", hard_glide, soft_glide, no_glide);
+        ok("hard attack: a hard stroke starts sharp and settles", hard_glide > 2.0 && hard_glide > 4.0 * std::abs(no_glide) + 1.0);
+        ok("hard attack: a soft stroke hardly glides", soft_glide < 0.25 * hard_glide);
+
+        // the pick: it pushes before it lets go (the bridge feels it), the scrape is louder on a wound string
+        Voicing push = free;
+        push.push_ms = 2.0;
+        const auto pushed = note(push, 0, 0.8, 0.3), released = note(free, 0, 0.8, 0.3);
+        std::printf("     hard attack: first ms %.4f pushed, %.4f released at once\n", rms(pushed, sr, 0.0, 0.001), rms(released, sr, 0.0, 0.001));
+        ok("hard attack: the push is heard before the release", rms(pushed, sr, 0.0, 0.001) > 0.0);
+        Voicing scrape = push;
+        scrape.scrape = 1.0;
+        auto scrape_noise = [&](int string) {
+            return bands(note(scrape, string, 0.8, 0.01), 0.0, 0.001).second - bands(note(push, string, 0.8, 0.01), 0.0, 0.001).second;
+        };
+        const double wound = scrape_noise(1), plain = scrape_noise(4);
+        std::printf("     hard attack: scrape adds %.1f dB of highs on a wound string, %.1f dB on a plain one\n", wound, plain);
+        ok("hard attack: the pick scrapes, more on a wound string", wound > 3.0 && wound > plain + 3.0);
+    }
+
     std::printf("%d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;
 }

@@ -30,6 +30,7 @@ namespace grmg
             bool rings;
             int note, strum;
             double end;
+            bool lifted = false;
         };
         std::vector<Item> items;
         for (size_t k = 0; k < song.notes.size(); ++k)
@@ -63,6 +64,21 @@ namespace grmg
             if (loop)
                 starts.insert(std::lround((it.start + length) * 960.0));
         }
+        // the next strum (after `after`) whose shape differs from strum k's, and whether it plays `string`
+        auto next_shape = [&](int k, int string, double after)
+        {
+            std::pair<double, bool> next{FAR, false};
+            for (size_t j = 0; j < song.strums.size(); ++j)
+            {
+                const auto &o = song.strums[j];
+                if (o.start >= length || o.frets == song.strums[(size_t)k].frets)
+                    continue;
+                for (double shift : {0.0, loop ? length : FAR})
+                    if (shift < FAR && o.start + shift > after + 1e-9 && o.start + shift < next.first)
+                        next = {o.start + shift, o.frets[(size_t)string] >= 0};
+            }
+            return next;
+        };
         auto next_on = [&](int string, double after)
         {
             double next = FAR;
@@ -117,7 +133,16 @@ namespace grmg
                     }
                 }
             }
+            // a strummer changing chord shape lifts the hand: the strings the new chord does not play stop there
+            double lift_at = FAR;
+            if (it.strum >= 0)
+            {
+                const auto [at, plays] = next_shape(it.strum, it.string, it.start);
+                if (!plays && at < end - 1e-9)
+                    end = lift_at = at;
+            }
             it.end = std::max(end, it.nominal);
+            it.lifted = lift_at < FAR && it.end <= lift_at + 1e-9;
         }
         // a hand laid flat on the strings stops whatever rings at that moment
         for (auto &it : items)
@@ -128,17 +153,24 @@ namespace grmg
                         continue;
                     const double at = t + shift;
                     if (at > it.start + 1e-9 && at < it.end - 1e-9)
+                    {
                         it.end = at;
+                        it.lifted = false;
+                    }
                 }
         models::Ringing r;
         r.note_end.assign(song.notes.size(), 0.0);
         r.strum_end.assign(song.strums.size(), {-1, -1, -1, -1, -1, -1});
+        r.strum_lifted.assign(song.strums.size(), {false, false, false, false, false, false});
         for (const auto &it : items)
         {
             if (it.note >= 0)
                 r.note_end[(size_t)it.note] = it.end;
             else
+            {
                 r.strum_end[(size_t)it.strum][(size_t)it.string] = it.end;
+                r.strum_lifted[(size_t)it.strum][(size_t)it.string] = it.lifted;
+            }
         }
         for (size_t k = 0; k < song.notes.size(); ++k)
             if (r.note_end[k] <= 0)

@@ -38,6 +38,7 @@ static double ms_since(std::chrono::steady_clock::time_point t0) {
 
 int main(int argc, char** argv) {
     using namespace grmg;
+    using namespace grmg::models;
     const int sr = 48000, block = 256;
     auto t0 = std::chrono::steady_clock::now();
     auto model = std::make_shared<Model>();

@@ -26,7 +26,6 @@
 #include "feedback.hpp"
 #include "performance.hpp"
 #include "voice.hpp"
-#include "../constants/ui.hpp"
 #include "../constants/core.hpp"
 
 namespace grmg
@@ -78,6 +77,7 @@ namespace grmg
 		MidiStrings midi_strings = MidiStrings::automatic;
 		bool live_palm = false;
 		double live_velocity_curve = 1.0;
+		models::Voicing voicing; // the strings' two planes (set live from the sliders)
 
 		std::array<std::atomic<int>, NUM_STRINGS> shown_fret{};
 		std::array<std::atomic<float>, NUM_STRINGS> shown_level{};
@@ -270,6 +270,7 @@ namespace grmg
 			p.tau = m.tau[(size_t)i][(size_t)fret];
 			p.pluck = m.s.pluck;
 			p.kind = models::Kind::strike;
+			p.pick = m.s.pick;
 			p.palm = (live_palm && m.palm_ready) ? m.palm[(size_t)i][(size_t)fret].get() : nullptr;
 			start(p);
 		}
@@ -370,12 +371,19 @@ namespace grmg
 			if (live_palm && !p.palm && p.kind == models::Kind::strike && m.palm_ready)
 				p.palm = m.palm[(size_t)p.string][(size_t)p.fret].get();
 			auto &v = voices_[(size_t)p.string];
+			auto &previous = fading_[(size_t)p.string];
+			// struck again, the string forgets its note (it fades out); a finger landing or leaving only changes the
+			// vibrating length: the new voice carries on what rings
+			const bool carries = v.active && p.kind != models::Kind::strike;
 			if (v.active)
 			{
-				fading_[(size_t)p.string] = v;
-				fading_[(size_t)p.string].fade_out(0.02);
+				previous = v;
+				if (!carries)
+					previous.fade_out(0.02);
 			}
-			v.start(p, m.body, m.losses[(size_t)p.string], m.s.brightness, sr_, m.pickup_xs());
+			v.start(p, m.body, m.losses[(size_t)p.string], m.s.brightness, sr_, m.pickup_xs(), carries ? &previous : nullptr, voicing);
+			if (carries)
+				previous.active = false;
 			v.note = -1;
 			shown_fret[(size_t)p.string].store(p.fret);
 			if (!m.s.sympathy)

@@ -10,6 +10,7 @@
 #include <string>
 
 #include "grm.hpp"
+#include "../constants/core.hpp"
 
 namespace grmg
 {

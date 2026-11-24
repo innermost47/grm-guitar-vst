@@ -15,6 +15,8 @@
 #include <mutex>
 #include <vector>
 
+#include <JuceHeader.h>
+
 #include "../core/engine.hpp"
 
 using namespace grmg;
@@ -135,6 +137,7 @@ private:
 	} mixParams;
 	const std::atomic<float> *const bodyAmount;
 	const std::atomic<float> *const roomOn;
+	std::array<const std::atomic<float> *, std::size(VOICE_TUNABLES)> voiceParams{}; // read at every block
 
 	// patterns, edited on the message thread, read by the solver
 	mutable std::mutex songLock;

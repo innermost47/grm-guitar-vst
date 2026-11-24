@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "../PluginProcessor.h"
+#include "../../constants/ui.hpp"
 
 #include "../../core/chords.hpp"
 #include "../../core/playability.hpp"

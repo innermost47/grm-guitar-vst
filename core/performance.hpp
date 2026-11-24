@@ -226,7 +226,7 @@ namespace grmg
 						const auto *st = by_string[q];
 						played.push_back({stroke.t + early + contacts[q].delay, st->string, st->fret, stroke.force * contacts[q].share, stroke.p,
 										  st->ring * spb, palm_for(st->string, st->fret), stroke, palm_share(st->string) > 0,
-										  contacts.size() > 1 ? (int)q : -1});
+										  contacts.size() > 1 ? (int)q : -1, false, up});
 						struck[(size_t)st->string] = true;
 						// a dead note: the finger resting on the string damps it at once, the pick leaves a click
 						if (st->dead)
@@ -270,7 +270,8 @@ namespace grmg
 						const int i = strings[q];
 						const double ring = rings.strum_end[(size_t)mo.strum][(size_t)i] - st.start;
 						played.push_back({stroke.t + early + contacts[q].delay, i, frets[q], stroke.force * contacts[q].share, stroke.p,
-										  std::max(ring, st.length) * spb, palm_for(i, frets[q]), stroke, palm_share(i) > 0, (int)q});
+										  std::max(ring, st.length) * spb, palm_for(i, frets[q]), stroke, palm_share(i) > 0, (int)q,
+										  rings.strum_lifted[(size_t)mo.strum][(size_t)i], st.up});
 						struck[(size_t)i] = true;
 					}
 				}
@@ -309,11 +310,17 @@ namespace grmg
 						return true;
 				return false;
 			};
+			// how long before a stroke the whole hand leaves its shape (gap: the time since the string's last stroke)
+			auto hand_lead = [&](double gap)
+			{ return std::max(0.025, std::min(0.09, 0.35 * gap)) + std::abs(jitter(0.006)); };
 			// how a note ends: the finger relaxes (fretted) or a hand touches the string (open); the strings of a
-			// chord are left one after the other, a few milliseconds apart
+			// chord are left one after the other, a few milliseconds apart. Left for a new chord shape, the hand
+			// touches it as it lifts, ahead of that chord's stroke.
 			auto release = [&](const models::Played &p, double t)
 			{
 				const double spread = p.chord_order >= 0 ? p.chord_order * RELEASE_SPREAD + std::abs(jitter(0.004)) : 0.0;
+				if (p.hand_lifts)
+					return std::make_pair(t - hand_lead(t - p.t) + spread, s.hand_mute);
 				return std::make_pair(t + spread, p.fret > 0 ? RELEASE_FRETTED : RELEASE_OPEN);
 			};
 			for (int i = 0; i < NUM_STRINGS; ++i)
@@ -345,45 +352,61 @@ namespace grmg
 				{
 					if (p.fret != held)
 					{
-						// the hand changes shape just before the stroke (as late as it can: a player keeps the notes
-						// ringing until the fingers must move): lift from the old fret, land on the new one
 						const double gap = last_t < -1e299 ? 0.25 : p.t - last_t;
-						const double lead = std::max(0.025, std::min(0.09, 0.35 * gap)) + std::abs(jitter(0.006));
-						const double t_change = p.t - lead;
-						const double t_lift = t_change + std::max(0.0, 0.1 * lead + jitter(0.006));
-						const double t_land = t_change + std::max(0.3 * lead, 0.65 * lead + jitter(0.006));
 						const bool palm_now = under_palm(p.t);
-						settle(std::min(t_lift, t_land));
-						if (held > 0)
+						auto palm_at = [&](int fret)
+						{ return palm_now ? keep(*perf, palms.get(m, i, fret, p.stroke.palm_x, p.stroke.palm_N)) : nullptr; };
+						// a finger landing or leaving always changes the vibrating length (the engine carries what
+						// rings onto it); the tap or the release it makes is heard only with the finger noises
+						const double noise = s.finger_noises ? 1.0 : 0.0;
+						auto land_on = [&](double t, int fret)
 						{
-							if (ringing_until > t_lift)
-							{ // the old note stops when the finger leaves
-								add_damp(*perf, i, to_beat(t_lift), true, RELEASE_LIFT);
-								ringing_until = t_lift;
-							}
-							if (s.finger_noises)
+							const models::Action &a = m.action[(size_t)fret];
+							add_pluck(*perf, to_beat(t), make_pluck(m, i, fret, noise * LAND_SHARE * a.h / Y_REF, TAU_LAND, 0.03, models::Kind::land, palm_at(fret)));
+						};
+						auto leave_to = [&](double t, int fret)
+						{
+							const models::Action &a = m.action[(size_t)held];
+							add_pluck(*perf, to_beat(t), make_pluck(m, i, fret, noise * a.h / Y_REF, TAU_LIFT, std::max(a.xf / sp.L, 0.02), models::Kind::lift, palm_at(fret)));
+						};
+						// a chord whose shape changes, or a jump along the neck: the whole hand moves
+						const bool hand_moves = p.chord_order >= 0 || (held > 0 && p.fret > 0 && std::abs(p.fret - held) > HAND_SPAN_FRETS);
+						if (!hand_moves)
+						{
+							// a line of single notes, the new fret under the hand: one finger moves at the last moment
+							// before the pick, and the string goes on ringing at its new length until the stroke. Up
+							// the neck a finger lands in front of the one holding; down the neck the finger behind was
+							// already resting there and the one in front leaves; from or to the open string a single
+							// finger moves.
+							const double lead = std::clamp(FINGER_LEAD_SHARE * gap, FINGER_LEAD_MIN, FINGER_LEAD_MAX) + std::abs(jitter(FINGER_LEAD_JITTER));
+							const double t_change = p.t - lead;
+							settle(t_change);
+							if (p.fret > held)
+								land_on(t_change, p.fret);
+							else
+								leave_to(t_change, p.fret);
+						}
+						else
+						{
+							// the hand lifts (a new chord shape, or a travel along the neck): it leaves the old fret,
+							// touches the string on its way (the old note stops: the strum is heard string by string
+							// on quiet strings) and lands on the new one, ahead of the stroke
+							const double lead = hand_lead(gap);
+							const double t_change = p.t - lead;
+							const double t_lift = t_change + std::max(0.0, 0.1 * lead + jitter(0.006));
+							const double t_land = t_change + std::max(0.3 * lead, 0.65 * lead + jitter(0.006));
+							settle(std::min(t_lift, t_land));
+							if (held > 0)
 							{
-								const models::Action &a = m.action[(size_t)held];
-								models::Pluck lift = make_pluck(m, i, 0, a.h / Y_REF, TAU_LIFT, std::max(a.xf / sp.L, 0.02), models::Kind::lift,
-																palm_now ? keep(*perf, palms.get(m, i, 0, p.stroke.palm_x, p.stroke.palm_N)) : nullptr);
-								add_pluck(*perf, to_beat(t_lift), lift);
-								ringing_until = t_lift + 1.5;
-								end_of_note = ringing_until;
-								end_extra = RELEASE_OPEN;
-								if (sp.wound)
+								leave_to(t_lift, 0);
+								if (sp.wound && s.finger_noises)
 									add_squeak(*perf, m, i, held, p.fret, to_beat(t_lift), std::max(0.04, t_land - t_lift), (unsigned)perf->squeaks.size());
 							}
-						}
-						if (p.fret > 0 && s.finger_noises)
-						{
-							const models::Action &a = m.action[(size_t)p.fret];
-							models::Pluck land = make_pluck(m, i, p.fret, LAND_SHARE * a.h / Y_REF, TAU_LAND, 0.03, models::Kind::land,
-															palm_now ? keep(*perf, palms.get(m, i, p.fret, p.stroke.palm_x, p.stroke.palm_N)) : nullptr);
-							settle(t_land);
-							add_pluck(*perf, to_beat(t_land), land);
-							ringing_until = t_land + 1.5;
-							end_of_note = ringing_until;
-							end_extra = RELEASE_FRETTED;
+							// the moving hand touches the ringing string, fretted or open
+							if (ringing_until > t_lift)
+								add_damp(*perf, i, to_beat(t_lift + SHIFT_TOUCH_DELAY), true, s.hand_mute);
+							if (p.fret > 0)
+								land_on(t_land, p.fret);
 						}
 						held = p.fret;
 					}
@@ -392,6 +415,7 @@ namespace grmg
 					const double force = s.force * std::max(p.factor, 0.02);
 					const auto a = pluck_network(sp.mu, sp.L, m.tension[(size_t)i], p.fret, p.pluck, force, s.pick, s.pick_mm);
 					models::Pluck pl = make_pluck(m, i, p.fret, a["y0"] / Y_REF, a["tau"], p.pluck, models::Kind::strike, p.palm);
+					pl.up = p.up;
 					add_pluck(*perf, to_beat(p.t), pl);
 					ringing_until = p.t + p.length;
 					last_t = p.t;
@@ -557,6 +581,7 @@ namespace grmg
 			p.pluck = pluck;
 			p.kind = kind;
 			p.palm = palm;
+			p.pick = m.s.pick;
 			return p;
 		}
 

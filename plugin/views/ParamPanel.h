@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Anthony Charretier
+#pragma once
+
 #include "../PluginProcessor.h"
+#include "../../constants/ui.hpp"
 
 class ParamPanel : public juce::Component
 {

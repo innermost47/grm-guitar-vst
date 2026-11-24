@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Anthony Charretier
+#pragma once
+
 #include "../PluginProcessor.h"
+#include "../../constants/ui.hpp"
 #include "IconButton.h"
 
 class MixerView : public juce::Component
