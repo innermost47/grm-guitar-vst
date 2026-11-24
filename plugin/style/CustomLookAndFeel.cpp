@@ -14,7 +14,7 @@ CustomLookAndFeel::CustomLookAndFeel()
     const juce::Colour lightGrey{palette.mediumGrey};
     const juce::Colour buttonPrimary{palette.cyan};
     const juce::Colour buttonSuccess{palette.sageGreen};
-    const juce::Colour muteActive{palette.terracotta};
+    const juce::Colour scrollbarThumb{palette.teal};
 
     setColour(juce::TextButton::buttonColourId, soften(backgroundLight));
     setColour(juce::TextButton::buttonOnColourId, soften(buttonSuccess));
@@ -29,7 +29,7 @@ CustomLookAndFeel::CustomLookAndFeel()
     setColour(juce::TextEditor::focusedOutlineColourId, buttonPrimary.withAlpha(0.6f));
     setColour(juce::TextEditor::highlightColourId, buttonPrimary.withAlpha(0.3f));
     setColour(juce::TextEditor::shadowColourId, juce::Colours::transparentBlack);
-    setColour(juce::ScrollBar::thumbColourId, muteActive);
+    setColour(juce::ScrollBar::thumbColourId, scrollbarThumb);
     setColour(juce::ScrollBar::backgroundColourId, backgroundDeep);
     setColour(juce::ComboBox::backgroundColourId, backgroundDark);
     setColour(juce::PopupMenu::backgroundColourId, backgroundDark);
@@ -153,45 +153,60 @@ void CustomLookAndFeel::drawButtonText(juce::Graphics &g, juce::TextButton &butt
 void CustomLookAndFeel::drawToggleButton(juce::Graphics &g, juce::ToggleButton &button,
                                          bool shouldDrawButtonAsHighlighted, bool shouldDrawButtonAsDown)
 {
+    const bool isChecked = button.getToggleState();
+    const bool isEnabled = button.isEnabled();
+    const float alpha = isEnabled ? 1.0f : 0.5f;
+
     auto bounds = button.getLocalBounds().toFloat();
+    constexpr float boxSize = 16.0f;
+    const float corner = static_cast<float>(appTheme.borders.corner);
 
-    auto bgColour = button.findColour(juce::TextButton::buttonColourId);
+    auto boxBounds = juce::Rectangle<float>(boxSize, boxSize)
+                         .withCentre({bounds.getX() + 6.0f + boxSize * 0.5f, bounds.getCentreY()});
 
-    if (!button.isEnabled())
-        bgColour = bgColour.withAlpha(0.5f);
-    else if (shouldDrawButtonAsDown)
-        bgColour = bgColour.darker(0.15f);
+    auto fillColour = isChecked
+                          ? button.findColour(juce::ToggleButton::tickColourId)
+                          : juce::Colour(palette.charcoal);
+
+    if (shouldDrawButtonAsDown)
+        fillColour = fillColour.darker(0.15f);
     else if (shouldDrawButtonAsHighlighted)
-        bgColour = bgColour.brighter(0.12f);
+        fillColour = fillColour.brighter(0.12f);
 
-    if (!shouldDrawButtonAsDown)
+    g.setColour(fillColour.withMultipliedAlpha(alpha));
+    g.fillRoundedRectangle(boxBounds, corner);
+
+    auto borderColour = isChecked
+                            ? fillColour.brighter(0.25f)
+                            : juce::Colour(palette.steelGrey).withAlpha(shouldDrawButtonAsHighlighted ? 0.7f : 0.45f);
+    g.setColour(borderColour.withMultipliedAlpha(alpha));
+    g.drawRoundedRectangle(boxBounds, corner, appTheme.borders.base);
+
+    if (isChecked)
     {
-        g.setColour(juce::Colours::black.withAlpha(0.3f));
-        g.fillRoundedRectangle(bounds.translated(0, 1.5f), appTheme.borders.corner);
+        juce::Path checkPath;
+        const float bx = boxBounds.getX();
+        const float by = boxBounds.getY();
+        checkPath.startNewSubPath(bx + boxSize * 0.24f, by + boxSize * 0.52f);
+        checkPath.lineTo(bx + boxSize * 0.44f, by + boxSize * 0.72f);
+        checkPath.lineTo(bx + boxSize * 0.78f, by + boxSize * 0.30f);
+
+        auto tickColour = button.findColour(juce::ToggleButton::tickDisabledColourId);
+        if (!button.isColourSpecified(juce::ToggleButton::tickDisabledColourId))
+            tickColour = juce::Colour(palette.warmWhite);
+
+        g.setColour(tickColour.withMultipliedAlpha(alpha));
+        g.strokePath(checkPath, juce::PathStrokeType(1.8f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
     }
 
-    g.setColour(bgColour);
-    g.fillRoundedRectangle(bounds, appTheme.borders.corner);
+    auto textBounds = bounds.withTrimmedLeft(static_cast<int>(boxBounds.getRight() + 8.0f));
+    auto textColour = button.findColour(juce::ToggleButton::textColourId);
+    if (!button.isColourSpecified(juce::ToggleButton::textColourId))
+        textColour = juce::Colour(palette.warmWhite);
 
-    if (!shouldDrawButtonAsDown)
-    {
-        g.setColour(juce::Colours::white.withAlpha(0.05f));
-        auto topBounds = bounds.withHeight(bounds.getHeight() * 0.4f);
-        g.fillRoundedRectangle(topBounds, appTheme.borders.corner);
-    }
-
-    g.setColour(bgColour.brighter(0.2f).withAlpha(0.4f));
-    g.drawRoundedRectangle(bounds, appTheme.borders.corner, appTheme.borders.base);
-
-    auto textColour = button.findColour(button.getToggleState() ? juce::TextButton::textColourOnId
-                                                                : juce::TextButton::textColourOffId);
-
-    if (!button.isEnabled())
-        textColour = textColour.withAlpha(0.5f);
-
-    g.setColour(textColour);
+    g.setColour(textColour.withMultipliedAlpha(alpha));
     g.setFont(juce::Font(juce::FontOptions(theme::FontFamily::load().notoRegular).withHeight(appTheme.typography.regular)));
-    g.drawText(button.getButtonText(), bounds, juce::Justification::centred);
+    g.drawFittedText(button.getButtonText(), textBounds.toNearestInt(), juce::Justification::centredLeft, 1, 0.85f);
 }
 
 juce::AlertWindow *CustomLookAndFeel::createAlertWindow(const juce::String &title, const juce::String &message,
@@ -693,15 +708,16 @@ void CustomLookAndFeel::drawPopupMenuBackground(juce::Graphics &g, int width, in
 }
 
 void CustomLookAndFeel::drawPopupMenuItem(juce::Graphics &g, const juce::Rectangle<int> &area, bool isSeparator,
-                                          bool isActive, bool isHighlighted, bool isTicked, bool /*hasSubMenu*/,
+                                          bool isActive, bool isHighlighted, bool isTicked, bool hasSubMenu,
                                           const juce::String &text, const juce::String & /*shortcutKeyText*/,
                                           const juce::Drawable * /*icon*/, const juce::Colour *textColourToUse)
 {
     if (isSeparator)
     {
-        auto r = area.reduced(5, 0);
+        auto separatorBounds = area.reduced(5, 0);
         g.setColour(juce::Colour(palette.charcoalLight).withAlpha(0.5f));
-        g.drawLine((float)r.getX(), (float)r.getCentreY(), (float)r.getRight(), (float)r.getCentreY(), 0.5f);
+        g.drawLine(static_cast<float>(separatorBounds.getX()), static_cast<float>(separatorBounds.getCentreY()),
+                   static_cast<float>(separatorBounds.getRight()), static_cast<float>(separatorBounds.getCentreY()), 0.5f);
         return;
     }
 
@@ -714,18 +730,31 @@ void CustomLookAndFeel::drawPopupMenuItem(juce::Graphics &g, const juce::Rectang
     auto textColour = (textColourToUse != nullptr) ? *textColourToUse : juce::Colour(palette.warmWhite);
     if (!isActive)
         textColour = textColour.withAlpha(0.4f);
+
     g.setFont(juce::Font(juce::FontOptions(theme::FontFamily::load().notoRegular).withHeight(appTheme.typography.regular)));
 
-    auto r = area.reduced(10, 0);
+    auto itemBounds = area.reduced(10, 0);
     if (isTicked)
     {
-        auto tickArea = r.removeFromLeft(15).toFloat();
+        auto tickArea = itemBounds.removeFromLeft(15).toFloat();
         g.setColour(juce::Colour(palette.steelGrey));
-        g.fillEllipse(tickArea.withSizeKeepingCentre(6, 6));
+        g.fillEllipse(tickArea.withSizeKeepingCentre(6.0f, 6.0f));
+    }
+
+    if (hasSubMenu)
+    {
+        auto subMenuArea = itemBounds.removeFromRight(14).toFloat().translated(2.0f, 0.0f);
+        auto chevronRightSvg = juce::Drawable::createFromImageData(BinaryData::caretright_svg, BinaryData::caretright_svgSize);
+        if (chevronRightSvg != nullptr)
+        {
+            chevronRightSvg->replaceColour(juce::Colours::black, juce::Colour(palette.warmWhite));
+            chevronRightSvg->drawWithin(g, subMenuArea.reduced(5.0f), juce::RectanglePlacement::centred,
+                                        isActive ? opacity.alpha04 : opacity.alpha04 * 0.4f);
+        }
     }
 
     g.setColour(textColour);
-    g.drawText(text, r, juce::Justification::centredLeft, true);
+    g.drawText(text, itemBounds, juce::Justification::centredLeft, true);
 }
 
 void CustomLookAndFeel::fillTextEditorBackground(juce::Graphics &g, int width, int height, juce::TextEditor &textEditor)

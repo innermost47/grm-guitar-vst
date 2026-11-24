@@ -284,7 +284,7 @@ GRMGuitarEditor::GRMGuitarEditor(GRMGuitarProcessor &p)
 
 	setResizable(true, true);
 	setResizeLimits(1000, 680, 2400, 1600);
-	setSize(1380, 820);
+	setSize(1420, 820);
 	vblank = std::make_unique<juce::VBlankAttachment>(this, [this]
 													  { updateEditor(); });
 }
@@ -460,7 +460,7 @@ void GRMGuitarEditor::paint(juce::Graphics &g)
 	g.drawText("GRM GUITAR", 12, 6, 160, 26, juce::Justification::centredLeft);
 	g.setColour(TEXT);
 	g.setFont(font(11.0f));
-	g.drawText("every string, attack, palm, finger, body and room: a network solved by the GRM core", 150, 6, subtitleWidth, 26,
+	g.drawText("from string to amp and room: all solved by GRM", 110, 6, subtitleWidth, 26,
 			   juce::Justification::centredLeft);
 	g.drawText("Volume", getWidth() - 256, 8, 52, 22, juce::Justification::centredRight);
 }
@@ -515,56 +515,78 @@ void GRMGuitarEditor::resized()
 	top.removeFromRight(8);
 	tabs.setBounds(top);
 
-	auto tools = area.removeFromTop(32).reduced(8, 3);
-	songLabel.setBounds(tools.removeFromLeft(38));
-	barsBox.setBounds(tools.removeFromLeft(88));
-	tools.removeFromLeft(8);
-	snapLabel.setBounds(tools.removeFromLeft(36));
-	snapBox.setBounds(tools.removeFromLeft(84));
-	tools.removeFromLeft(14);
-	chordLabel.setBounds(tools.removeFromLeft(42));
-	rootBox.setBounds(tools.removeFromLeft(76));
-	qualityBox.setBounds(tools.removeFromLeft(78));
-	tools.removeFromLeft(4);
-	strumBox.setBounds(tools.removeFromLeft(132));
-	fillStrums.setBounds(tools.removeFromLeft(84));
-	tools.removeFromLeft(4);
-	arpBox.setBounds(tools.removeFromLeft(150));
-	fillArp.setBounds(tools.removeFromLeft(96));
-	tools.removeFromLeft(4);
-	fillCount.setBounds(tools.removeFromLeft(54));
-	tools.removeFromLeft(10);
-	clearBar.setBounds(tools.removeFromLeft(74));
-	tools.removeFromLeft(10);
-	redoButton.setBounds(tools.removeFromRight(52));
-	undoButton.setBounds(tools.removeFromRight(52));
-	tools.removeFromRight(6);
-	demoButton.setBounds(tools.removeFromRight(84));
+	{
+		auto toolsBounds = area.removeFromTop(34).reduced(8, 2);
+		juce::FlexBox toolsBox;
+		toolsBox.flexDirection = juce::FlexBox::Direction::row;
+		toolsBox.alignItems = juce::FlexBox::AlignItems::center;
+		toolsBox.justifyContent = juce::FlexBox::JustifyContent::flexStart;
 
-	auto row = area.removeFromTop(30).reduced(8, 3);
-	patternLabel.setBounds(row.removeFromLeft(50));
-	patternBox.setBounds(row.removeFromLeft(150));
-	row.removeFromLeft(4);
-	newPattern.setBounds(row.removeFromLeft(48));
-	row.removeFromLeft(4);
-	duplicatePattern.setBounds(row.removeFromLeft(74));
-	row.removeFromLeft(4);
-	deletePatternButton.setBounds(row.removeFromLeft(56));
-	row.removeFromLeft(4);
-	copyPatternButton.setBounds(row.removeFromLeft(48));
-	row.removeFromLeft(4);
-	pastePatternButton.setBounds(row.removeFromLeft(50));
-	row.removeFromLeft(12);
-	keyLabel.setBounds(row.removeFromLeft(28));
-	keyBox.setBounds(row.removeFromLeft(74));
-	scaleBox.setBounds(row.removeFromLeft(120));
-	row.removeFromLeft(12);
-	midiLabel.setBounds(row.removeFromLeft(66));
-	midiModeBox.setBounds(row.removeFromLeft(120));
-	row.removeFromLeft(8);
-	followButton.setBounds(row.removeFromRight(130));
-	ghostsButton.setBounds(row.removeFromRight(120));
-	keyHint.setBounds(row);
+		constexpr float labelWidth = 56.0f;
+		constexpr float itemHeight = 24.0f;
+		const juce::FlexItem::Margin itemGap(0.0f, 6.0f, 0.0f, 0.0f);
+		const juce::FlexItem::Margin groupGap(0.0f, 12.0f, 0.0f, 0.0f);
+		const juce::FlexItem::Margin noMargin(0.0f);
+
+		toolsBox.items.add(juce::FlexItem(songLabel).withWidth(labelWidth).withHeight(itemHeight).withMargin(itemGap));
+		toolsBox.items.add(juce::FlexItem(barsBox).withWidth(86.0f).withHeight(itemHeight).withMargin(groupGap));
+
+		toolsBox.items.add(juce::FlexItem(snapLabel).withWidth(labelWidth).withHeight(itemHeight).withMargin(itemGap));
+		toolsBox.items.add(juce::FlexItem(snapBox).withWidth(82.0f).withHeight(itemHeight).withMargin(groupGap));
+
+		toolsBox.items.add(juce::FlexItem(chordLabel).withWidth(labelWidth).withHeight(itemHeight).withMargin(itemGap));
+		toolsBox.items.add(juce::FlexItem(rootBox).withWidth(72.0f).withHeight(itemHeight).withMargin(itemGap));
+		toolsBox.items.add(juce::FlexItem(qualityBox).withWidth(76.0f).withHeight(itemHeight).withMargin(itemGap));
+		toolsBox.items.add(juce::FlexItem(strumBox).withWidth(122.0f).withHeight(itemHeight).withMargin(itemGap));
+		toolsBox.items.add(juce::FlexItem(fillStrums).withWidth(84.0f).withHeight(itemHeight).withMargin(groupGap));
+
+		toolsBox.items.add(juce::FlexItem(arpBox).withWidth(138.0f).withHeight(itemHeight).withMargin(itemGap));
+		toolsBox.items.add(juce::FlexItem(fillArp).withWidth(94.0f).withHeight(itemHeight).withMargin(itemGap));
+		toolsBox.items.add(juce::FlexItem(fillCount).withWidth(54.0f).withHeight(itemHeight).withMargin(itemGap));
+		toolsBox.items.add(juce::FlexItem(clearBar).withWidth(76.0f).withHeight(itemHeight).withMargin(noMargin));
+
+		toolsBox.items.add(juce::FlexItem().withFlex(1.0f).withHeight(itemHeight));
+		toolsBox.items.add(juce::FlexItem(demoButton).withWidth(86.0f).withHeight(itemHeight).withMargin(itemGap));
+		toolsBox.items.add(juce::FlexItem(undoButton).withWidth(56.0f).withHeight(itemHeight).withMargin(itemGap));
+		toolsBox.items.add(juce::FlexItem(redoButton).withWidth(56.0f).withHeight(itemHeight).withMargin(noMargin));
+
+		toolsBox.performLayout(toolsBounds.toFloat());
+	}
+
+	{
+		auto rowBounds = area.removeFromTop(32).reduced(8, 2);
+		juce::FlexBox rowBox;
+		rowBox.flexDirection = juce::FlexBox::Direction::row;
+		rowBox.alignItems = juce::FlexBox::AlignItems::center;
+		rowBox.justifyContent = juce::FlexBox::JustifyContent::flexStart;
+
+		constexpr float labelWidth = 56.0f;
+		constexpr float itemHeight = 24.0f;
+		const juce::FlexItem::Margin itemGap(0.0f, 6.0f, 0.0f, 0.0f);
+		const juce::FlexItem::Margin groupGap(0.0f, 12.0f, 0.0f, 0.0f);
+		const juce::FlexItem::Margin noMargin(0.0f);
+
+		rowBox.items.add(juce::FlexItem(patternLabel).withWidth(labelWidth).withHeight(itemHeight).withMargin(itemGap));
+		rowBox.items.add(juce::FlexItem(patternBox).withWidth(144.0f).withHeight(itemHeight).withMargin(itemGap));
+		rowBox.items.add(juce::FlexItem(newPattern).withWidth(50.0f).withHeight(itemHeight).withMargin(itemGap));
+		rowBox.items.add(juce::FlexItem(duplicatePattern).withWidth(76.0f).withHeight(itemHeight).withMargin(itemGap));
+		rowBox.items.add(juce::FlexItem(deletePatternButton).withWidth(58.0f).withHeight(itemHeight).withMargin(itemGap));
+		rowBox.items.add(juce::FlexItem(copyPatternButton).withWidth(50.0f).withHeight(itemHeight).withMargin(itemGap));
+		rowBox.items.add(juce::FlexItem(pastePatternButton).withWidth(52.0f).withHeight(itemHeight).withMargin(groupGap));
+
+		rowBox.items.add(juce::FlexItem(keyLabel).withWidth(labelWidth).withHeight(itemHeight).withMargin(itemGap));
+		rowBox.items.add(juce::FlexItem(keyBox).withWidth(72.0f).withHeight(itemHeight).withMargin(itemGap));
+		rowBox.items.add(juce::FlexItem(scaleBox).withWidth(114.0f).withHeight(itemHeight).withMargin(groupGap));
+
+		rowBox.items.add(juce::FlexItem(midiLabel).withWidth(labelWidth).withHeight(itemHeight).withMargin(itemGap));
+		rowBox.items.add(juce::FlexItem(midiModeBox).withWidth(114.0f).withHeight(itemHeight).withMargin(groupGap));
+
+		rowBox.items.add(juce::FlexItem(keyHint).withFlex(1.0f).withMinWidth(80.0f).withHeight(itemHeight).withMargin(itemGap));
+		rowBox.items.add(juce::FlexItem(ghostsButton).withWidth(122.0f).withHeight(itemHeight).withMargin(itemGap));
+		rowBox.items.add(juce::FlexItem(followButton).withWidth(134.0f).withHeight(itemHeight).withMargin(noMargin));
+
+		rowBox.performLayout(rowBounds.toFloat());
+	}
 
 	help.setBounds(area.removeFromBottom(20).reduced(10, 0));
 	roll.setBounds(area.reduced(8, 2));
