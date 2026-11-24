@@ -1,5 +1,5 @@
 #include "CustomLookAndFeel.h"
-#include "BinaryData.h"
+#include "IconLibrary.h"
 
 using namespace ui;
 
@@ -209,6 +209,22 @@ void CustomLookAndFeel::drawToggleButton(juce::Graphics &g, juce::ToggleButton &
     g.drawFittedText(button.getButtonText(), textBounds.toNearestInt(), juce::Justification::centredLeft, 1, 0.85f);
 }
 
+void CustomLookAndFeel::drawIconButton(juce::Graphics &g, IconButton &button, bool shouldDrawButtonAsHighlighted,
+                                       bool shouldDrawButtonAsDown)
+{
+    const bool isOn = button.getToggleState();
+    drawButtonBackground(g, button,
+                         button.findColour(isOn ? juce::TextButton::buttonOnColourId : juce::TextButton::buttonColourId),
+                         shouldDrawButtonAsHighlighted, shouldDrawButtonAsDown);
+
+    float alpha = (isOn || shouldDrawButtonAsHighlighted) ? 1.0f : opacity.alpha08;
+    if (!button.isEnabled())
+        alpha = opacity.alpha03;
+
+    const auto glyphArea = button.getLocalBounds().toFloat().reduced(static_cast<float>(appTheme.dimensions.iconButtonPadding));
+    IconLibrary::getInstance().draw(g, button.getShownIcon(), glyphArea, juce::Colour(palette.warmWhite).withAlpha(alpha));
+}
+
 juce::AlertWindow *CustomLookAndFeel::createAlertWindow(const juce::String &title, const juce::String &message,
                                                         const juce::String & /*button1*/,
                                                         const juce::String & /*button2*/,
@@ -293,13 +309,8 @@ void CustomLookAndFeel::drawComboBox(juce::Graphics &g, int width, int height, b
 
     auto arrowZone = juce::Rectangle<float>((float)buttonX, (float)buttonY, (float)buttonW, (float)buttonH);
 
-    auto chevronDownSvg = juce::Drawable::createFromImageData(BinaryData::caretdown_svg, BinaryData::caretdown_svgSize);
-    if (chevronDownSvg != nullptr)
-    {
-        chevronDownSvg->replaceColour(juce::Colours::black, juce::Colour(palette.warmWhite));
-        chevronDownSvg->drawWithin(g, arrowZone.toFloat().reduced(4), juce::RectanglePlacement::centred,
-                                   opacity.alpha04);
-    }
+    IconLibrary::getInstance().draw(g, IconId::caretDown, arrowZone.reduced(4.0f),
+                                    juce::Colour(palette.warmWhite).withAlpha(opacity.alpha04));
 }
 
 juce::Font CustomLookAndFeel::getComboBoxFont(juce::ComboBox & /*box*/)
@@ -744,13 +755,9 @@ void CustomLookAndFeel::drawPopupMenuItem(juce::Graphics &g, const juce::Rectang
     if (hasSubMenu)
     {
         auto subMenuArea = itemBounds.removeFromRight(14).toFloat().translated(2.0f, 0.0f);
-        auto chevronRightSvg = juce::Drawable::createFromImageData(BinaryData::caretright_svg, BinaryData::caretright_svgSize);
-        if (chevronRightSvg != nullptr)
-        {
-            chevronRightSvg->replaceColour(juce::Colours::black, juce::Colour(palette.warmWhite));
-            chevronRightSvg->drawWithin(g, subMenuArea.reduced(5.0f), juce::RectanglePlacement::centred,
-                                        isActive ? opacity.alpha04 : opacity.alpha04 * 0.4f);
-        }
+        IconLibrary::getInstance().draw(g, IconId::caretRight, subMenuArea.reduced(5.0f),
+                                        juce::Colour(palette.warmWhite)
+                                            .withAlpha(isActive ? opacity.alpha04 : opacity.alpha04 * 0.4f));
     }
 
     g.setColour(textColour);

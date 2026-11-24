@@ -2,8 +2,9 @@
 // Copyright (C) 2026 Anthony Charretier
 #pragma once
 #include "../../constants/ui.hpp"
+#include "../widgets/IconButton.h"
 
-class CustomLookAndFeel : public juce::LookAndFeel_V4
+class CustomLookAndFeel : public juce::LookAndFeel_V4, public IconButton::LookAndFeelMethods
 {
 public:
     static CustomLookAndFeel &getInstance()
@@ -26,6 +27,9 @@ public:
 
     void drawToggleButton(juce::Graphics &g, juce::ToggleButton &button, bool shouldDrawButtonAsHighlighted,
                           bool shouldDrawButtonAsDown) override;
+
+    void drawIconButton(juce::Graphics &g, IconButton &button, bool shouldDrawButtonAsHighlighted,
+                        bool shouldDrawButtonAsDown) override;
 
     juce::AlertWindow *createAlertWindow(const juce::String &title, const juce::String &message,
                                          const juce::String & /*button1*/, const juce::String & /*button2*/,

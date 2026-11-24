@@ -42,8 +42,8 @@ void MixerView::rebuild()
         s.gain->setTooltip("Gain (dB)");
         s.pan->setTooltip("Pan");
         s.level->setTooltip("Level");
-        s.mute = std::make_unique<juce::ToggleButton>("M");
-        s.solo = std::make_unique<juce::ToggleButton>("S");
+        s.mute = std::make_unique<IconButton>(ui::IconId::speakerSlash, "Mute this guitar", IconButton::Behaviour::toggle);
+        s.solo = std::make_unique<IconButton>(ui::IconId::headphones, "Solo: hear only the soloed guitars", IconButton::Behaviour::toggle);
         s.out = std::make_unique<juce::ComboBox>();
         s.out->addItemList({"Main", "Own output"}, 1);
         s.out->setTooltip("Main: the plugin's main output. Own output: this guitar's output (enable it in the host)");
@@ -89,9 +89,10 @@ void MixerView::resized()
         s.name->setBounds(a.removeFromTop(22));
         a.removeFromTop(10);
         s.out->setBounds(a.removeFromBottom(22));
-        auto ms = a.removeFromBottom(22);
-        s.mute->setBounds(ms.removeFromLeft(ms.getWidth() / 2));
-        s.solo->setBounds(ms);
+        auto ms = a.removeFromBottom(appTheme.dimensions.iconButton);
+        const int iconSize = appTheme.dimensions.iconButton;
+        s.mute->setBounds(ms.removeFromLeft(ms.getWidth() / 2).withSizeKeepingCentre(iconSize, iconSize));
+        s.solo->setBounds(ms.withSizeKeepingCentre(iconSize, iconSize));
         auto knobs = a.removeFromLeft(a.getWidth() / 2);
         s.gain->setBounds(knobs.removeFromTop(knobs.getHeight() / 2));
         s.pan->setBounds(knobs);

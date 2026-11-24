@@ -51,6 +51,8 @@ namespace ui::theme
         int baseModalHeight = 400;
         int minSmallBtnWidth = 24;
         int minSmallBtnHeight = 24;
+        int iconButton = 24;
+        int iconButtonPadding = 5;
         int sampleDetailHeightVst = 122;
         int sampleDetailHeightStandalone = 94;
         int sampleRowHeight = 64;
@@ -125,6 +127,8 @@ namespace ui::theme
             theme.dimensions.baseModalHeight = static_cast<int>(400 * uiScale);
             theme.dimensions.minSmallBtnWidth = static_cast<int>(24 * uiScale);
             theme.dimensions.minSmallBtnHeight = static_cast<int>(24 * uiScale);
+            theme.dimensions.iconButton = static_cast<int>(24 * uiScale);
+            theme.dimensions.iconButtonPadding = static_cast<int>(5 * uiScale);
             theme.dimensions.sampleDetailHeightVst = static_cast<int>(122 * uiScale);
             theme.dimensions.sampleDetailHeightStandalone = static_cast<int>(94 * uiScale);
             theme.dimensions.sampleRowHeight = static_cast<int>(64 * uiScale);

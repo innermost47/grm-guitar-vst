@@ -19,16 +19,12 @@ GRMGuitarEditor::GRMGuitarEditor(GRMGuitarProcessor &p)
 	tabs.setOutline(0);
 	addAndMakeVisible(tabs);
 	addAndMakeVisible(addGuitarButton);
-	addGuitarButton.setTooltip("Another guitar in this plugin (up to 8), with its own settings, patterns and mixer strip");
 	addGuitarButton.onClick = [this]
 	{ processor.addGuitar(); };
 	addAndMakeVisible(removeGuitarButton);
-	removeGuitarButton.setTooltip("Remove the selected guitar (the ones after it move down)");
 	removeGuitarButton.onClick = [this]
 	{ processor.removeGuitar(processor.getSelectedGuitar()); };
 	addAndMakeVisible(ghostsButton);
-	ghostsButton.setTooltip("Show the notes of the other guitars, faint, behind this guitar's roll");
-	ghostsButton.setColour(juce::ToggleButton::textColourId, TEXT);
 	ghostsAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.params, "ghosts", ghostsButton);
 	rebuildGuitars();
 
@@ -36,11 +32,9 @@ GRMGuitarEditor::GRMGuitarEditor(GRMGuitarProcessor &p)
 	playButton.onClick = [this]
 	{ togglePlay(); };
 	addAndMakeVisible(takeButton);
-	takeButton.setTooltip("The player network plays the roll again, with new imprecisions");
 	takeButton.onClick = [this]
 	{ processor.newTake(); };
 	addAndMakeVisible(exportButton);
-	exportButton.setTooltip("Render the whole roll with the body and the room to a WAV file");
 	exportButton.onClick = [this]
 	{
 		chooser = std::make_unique<juce::FileChooser>("Export the roll", juce::File::getSpecialLocation(juce::File::userMusicDirectory).getChildFile("grm_guitar.wav"), "*.wav");
@@ -243,26 +237,20 @@ GRMGuitarEditor::GRMGuitarEditor(GRMGuitarProcessor &p)
 		if (k >= 0)
 			processor.selectPattern(k);
 	};
-	newPattern.setTooltip("A new empty pattern after this one");
 	newPattern.onClick = [this]
 	{ processor.addPattern(false); };
-	duplicatePattern.setTooltip("A copy of this pattern after it");
 	duplicatePattern.onClick = [this]
 	{ processor.addPattern(true); };
-	deletePatternButton.setTooltip("Delete this pattern");
 	deletePatternButton.onClick = [this]
 	{ processor.deletePattern(); };
-	copyPatternButton.setTooltip("Copy this pattern (paste it into any guitar, or another instance)");
 	copyPatternButton.onClick = [this]
 	{ processor.copyPattern(); };
-	pastePatternButton.setTooltip("Paste the copied pattern as a new pattern after this one");
 	pastePatternButton.onClick = [this]
 	{ processor.pastePattern(); };
 	midiModeBox.addItemList({"Play notes", "Play patterns"}, 1);
 	midiModeBox.setTooltip("Play notes: a key plays a note on the guitar. Play patterns: a key plays a whole pattern "
 						   "(C1 pattern 1, C#1 pattern 2...), looped while the key is held");
 	midiModeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(processor.params, "midi_mode", midiModeBox);
-	followButton.setTooltip("The roll scrolls with the playhead. Off: it stays where you are editing");
 	followAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.params, "follow_playhead", followButton);
 	for (auto *c : std::initializer_list<juce::Component *>{&patternLabel, &patternBox, &newPattern, &duplicatePattern,
 															&deletePatternButton, &copyPatternButton, &pastePatternButton, &midiLabel, &midiModeBox, &keyHint, &followButton})
@@ -272,7 +260,6 @@ GRMGuitarEditor::GRMGuitarEditor(GRMGuitarProcessor &p)
 		l->setColour(juce::Label::textColourId, TEXT);
 		l->setFont(font(12.0f));
 	}
-	followButton.setColour(juce::ToggleButton::textColourId, TEXT);
 	refreshPatterns();
 
 	roll.onPlayToggle = [this]
@@ -426,7 +413,7 @@ void GRMGuitarEditor::updateEditor()
 	refreshPatterns();
 	pastePatternButton.setEnabled(processor.hasCopiedPattern() || juce::SystemClipboard::getTextFromClipboard().startsWith("grm-guitar-roll"));
 	const bool host = processor.isHostPlaying();
-	playButton.setButtonText(processor.isInternalPlaying() ? "Stop" : "Play");
+	playButton.setToggleState(processor.isInternalPlaying(), juce::dontSendNotification);
 	playButton.setEnabled(!host);
 	exportButton.setEnabled(!processor.isExporting());
 	const double b = processor.getShownBeat();
@@ -476,20 +463,27 @@ void GRMGuitarEditor::resized()
 	const bool isStandalone = processor.wrapperType == juce::AudioProcessor::wrapperType_Standalone;
 	playButton.setVisible(isStandalone);
 
+	const int iconSize = appTheme.dimensions.iconButton;
+	const int iconGap = appTheme.spacing.md;
+	auto placeIcon = [iconSize](juce::Component &button, juce::Rectangle<int> slot)
+	{ button.setBounds(slot.withSizeKeepingCentre(iconSize, iconSize)); };
+	auto iconItem = [iconSize](juce::Component &button, juce::FlexItem::Margin margin)
+	{ return juce::FlexItem(button).withWidth((float)iconSize).withHeight((float)iconSize).withMargin(margin); };
+
 	if (isStandalone)
 	{
-		playButton.setBounds(header.removeFromRight(70));
-		header.removeFromRight(6);
+		placeIcon(playButton, header.removeFromRight(iconSize));
+		header.removeFromRight(iconGap);
 	}
 	else
 	{
 		playButton.setBounds({});
 	}
 
-	takeButton.setBounds(header.removeFromRight(84));
-	header.removeFromRight(6);
-	exportButton.setBounds(header.removeFromRight(90));
-	header.removeFromRight(10);
+	placeIcon(takeButton, header.removeFromRight(iconSize));
+	header.removeFromRight(iconGap);
+	placeIcon(exportButton, header.removeFromRight(iconSize));
+	header.removeFromRight(appTheme.spacing.xl);
 	position.setBounds(header.removeFromRight(200));
 	header.removeFromRight(10);
 	status.setBounds(header.removeFromRight(juce::jmin(260, juce::jmax(0, header.getWidth() - 150))));
@@ -502,10 +496,10 @@ void GRMGuitarEditor::resized()
 			b->setBounds(bar.removeFromLeft(84));
 			bar.removeFromLeft(4);
 		}
-		bar.removeFromLeft(6);
-		addGuitarButton.setBounds(bar.removeFromLeft(80));
-		bar.removeFromLeft(4);
-		removeGuitarButton.setBounds(bar.removeFromLeft(70));
+		bar.removeFromLeft(iconGap);
+		placeIcon(addGuitarButton, bar.removeFromLeft(iconSize));
+		bar.removeFromLeft(appTheme.spacing.base);
+		placeIcon(removeGuitarButton, bar.removeFromLeft(iconSize));
 	}
 	auto top = area.removeFromTop(juce::jmax(250, area.getHeight() * 36 / 100)).reduced(8, 4);
 	auto right = top.removeFromRight(top.getWidth() * 46 / 100);
@@ -538,17 +532,17 @@ void GRMGuitarEditor::resized()
 		toolsBox.items.add(juce::FlexItem(rootBox).withWidth(72.0f).withHeight(itemHeight).withMargin(itemGap));
 		toolsBox.items.add(juce::FlexItem(qualityBox).withWidth(76.0f).withHeight(itemHeight).withMargin(itemGap));
 		toolsBox.items.add(juce::FlexItem(strumBox).withWidth(122.0f).withHeight(itemHeight).withMargin(itemGap));
-		toolsBox.items.add(juce::FlexItem(fillStrums).withWidth(84.0f).withHeight(itemHeight).withMargin(groupGap));
+		toolsBox.items.add(iconItem(fillStrums, groupGap));
 
 		toolsBox.items.add(juce::FlexItem(arpBox).withWidth(138.0f).withHeight(itemHeight).withMargin(itemGap));
-		toolsBox.items.add(juce::FlexItem(fillArp).withWidth(94.0f).withHeight(itemHeight).withMargin(itemGap));
+		toolsBox.items.add(iconItem(fillArp, itemGap));
 		toolsBox.items.add(juce::FlexItem(fillCount).withWidth(54.0f).withHeight(itemHeight).withMargin(itemGap));
-		toolsBox.items.add(juce::FlexItem(clearBar).withWidth(76.0f).withHeight(itemHeight).withMargin(noMargin));
+		toolsBox.items.add(iconItem(clearBar, noMargin));
 
 		toolsBox.items.add(juce::FlexItem().withFlex(1.0f).withHeight(itemHeight));
-		toolsBox.items.add(juce::FlexItem(demoButton).withWidth(86.0f).withHeight(itemHeight).withMargin(itemGap));
-		toolsBox.items.add(juce::FlexItem(undoButton).withWidth(56.0f).withHeight(itemHeight).withMargin(itemGap));
-		toolsBox.items.add(juce::FlexItem(redoButton).withWidth(56.0f).withHeight(itemHeight).withMargin(noMargin));
+		toolsBox.items.add(iconItem(demoButton, itemGap));
+		toolsBox.items.add(iconItem(undoButton, itemGap));
+		toolsBox.items.add(iconItem(redoButton, noMargin));
 
 		toolsBox.performLayout(toolsBounds.toFloat());
 	}
@@ -568,11 +562,11 @@ void GRMGuitarEditor::resized()
 
 		rowBox.items.add(juce::FlexItem(patternLabel).withWidth(labelWidth).withHeight(itemHeight).withMargin(itemGap));
 		rowBox.items.add(juce::FlexItem(patternBox).withWidth(144.0f).withHeight(itemHeight).withMargin(itemGap));
-		rowBox.items.add(juce::FlexItem(newPattern).withWidth(50.0f).withHeight(itemHeight).withMargin(itemGap));
-		rowBox.items.add(juce::FlexItem(duplicatePattern).withWidth(76.0f).withHeight(itemHeight).withMargin(itemGap));
-		rowBox.items.add(juce::FlexItem(deletePatternButton).withWidth(58.0f).withHeight(itemHeight).withMargin(itemGap));
-		rowBox.items.add(juce::FlexItem(copyPatternButton).withWidth(50.0f).withHeight(itemHeight).withMargin(itemGap));
-		rowBox.items.add(juce::FlexItem(pastePatternButton).withWidth(52.0f).withHeight(itemHeight).withMargin(groupGap));
+		rowBox.items.add(iconItem(newPattern, itemGap));
+		rowBox.items.add(iconItem(duplicatePattern, itemGap));
+		rowBox.items.add(iconItem(deletePatternButton, itemGap));
+		rowBox.items.add(iconItem(copyPatternButton, itemGap));
+		rowBox.items.add(iconItem(pastePatternButton, groupGap));
 
 		rowBox.items.add(juce::FlexItem(keyLabel).withWidth(labelWidth).withHeight(itemHeight).withMargin(itemGap));
 		rowBox.items.add(juce::FlexItem(keyBox).withWidth(72.0f).withHeight(itemHeight).withMargin(itemGap));
@@ -582,8 +576,8 @@ void GRMGuitarEditor::resized()
 		rowBox.items.add(juce::FlexItem(midiModeBox).withWidth(114.0f).withHeight(itemHeight).withMargin(groupGap));
 
 		rowBox.items.add(juce::FlexItem(keyHint).withFlex(1.0f).withMinWidth(80.0f).withHeight(itemHeight).withMargin(itemGap));
-		rowBox.items.add(juce::FlexItem(ghostsButton).withWidth(122.0f).withHeight(itemHeight).withMargin(itemGap));
-		rowBox.items.add(juce::FlexItem(followButton).withWidth(134.0f).withHeight(itemHeight).withMargin(noMargin));
+		rowBox.items.add(iconItem(ghostsButton, itemGap));
+		rowBox.items.add(iconItem(followButton, noMargin));
 
 		rowBox.performLayout(rowBounds.toFloat());
 	}

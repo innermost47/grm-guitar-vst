@@ -13,6 +13,7 @@
 #include "RollView.h"
 #include "NeckView.h"
 #include "ScopeView.h"
+#include "IconButton.h"
 
 class GRMGuitarEditor : public juce::AudioProcessorEditor
 {
@@ -29,12 +30,20 @@ private:
 	RollView roll;
 
 	CustomLookAndFeel customLookAndFeel;
+	const ui::theme::AppTheme appTheme = ui::theme::AppTheme::fromScale(1.0f);
+
+	juce::SharedResourcePointer<juce::TooltipWindow> tooltipWindow;
 
 	juce::TabbedComponent tabs{juce::TabbedButtonBar::TabsAtTop};
 
 	std::unique_ptr<juce::VBlankAttachment> vblank;
 
-	juce::TextButton playButton{"Play"}, takeButton{"New take"}, exportButton{"Export WAV"};
+	using Icon = ui::IconId;
+	using Behaviour = IconButton::Behaviour;
+
+	IconButton playButton{Icon::play, "Play / stop the roll (Space)", Behaviour::momentary, Icon::stop};
+	IconButton takeButton{Icon::arrowsClockwise, "New take: the player network plays the roll again, with new imprecisions"};
+	IconButton exportButton{Icon::exportFile, "Export WAV: render the whole roll with the body and the room to a WAV file"};
 	std::unique_ptr<juce::FileChooser> chooser;
 	juce::Label status, position;
 	juce::Slider volume;
@@ -43,21 +52,29 @@ private:
 	juce::ComboBox rootBox, qualityBox, strumBox, arpBox, snapBox, barsBox, fillCount;
 	juce::ComboBox keyBox, scaleBox;
 	juce::Label keyLabel;
-	juce::TextButton fillStrums{"Fill strums"}, fillArp{"Fill arpeggio"}, clearBar{"Clear bar"}, undoButton{"Undo"},
-		redoButton{"Redo"}, demoButton{"Demo song"};
+	IconButton fillStrums{Icon::strum, "Fill strums: the selection (or the bars from the current one) strummed with the chord"};
+	IconButton fillArp{Icon::arpeggio, "Fill arpeggio: the selection (or the bars from the current one) picked string by string with the chord"};
+	IconButton clearBar{Icon::eraser, "Clear bar: remove every note of the current bar"};
+	IconButton undoButton{Icon::arrowCounterClockwise, "Undo (Ctrl+Z)"};
+	IconButton redoButton{Icon::arrowClockwise, "Redo (Ctrl+Y)"};
+	IconButton demoButton{Icon::musicNotes, "Demo song: replace the roll with the demo song (undo brings it back)"};
 	juce::Label chordLabel, barLabel, snapLabel, songLabel, help;
 
 	juce::ComboBox patternBox, midiModeBox;
-	juce::TextButton newPattern{"New"}, duplicatePattern{"Duplicate"}, deletePatternButton{"Delete"},
-		copyPatternButton{"Copy"}, pastePatternButton{"Paste"};
+	IconButton newPattern{Icon::filePlus, "New pattern: an empty pattern after this one"};
+	IconButton duplicatePattern{Icon::copySimple, "Duplicate pattern: a copy of this pattern after it"};
+	IconButton deletePatternButton{Icon::trash, "Delete this pattern"};
+	IconButton copyPatternButton{Icon::copy, "Copy this pattern (paste it into any guitar, or another instance)"};
+	IconButton pastePatternButton{Icon::clipboard, "Paste the copied pattern as a new pattern after this one"};
 
 	std::vector<std::unique_ptr<juce::TextButton>> guitarButtons;
-	juce::TextButton addGuitarButton{"+ Guitar"}, removeGuitarButton{"Remove"};
-	juce::ToggleButton ghostsButton{"Other guitars"};
+	IconButton addGuitarButton{Icon::plus, "Add a guitar to this plugin (up to 8), with its own settings, patterns and mixer strip"};
+	IconButton removeGuitarButton{Icon::minus, "Remove the selected guitar (the ones after it move down)"};
+	IconButton ghostsButton{Icon::ghost, "Other guitars: show their notes, faint, behind this guitar's roll", Behaviour::toggle};
 	std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> ghostsAttachment;
 	int shownGuitarVersion = -1;
 	void rebuildGuitars();
-	juce::ToggleButton followButton{"Follow playhead"};
+	IconButton followButton{Icon::crosshair, "Follow playhead: the roll scrolls with the playhead. Off: it stays where you are editing", Behaviour::toggle};
 	juce::Label patternLabel, midiLabel, keyHint;
 	std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> midiModeAttachment;
 	std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> followAttachment;

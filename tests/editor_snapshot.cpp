@@ -5,6 +5,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "../plugin/PluginProcessor.h"
 #include "../plugin/PluginEditor.h"
+#include "../plugin/views/MixerView.h"
 
 int main(int argc, char** argv) {
     juce::ScopedJuceInitialiser_GUI init;
@@ -22,7 +23,7 @@ int main(int argc, char** argv) {
     auto song = g->getSong();
     song.loop_start = 4.0;          // a loop over bars 2 to 3, a note written past the end
     song.loop_end = 12.0;
-    grmg::RollNote far;
+    grmg::models::RollNote far;
     far.start = 33.0;
     far.fret = 5;
     song.notes.push_back(far);
@@ -34,14 +35,14 @@ int main(int argc, char** argv) {
     lead.bars = 4;
     const int frets[8] = {3, 5, 7, 8, 7, 5, 3, 2};
     for (int k = 0; k < 8; ++k) {
-        grmg::RollNote n;
+        grmg::models::RollNote n;
         n.string = 3;
         n.fret = frets[k];
         n.start = 2.0 * k;
         n.length = 1.5;
         lead.notes.push_back(n);
     }
-    grmg::RollNote dead;
+    grmg::models::RollNote dead;
     dead.string = 2;
     dead.fret = 5;
     dead.start = 2.0;
@@ -49,7 +50,7 @@ int main(int argc, char** argv) {
     dead.dead = true;
     lead.notes.push_back(dead);
     for (int i = 0; i < 3; ++i) {          // a shape over three strings, each its own fret
-        grmg::RollNote b;
+        grmg::models::RollNote b;
         b.string = i;
         b.fret = i == 0 ? 0 : 2;
         b.start = 12.0;

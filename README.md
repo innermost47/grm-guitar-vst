@@ -143,12 +143,14 @@ Up to 8 guitars in one plugin, each with its own settings, patterns, player and 
 
 ## Tests
 
-`ctest` runs the first three:
+`ctest` runs the first four:
 - `test_core`: 210 checks that the C++ GRM gives the same numbers as the Python one (values to 1e-9).
 - `test_physics`: 153 checks of the networks (body, bridge, room, palm, finger, action, player, strum, string
   losses, loaded top) and of one string's sound against the proof of concept.
 - `test_play`: 52 checks of the playing (hands, sweep, pinch, muscle, picking, palm, loop flags, ringing, endings,
   hand stops, chords on every tuning, scales, fills, dead notes, endings across a pattern change).
+- `test_icons`: every icon is embedded and drawn, every icon button of the interface has its tooltip and its
+  design-system size.
 - `plugin_host_test`: the plugin called as a host would (MIDI, patterns, sensors, several guitars, own outputs,
   sessions of 0.2.0, state).
 - `plugin_cpu_test [guitars]`: the share of each audio block the plugin takes with several guitars.
@@ -223,3 +225,8 @@ a new look (light and dark); modulators; one network holding all the others (the
 - H. Lemme's pickup measurements (via ozvalveamps.org): pickup inductance, resistance, capacitance.
 - M. Zollner, Physics of the Electric Guitar, ch. 7.7: string decay on electric guitars.
 - J. Wolfe, UNSW, "How does a guitar work?": the lowest air and top resonances.
+
+## Credits
+
+- Icons: [Phosphor Icons](https://phosphoricons.com) (fill style), MIT license. The strum and arpeggio icons are
+  drawn for GRM Guitar on the same grid.

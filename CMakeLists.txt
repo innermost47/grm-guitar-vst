@@ -67,10 +67,31 @@ if(GRMG_BUILD_PLUGIN)
             assets/fonts/noto-bold.ttf
             assets/fonts/noto-italic.ttf
             assets/fonts/noto-regular.ttf
+            assets/icons/arpeggio.svg
+            assets/icons/arrow-clockwise.svg
+            assets/icons/arrow-counter-clockwise.svg
+            assets/icons/arrows-clockwise.svg
             assets/icons/caret-down.svg
             assets/icons/caret-left.svg
             assets/icons/caret-right.svg
             assets/icons/caret-up.svg
+            assets/icons/clipboard.svg
+            assets/icons/copy-simple.svg
+            assets/icons/copy.svg
+            assets/icons/crosshair.svg
+            assets/icons/eraser.svg
+            assets/icons/export.svg
+            assets/icons/file-plus.svg
+            assets/icons/ghost.svg
+            assets/icons/headphones.svg
+            assets/icons/minus.svg
+            assets/icons/music-notes.svg
+            assets/icons/play.svg
+            assets/icons/plus.svg
+            assets/icons/speaker-slash.svg
+            assets/icons/stop.svg
+            assets/icons/strum.svg
+            assets/icons/trash.svg
     )
 
     target_sources(GRMGuitar PRIVATE
@@ -79,6 +100,8 @@ if(GRMG_BUILD_PLUGIN)
         plugin/PluginEditor.cpp
         plugin/solver/SolverThread.cpp
         plugin/style/CustomLookAndFeel.cpp
+        plugin/style/IconLibrary.cpp
+        plugin/widgets/IconButton.cpp
         plugin/views/MixerView.cpp
         plugin/views/NeckView.cpp
         plugin/views/NetworksView.cpp
@@ -86,11 +109,12 @@ if(GRMG_BUILD_PLUGIN)
         plugin/views/RollView.cpp
         plugin/views/ScopeView.cpp)
 
-    target_include_directories(GRMGuitar PRIVATE
+    target_include_directories(GRMGuitar PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/plugin
         ${CMAKE_CURRENT_SOURCE_DIR}/plugin/solver
         ${CMAKE_CURRENT_SOURCE_DIR}/plugin/views
-        ${CMAKE_CURRENT_SOURCE_DIR}/plugin/style)
+        ${CMAKE_CURRENT_SOURCE_DIR}/plugin/style
+        ${CMAKE_CURRENT_SOURCE_DIR}/plugin/widgets)
 
     target_compile_definitions(GRMGuitar PUBLIC
         JUCE_WEB_BROWSER=0
@@ -140,14 +164,18 @@ if(GRMG_BUILD_PLUGIN)
             juce::juce_recommended_warning_flags)
 
     if(GRMG_BUILD_TESTS)
-        add_executable(plugin_host_test tests/plugin_host_test.cpp)
-        target_link_libraries(plugin_host_test PRIVATE GRMGuitar juce::juce_audio_formats juce::juce_recommended_config_flags)
-        target_compile_definitions(plugin_host_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
-        add_executable(plugin_cpu_test tests/plugin_cpu_test.cpp)
-        target_link_libraries(plugin_cpu_test PRIVATE GRMGuitar juce::juce_audio_formats juce::juce_recommended_config_flags)
-        target_compile_definitions(plugin_cpu_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
-        add_executable(editor_snapshot tests/editor_snapshot.cpp)
-        target_link_libraries(editor_snapshot PRIVATE GRMGuitar juce::juce_audio_formats juce::juce_recommended_config_flags)
-        target_compile_definitions(editor_snapshot PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+        # a test built against the plugin's code (editor, processor, look and feel, binary data)
+        function(grmg_add_plugin_test name)
+            add_executable(${name} tests/${name}.cpp)
+            target_link_libraries(${name} PRIVATE GRMGuitar GRMGuitarBinaryData grm_core
+                juce::juce_audio_formats juce::juce_recommended_config_flags)
+            target_compile_definitions(${name} PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+        endfunction()
+
+        grmg_add_plugin_test(plugin_host_test)
+        grmg_add_plugin_test(plugin_cpu_test)
+        grmg_add_plugin_test(editor_snapshot)
+        grmg_add_plugin_test(test_icons)
+        add_test(NAME interface_icons COMMAND test_icons)
     endif()
 endif()
