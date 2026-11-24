@@ -8,20 +8,15 @@
 #include <vector>
 #include <cstdint>
 
+#include "constants.hpp"
 #include "physics.hpp"
 #include "grm.hpp"
 
 namespace grmg
 {
-	constexpr double MU_12AX7 = 100.0;
-	constexpr double G_12AX7 = 2.24e-6;
-	constexpr double V_SAT_TRIODE = 45.0;
-	constexpr double R_GRID_COND = 1.2e3;
-	constexpr double R_GRID_LEAK = 1.0e6;
-
 	struct AmpSpec
 	{
-		const char* name = "5150 High Gain";
+		const char *name = "5150 High Gain";
 		double Vdd = 320.0;
 		double Rp = 100.0e3;
 		double Rk = 1.8e3;
@@ -56,7 +51,7 @@ namespace grmg
 		AmpSpec spec;
 	};
 
-	inline AmpModel amp_network(const AmpSpec& spec)
+	inline AmpModel amp_network(const AmpSpec &spec)
 	{
 		grm::Network net;
 
@@ -79,33 +74,33 @@ namespace grmg
 		const int iVgk = net.index("Vgk"), iVpk = net.index("Vpk"), iA0 = net.index("A0");
 		const int iTr = net.index("transformer_coupling");
 
-		net.add_fn("plate_kcl", { "Vp", "Ip", "Rp", "Vdd_sag" }, [=](const grm::Values& v)
-			{ return (v[iVp] + v[iIp] * v[iRp] - v[iVdd_sag]) / 10.0; }, 1e-5);
+		net.add_fn("plate_kcl", {"Vp", "Ip", "Rp", "Vdd_sag"}, [=](const grm::Values &v)
+				   { return (v[iVp] + v[iIp] * v[iRp] - v[iVdd_sag]) / 10.0; }, 1e-5);
 
-		net.add_fn("cathode_kcl", { "Vk", "Ip", "Rk" }, [=](const grm::Values& v)
-			{ return (v[iVk] - v[iIp] * v[iRk]) * 10.0; }, 1e-5);
+		net.add_fn("cathode_kcl", {"Vk", "Ip", "Rk"}, [=](const grm::Values &v)
+				   { return (v[iVk] - v[iIp] * v[iRk]) * 10.0; }, 1e-5);
 
-		net.add_fn("power_supply_sag", { "Vdd_sag", "Vdd", "R_supply", "Ip" }, [=](const grm::Values& v)
-			{
+		net.add_fn("power_supply_sag", {"Vdd_sag", "Vdd", "R_supply", "Ip"}, [=](const grm::Values &v)
+				   {
 				const double total_Ip = v[iIp] * 4.0;
 				return (v[iVdd_sag] - (v[iVdd] - v[iR_supply] * total_Ip)) / 10.0; }, 1e-5);
 
-		net.add_fn("transformer_warmth_rel", { "transformer_coupling", "A0" }, [=](const grm::Values& v)
-			{
+		net.add_fn("transformer_warmth_rel", {"transformer_coupling", "A0"}, [=](const grm::Values &v)
+				   {
 				const double expected_tr = 0.75 + 0.25 * std::tanh(v[iA0] / 40.0);
 				return (v[iTr] - expected_tr) / 10.0; }, 1e-5);
 
-		net.add_sum("grid_bias", { {"Vgk", 1.0}, {"Vk", 1.0} }, 0.0, 1e-6);
-		net.add_sum("plate_cathode", { {"Vpk", 1.0}, {"Vp", -1.0}, {"Vk", 1.0} }, 0.0, 1e-6);
+		net.add_sum("grid_bias", {{"Vgk", 1.0}, {"Vk", 1.0}}, 0.0, 1e-6);
+		net.add_sum("plate_cathode", {{"Vpk", 1.0}, {"Vp", -1.0}, {"Vk", 1.0}}, 0.0, 1e-6);
 
-		net.add_fn("triode_characteristic", { "Ip", "Vgk", "Vpk" }, [=](const grm::Values& v)
-			{
+		net.add_fn("triode_characteristic", {"Ip", "Vgk", "Vpk"}, [=](const grm::Values &v)
+				   {
 				const double Veff = std::max(v[iVgk] + v[iVpk] / MU_12AX7, 0.0);
 				const double Ip_phys = G_12AX7 * std::pow(Veff, 1.5);
 				return (v[iIp] - Ip_phys) * 1e4; }, 1e-5);
 
-		net.add_fn("small_signal_gain", { "A0", "Ip", "Vgk", "Vpk", "Rp" }, [=](const grm::Values& v)
-			{
+		net.add_fn("small_signal_gain", {"A0", "Ip", "Vgk", "Vpk", "Rp"}, [=](const grm::Values &v)
+				   {
 				const double Veff = std::max(v[iVgk] + v[iVpk] / MU_12AX7, 1e-4);
 				const double gm = 1.5 * G_12AX7 * std::sqrt(Veff);
 				const double rp = std::max(MU_12AX7 / std::max(gm, 1e-9), 10e3);
@@ -204,7 +199,7 @@ namespace grmg
 		double up_s0 = 0.0, up_s1 = 0.0, up_s2 = 0.0, up_s3 = 0.0;
 		double dn_s0 = 0.0, dn_s1 = 0.0;
 
-		inline void up(double in, double& even, double& odd) noexcept
+		inline void up(double in, double &even, double &odd) noexcept
 		{
 			constexpr double a0 = 0.14134152, a1 = 0.58999482;
 			even = in;
@@ -285,7 +280,7 @@ namespace grmg
 			hb_b_.reset();
 		}
 
-		void set_model(const AmpModel& m)
+		void set_model(const AmpModel &m)
 		{
 			model_ = m;
 			update_coefficients();
@@ -296,7 +291,7 @@ namespace grmg
 			noise_amount_ = std::clamp(amount, 0.0, 2.0);
 		}
 
-		void process(float* buffer, int num_samples)
+		void process(float *buffer, int num_samples)
 		{
 			if (!buffer || num_samples <= 0)
 				return;
@@ -464,9 +459,7 @@ namespace grmg
 			if (noise_hum_phase_ > TWOPI)
 				noise_hum_phase_ -= TWOPI;
 
-			const double hum = 0.4 * std::sin(noise_hum_phase_)
-				+ 0.15 * std::sin(2.0 * noise_hum_phase_)
-				+ 0.05 * std::sin(3.0 * noise_hum_phase_);
+			const double hum = 0.4 * std::sin(noise_hum_phase_) + 0.15 * std::sin(2.0 * noise_hum_phase_) + 0.05 * std::sin(3.0 * noise_hum_phase_);
 
 			const double total_noise =
 				thermal_noise_coef_ * white +
@@ -571,7 +564,7 @@ namespace grmg
 				in = GRID_KNEE + e / (1.0 + e * 0.5);
 			}
 
-			double& bias = bias_shift_[st];
+			double &bias = bias_shift_[st];
 			const double v_grid = in - bias;
 
 			if (v_grid > 0.0)
@@ -656,7 +649,8 @@ namespace grmg
 			delay_write_ = (delay_write_ + 1) & (DELAY_BUFFER_SIZE - 1);
 
 			lfo_phase_ += 2.0 * PI * 0.3 / sr_;
-			if (lfo_phase_ > 2.0 * PI) lfo_phase_ -= 2.0 * PI;
+			if (lfo_phase_ > 2.0 * PI)
+				lfo_phase_ -= 2.0 * PI;
 			const double lfo = 0.5 + 0.5 * std::sin(lfo_phase_);
 
 			const double delay_ms = 1.5 + lfo * 1.0;
@@ -689,12 +683,12 @@ namespace grmg
 			current_mix_ = target_mix_;
 		}
 
-		void set_clean_model(const AmpModel& m)
+		void set_clean_model(const AmpModel &m)
 		{
 			clean_channel.set_model(m);
 		}
 
-		void set_lead_model(const AmpModel& m)
+		void set_lead_model(const AmpModel &m)
 		{
 			lead_channel.set_model(m);
 		}
@@ -710,7 +704,7 @@ namespace grmg
 			target_mix_ = std::clamp(mix, 0.0, 1.0);
 		}
 
-		void process(float* buffer, int num_samples)
+		void process(float *buffer, int num_samples)
 		{
 			if (!buffer || num_samples <= 0 || num_samples > static_cast<int>(temp_buffer_.size()))
 				return;

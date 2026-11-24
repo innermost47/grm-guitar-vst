@@ -19,16 +19,12 @@
 #include <string>
 #include <vector>
 
+#include "constants.hpp"
 #include "playability.hpp"
 #include "song.hpp"
 
 namespace grmg
 {
-
-    // the 12 roots, with both names for the black keys (the menus show both)
-    constexpr const char *ROOT_NAMES[12] = {"C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"};
-    constexpr const char *ROOT_LABELS[12] = {"C", "C# / Db", "D", "D# / Eb", "E", "F", "F# / Gb", "G", "G# / Ab", "A", "A# / Bb", "B"};
-
     struct ChordQuality
     {
         const char *suffix;

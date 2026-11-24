@@ -9,24 +9,11 @@
 #include <cmath>
 #include <string>
 
+#include "constants.hpp"
 #include "grm.hpp"
 
 namespace grmg
 {
-
-    constexpr double PI = 3.14159265358979323846;
-    constexpr double RHO_STEEL = 7850.0; // kg/m^3
-    constexpr double E_STEEL = 2.0e11;   // Pa
-    constexpr double SIGMA_L = 0.0005;   // m
-    constexpr double SIGMA_MU_REL = 0.01;
-    constexpr double SIGMA_T = 0.5;          // N
-    constexpr double PICK_E = 2.5e9;         // Pa (hypothesis)
-    constexpr double PICK_TIP_WIDTH = 0.005; // m (hypothesis)
-    constexpr double PICK_FREE = 0.004;      // m (hypothesis)
-    constexpr double PICK_CONTACT = 0.0015;  // m
-    constexpr double K_FLESH = 2.0e3;        // N/m (hypothesis)
-    constexpr double FINGER_CONTACT = 0.012; // m
-
     inline double dex(double rel) { return rel / grm::LN10; }
 
     // ---------------------------------------------------------------- the string

@@ -15,6 +15,7 @@
 #include <string>
 #include <vector>
 
+#include "constants.hpp"
 #include "fft.hpp"
 #include "guitar_networks.hpp"
 
@@ -22,14 +23,6 @@ namespace grmg
 {
 
     using cplx = std::complex<double>;
-
-    // ============================================================ body and bridge
-    constexpr double GAMMA_AIR = 1.4, R_GAS = 8.314462618, M_AIR = 0.028965, T_AIR = 293.15;
-    constexpr double NU_WOOD = 0.3, BETA_MODAL = 0.5, BRACING = 4.0;
-    constexpr double BRIDGE_VOLUME = 3.2e-5, RHO_BRIDGE = 850.0, BRIDGE_SHARE = 0.2;
-    constexpr double PLATE_RATIOS[5] = {21.26 / 10.21, 34.88 / 10.21, 39.77 / 10.21, 51.04 / 10.21, 60.82 / 10.21};
-    constexpr double MODE_GAINS[7] = {0.9, 1.0, 0.55, 0.45, 0.35, 0.25, 0.18};
-    constexpr double MODE_QS[7] = {16, 22, 25, 28, 30, 32, 35};
 
     inline double coupled(double fh, double ft, double k, double sign)
     {

@@ -17,6 +17,7 @@
 #include <cmath>
 #include <complex>
 
+#include "constants.hpp"
 #include "model.hpp"
 
 namespace grmg
@@ -26,7 +27,7 @@ namespace grmg
 	// call (C99 Annex G), several times slower in the loops that run for every mode at every sample
 	inline cplx cmul(cplx a, cplx b)
 	{
-		return { a.real() * b.real() - a.imag() * b.imag(), a.real() * b.imag() + a.imag() * b.real() };
+		return {a.real() * b.real() - a.imag() * b.imag(), a.real() * b.imag() + a.imag() * b.real()};
 	}
 	inline double cmul_re(cplx a, cplx b) { return a.real() * b.real() - a.imag() * b.imag(); }
 
@@ -51,11 +52,11 @@ namespace grmg
 	{
 		int string = 0, fret = 0;
 		Place place;
-		double gain = 0;     // release height / Y_REF
-		double tau = 0;      // s, release time
+		double gain = 0;	 // release height / Y_REF
+		double tau = 0;		 // s, release time
 		double pluck = 0.22; // apex of the triangle, share of the vibrating length
 		Kind kind = Kind::strike;
-		const Palm* palm = nullptr;
+		const Palm *palm = nullptr;
 	};
 
 	class StringVoice
@@ -72,8 +73,8 @@ namespace grmg
 		}
 
 		// pickup_x > 0: a magnetic pickup listens at that distance from the saddle (render's `pickup` output)
-		void start(const Pluck& p, const Body& body, const StringLosses& losses, double brightness, double sr,
-			const std::array<double, 3>& pickup_xs = std::array<double, 3>{ 0.0, 0.0, 0.0 })
+		void start(const Pluck &p, const Body &body, const StringLosses &losses, double brightness, double sr,
+				   const std::array<double, 3> &pickup_xs = std::array<double, 3>{0.0, 0.0, 0.0})
 		{
 			what = p;
 			sr_ = sr;
@@ -82,7 +83,7 @@ namespace grmg
 			t_ = 0;
 			fade_ = 1.0;
 			fade_step_ = 0.0;
-			const Place& pl = p.place;
+			const Place &pl = p.place;
 			const bool regain = p.palm && p.kind == Kind::strike;
 			std::array<double, MAX_MODES> amp{};
 			double peak = 0.0;
@@ -131,8 +132,8 @@ namespace grmg
 					const cplx base = rate_[m] * (pl.Leff / (pl.T * n * PI));
 					for (int k = 0; k < 3; ++k)
 						pick3_[k][m] = pickup_xs[k] > 0
-						? base * std::sin(n * PI * pickup_xs[k] / pl.Leff)
-						: cplx(0.0, 0.0);
+										   ? base * std::sin(n * PI * pickup_xs[k] / pl.Leff)
+										   : cplx(0.0, 0.0);
 					q_[m] = regain ? sp * PALM_DROP * PALM_RECOVER : 0.0;
 					if (regain)
 						z_[m] *= std::exp(q_[m]); // once the palm is back
@@ -142,8 +143,8 @@ namespace grmg
 					// the palm damps it more than it rings: it only creeps back to rest
 					const double r = std::sqrt(sg * sg - w * w), l1 = -sg + r, l2 = -sg - r;
 					const size_t m = (size_t)over_++;
-					oc_[m] = { scale * a * l2 / (l2 - l1), -scale * a * l1 / (l2 - l1) };
-					od_[m] = { std::exp(l1 / sr_), std::exp(l2 / sr_) };
+					oc_[m] = {scale * a * l2 / (l2 - l1), -scale * a * l1 / (l2 - l1)};
+					od_[m] = {std::exp(l1 / sr_), std::exp(l2 / sr_)};
 				}
 			}
 			// the onset: the string leaves the pick in tau, the force rises from where it was
@@ -182,9 +183,9 @@ namespace grmg
 			note = -1;
 		}
 
-		void render(double* out, int samples,
-			const std::array<double*, 3>& heard = std::array<double*, 3>{ nullptr, nullptr, nullptr },
-			const double* feedback = nullptr)
+		void render(double *out, int samples,
+					const std::array<double *, 3> &heard = std::array<double *, 3>{nullptr, nullptr, nullptr},
+					const double *feedback = nullptr)
 		{
 			if (!active)
 				return;
@@ -251,7 +252,7 @@ namespace grmg
 				}
 				for (int m = 0; m < over_; ++m)
 				{
-					auto& c = oc_[(size_t)m];
+					auto &c = oc_[(size_t)m];
 					sum += c[0] + c[1];
 					c[0] *= od_[(size_t)m][0];
 					c[1] *= od_[(size_t)m][1];
@@ -281,7 +282,7 @@ namespace grmg
 				peak = std::max(peak, std::abs(sum));
 				++t_;
 			}
-			if (peak < 1e-7 && t_ >(long)(0.05 * sr_))
+			if (peak < 1e-7 && t_ > (long)(0.05 * sr_))
 				active = false;
 		}
 
@@ -306,8 +307,8 @@ namespace grmg
 		int fret = 0;
 		bool palm = false;
 
-		void set(const Place& pl, const Palm* palm_net, const Body& body, const StringLosses& losses, double sr,
-			const std::array<double, 3>& pickup_xs = std::array<double, 3>{ 0.0, 0.0, 0.0 })
+		void set(const Place &pl, const Palm *palm_net, const Body &body, const StringLosses &losses, double sr,
+				 const std::array<double, 3> &pickup_xs = std::array<double, 3>{0.0, 0.0, 0.0})
 		{
 			sr_ = sr;
 			count_ = 0;
@@ -327,8 +328,8 @@ namespace grmg
 				const cplx base = cplx(-sg, 2 * PI * f) * gain_ * (pl.Leff / (pl.T * n * PI));
 				for (int p = 0; p < 3; ++p)
 					pick3_[p][k] = pickup_xs[p] > 0
-					? base * std::sin(n * PI * pickup_xs[p] / pl.Leff)
-					: cplx(0.0, 0.0);
+									   ? base * std::sin(n * PI * pickup_xs[p] / pl.Leff)
+									   : cplx(0.0, 0.0);
 				z_[k] = 0.0;
 			}
 			for (int k = count_; k < SYMPATHY_MODES; ++k)
@@ -349,8 +350,8 @@ namespace grmg
 		}
 
 		// in: the force of the other strings on the bridge; adds its own force to out
-		void render(const double* in, double* out, int samples,
-			const std::array<double*, 3>& heard = std::array<double*, 3>{ nullptr, nullptr, nullptr })
+		void render(const double *in, double *out, int samples,
+					const std::array<double *, 3> &heard = std::array<double *, 3>{nullptr, nullptr, nullptr})
 		{
 			if (!on)
 				return;

@@ -21,19 +21,13 @@
 #include <string>
 #include <vector>
 
+#include "constants.hpp"
 #include "grm.hpp"
 #include "model.hpp"
 #include "song.hpp"
 
 namespace grmg
 {
-
-    constexpr double FINGER_BEHIND = 0.010;  // m: a fingertip presses this far behind its fret wire
-    constexpr double TIP_SIGMA = 0.003;      // m: how far a fingertip may sit from that place
-    constexpr double FINGER_SPREAD = 0.022;  // m: the natural distance between two neighbouring fingertips
-    constexpr double HAND_SIGMA = 0.015;     // m: how much the hand gives, per finger gap
-    constexpr double HAND_TENSION_MAX = 4.0; // strain (cost of the hand network) the hand can still hold
-
     inline double fret_position(int fret, double L = STRING_SPECS[0].L)
     { // m from the nut
         return L * (1.0 - std::pow(2.0, -fret / 12.0));

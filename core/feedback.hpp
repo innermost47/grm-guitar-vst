@@ -8,17 +8,14 @@
 #pragma once
 
 #include <algorithm>
-#include <array>
 #include <cmath>
 #include <vector>
 
+#include "constants.hpp"
 #include "grm.hpp"
 
 namespace grmg
 {
-
-	constexpr double C_AIR_DEFAULT = 343.0; // speed of sound in air (m/s at 20 deg C)
-
 	enum class FeedbackTarget
 	{
 		Auto = 0,		 // phase-constructive harmonic chosen naturally by the distance

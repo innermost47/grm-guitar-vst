@@ -6,3 +6,4 @@ out/
 CMakeUserPresets.json
 *.wav
 __pycache__/
+CLAUDE.md

@@ -26,6 +26,7 @@
 #include <utility>
 #include <vector>
 
+#include "constants.hpp"
 #include "model.hpp"
 #include "ringing.hpp"
 #include "song.hpp"
@@ -52,30 +53,6 @@ namespace grmg
 		int squeak = -1;	 // squeak: index of the sound
 		double extra = 40.0; // damp: extra losses per second (at the fundamental; more for the higher modes)
 	};
-
-	// how a note stops (s^-1, extra losses at the fundamental): a fretted note dies as the finger relaxes on it, an
-	// open string waits for a hand to touch it (softer); a lifted finger leaves the string to the lift pluck
-	constexpr double RELEASE_FRETTED = 32.0, RELEASE_OPEN = 14.0, RELEASE_LIFT = 45.0;
-	// a hand laid flat on the strings: as fast as a finger leaving its fret (the flesh covers the strings at once)
-	constexpr double RELEASE_HAND = 45.0;
-	// a dead note: a finger rests on the string without pressing it (no measured value: a damping strong enough that
-	// no pitch is left after a few periods of the low strings, and the delay of the pick leaving the string)
-	constexpr double RELEASE_DEAD = 400.0, DEAD_TOUCH = 0.002;
-	// a chord released: the fingers leave one after the other (s between strings, before the player's own spread)
-	constexpr double RELEASE_SPREAD = 0.006;
-	// the palm: its edge presses less (share of the pressure on the strings next to the ones asked); how much harder
-	// it presses on a harder stroke (exponent of the stroke's force); how fast it stops a string it lands on (s^-1)
-	constexpr double PALM_EDGE = 0.45, PALM_FORCE_FOLLOW = 0.3, PALM_LAND_DAMP = 50.0;
-	// the damp of a string the palm lands on is given at its fundamental, and the engine adds more for the higher modes:
-	// the palm network's fundamental damping times this spread covers the band its modes are damped over
-	constexpr double PALM_LAND_SPREAD = 2.0;
-	// the sweep: the mass that carries the pick across the strings (kg): the pick and the fingers holding it, the
-	// arm behind a supple wrist; each string it pushes aside takes some of its energy
-	constexpr double HAND_MASS = 0.04, SWEEP_LOSS_MAX = 0.6;
-	// the muscle: recovery time (s), effort of a stroke of force 1 (fatigue units), how much fatigue weakens the stroke
-	constexpr double MUSCLE_RECOVER = 2.0, MUSCLE_EFFORT = 0.04, MUSCLE_WEAKEN = 0.3, MUSCLE_LIMITS[2] = {0.75, 1.1};
-	// fingers plucking together (a pinch): spread of their timing (s); the thumb leads a little
-	constexpr double PINCH_SPREAD = 0.004, THUMB_LEAD = 0.003, PINCH_FORCE_SIGMA = 0.06;
 
 	class Performance
 	{

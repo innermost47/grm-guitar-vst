@@ -14,8 +14,16 @@ option(GRMG_BUILD_PLUGIN "Build the JUCE plugin (downloads JUCE)" ON)
 option(GRMG_BUILD_TESTS "Build the tests and the offline renderer" OFF)
 option(GRMG_PORTABLE_CPU "Disable x86-64-v3 / AVX2 requirements for older CPUs" OFF)
 
-add_library(grm_core INTERFACE)
-target_include_directories(grm_core INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/core)
+include(FetchContent)
+FetchContent_Declare(cppgrm
+    GIT_REPOSITORY https://github.com/innermost47/cppgrm.git
+    GIT_TAG        main
+    GIT_SHALLOW    ON
+)
+FetchContent_MakeAvailable(cppgrm)
+
+add_library(grm_core ALIAS cppgrm)
+
 
 if(GRMG_BUILD_TESTS)
     enable_testing()
@@ -33,8 +41,6 @@ if(GRMG_BUILD_TESTS)
 endif()
 
 if(GRMG_BUILD_PLUGIN)
-    include(FetchContent)
-    set(FETCHCONTENT_QUIET OFF)
     FetchContent_Declare(JUCE
         GIT_REPOSITORY https://github.com/juce-framework/JUCE.git
         GIT_TAG 8.0.15

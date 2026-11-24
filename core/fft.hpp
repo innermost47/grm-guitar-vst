@@ -36,7 +36,7 @@ namespace grmg
         }
         for (size_t len = 2; len <= n; len <<= 1)
         {
-            const double ang = 2 * 3.14159265358979323846 / (double)len * (inverse ? 1 : -1);
+            const double ang = 2 * PI / (double)len * (inverse ? 1 : -1);
             const cplx wl(std::cos(ang), std::sin(ang));
             for (size_t i = 0; i < n; i += len)
             {
