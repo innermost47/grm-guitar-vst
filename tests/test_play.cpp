@@ -708,6 +708,11 @@ int main() {
         ok("hard attack: the frets compress the lows and open the highs", highs_frets - lows_frets > 6.0);
         ok("hard attack: a soft stroke does not reach the frets",
            std::abs(bands(note(frets, 0, 0.2, 0.3), 0.0, 0.3).second - bands(note(free, 0, 0.2, 0.3), 0.0, 0.3).second) < 0.5);
+        // pushed onto the fret, the string is released from it bent there: the fret takes energy, it never adds any
+        // (pushed out of the fret at once, it would be thrown off with a jolt)
+        const double held = rms(note(frets, 0, 2.4, 0.3), sr, 0.0, 0.3), open = rms(note(free, 0, 2.4, 0.3), sr, 0.0, 0.3);
+        std::printf("     hard attack: level of a hard stroke %.3f on the frets, %.3f free\n", held, open);
+        ok("hard attack: the frets never add energy", held < open);
 
         // the pitch glide: a hard stroke starts sharp and settles, a soft one does not move
         Voicing glide = free;

@@ -223,6 +223,26 @@ int main(int argc, char** argv) {
     auto* o = dynamic_cast<GRMGuitarProcessor*>(other.get());
     check("the patterns come back with the session", o->getPatternCount() == 2 && o->getEditingPattern() == 1
                                                          && o->getSong().notes.size() == 1);
+    {
+        // a session saved before the attack sliders existed, opened in an instance where they were moved: they come
+        // back at their defaults
+        auto before = g->params.copyState().createCopy();
+        for (const auto& tunable : VOICE_TUNABLES)
+            for (int k = before.getNumChildren() - 1; k >= 0; --k)
+                if (before.getChild(k).getProperty("id").toString() == GuitarTrack::paramId(0, tunable.id))
+                    before.removeChild(k, nullptr);
+        juce::MemoryBlock session;
+        if (auto xml = before.createXml()) juce::AudioProcessor::copyXmlToBinary(*xml, session);
+        auto* moved = o->params.getParameter(GuitarTrack::paramId(0, VOICE_TUNABLES[0].id));
+        moved->setValueNotifyingHost(1.0f - moved->getDefaultValue());
+        o->setStateInformation(session.getData(), (int) session.getSize());
+        bool defaults = true;
+        for (const auto& tunable : VOICE_TUNABLES) {
+            auto* param = o->params.getParameter(GuitarTrack::paramId(0, tunable.id));
+            defaults = defaults && param && std::abs(param->getValue() - param->getDefaultValue()) < 1e-6f;
+        }
+        check("a session older than a parameter opens it at its default", defaults);
+    }
     // ---------------------------------------------------------------- several guitars
     g->params.getParameter("midi_mode")->setValueNotifyingHost(0.0f);
     {

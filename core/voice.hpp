@@ -15,6 +15,7 @@
 // driven by the velocity of the bridge, V = Y(f_n) F_others (sympathetic_response in grm_guitar.py).
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <complex>
@@ -38,6 +39,24 @@ namespace grmg
 	{
 		p = std::min(std::max(p, 0.02), 0.98);
 		return 2.0 * std::sin(n * PI * p) / (n * n * PI * PI * p * (1.0 - p));
+	}
+
+	// the same for a string pushed by the pick (apex 1 at xp) onto a fret at xf, where it lies at height hf (a share
+	// of the apex): a line with two bends. The sine coefficients of a broken line held at both ends are
+	// -2 L / (n pi)^2 sum(change of slope at each bend * sin(n pi x_bend / L))
+	inline double pressed_amplitude(int n, double L, double xp, double xf, double hf)
+	{
+		const bool fret_first = xf < xp;
+		const std::array<double, 4> x = {0.0, fret_first ? xf : xp, fret_first ? xp : xf, L};
+		const std::array<double, 4> y = {0.0, fret_first ? hf : 1.0, fret_first ? 1.0 : hf, 0.0};
+		double sum = 0.0;
+		for (size_t k = 1; k < 3; ++k)
+		{
+			const double before = (y[k] - y[k - 1]) / std::max(x[k] - x[k - 1], 1e-9);
+			const double after = (y[k + 1] - y[k]) / std::max(x[k + 1] - x[k], 1e-9);
+			sum += (after - before) * std::sin(n * PI * x[k] / L);
+		}
+		return -2.0 * L / (n * n * PI * PI) * sum;
 	}
 
 	inline double sinc(double x) { return std::abs(x) < 1e-12 ? 1.0 : std::sin(PI * x) / (PI * x); }
@@ -87,20 +106,6 @@ namespace grmg
 			fade_step_ = 0.0;
 			const models::Place &pl = p.place;
 			const bool regain = p.palm && p.kind == models::Kind::strike;
-			std::array<double, MAX_MODES> amp{};
-			double peak = 0.0;
-			int count = 0;
-			for (int n = 1; n <= MAX_MODES; ++n)
-			{
-				const double f = n * pl.f1 * std::sqrt(1.0 + pl.B * n * n);
-				if (f >= 0.45 * sr_)
-					break;
-				double a = n * pluck_amplitude(n, p.pluck) * std::pow((double)n, -(1.0 - brightness) * 0.6);
-				if (p.tau > 0)
-					a *= sinc(f * p.tau);
-				amp[(size_t)count++] = a;
-				peak = std::max(peak, std::abs(a));
-			}
 			// the planes: the pluck's share in each, the share of each one's bridge force that is heard (the plane
 			// along the top keeps its true force inside: its slots hold the heard force, the pickup gets it back)
 			const double angle = (p.up ? voicing.angle_up : voicing.angle_down) * PI / 180.0;
@@ -120,6 +125,28 @@ namespace grmg
 			click_env_ = 0.0;
 			click_decay_ = std::exp(-1.0 / (FRET_CLICK_S * sr_));
 			inv_mass_ = 0.0;
+			// the pick pushes the plane across the top towards the frets: past the last fret's clearance the string
+			// lies on it, and is released from a shape bent there as well (it does not go through the fret)
+			const double apex = Y_REF * p.gain * share[0], xp = p.pluck * pl.Leff;
+			const double over_fret = fret_x > xp ? (pl.Leff - fret_x) / (pl.Leff - xp) : fret_x / xp;
+			const bool pressed = frets && apex * over_fret > clearance_;
+			std::array<std::array<double, MAX_MODES>, PLANES> amp{}; // each plane's modes, from a shape of apex 1
+			double peak = 0.0;
+			int count = 0;
+			for (int n = 1; n <= MAX_MODES; ++n)
+			{
+				const double f = n * pl.f1 * std::sqrt(1.0 + pl.B * n * n);
+				if (f >= 0.45 * sr_)
+					break;
+				double tilt = n * std::pow((double)n, -(1.0 - brightness) * 0.6);
+				if (p.tau > 0)
+					tilt *= sinc(f * p.tau);
+				const double free = pluck_amplitude(n, p.pluck);
+				amp[0][(size_t)count] = tilt * (pressed ? pressed_amplitude(n, pl.Leff, xp, fret_x, clearance_ / apex) : free);
+				amp[1][(size_t)count] = tilt * free;
+				peak = std::max({peak, std::abs(amp[0][(size_t)count]), std::abs(amp[1][(size_t)count])});
+				++count;
+			}
 			// newtons on the bridge: T pi / L * (release height) * (normalised modal amplitudes)
 			const double scale = pl.T * PI / pl.Leff * Y_REF * p.gain;
 			double first = 0.0;
@@ -139,7 +166,7 @@ namespace grmg
 				const double at_fret = frets ? per_newton * std::sin(n * PI * fret_x / pl.Leff) : 0.0;
 				for (int plane = 0; plane < PLANES; ++plane)
 				{
-					const double a = amp[(size_t)k] * share[(size_t)plane] * heard[(size_t)plane];
+					const double a = amp[(size_t)plane][(size_t)k] * share[(size_t)plane] * heard[(size_t)plane];
 					const cplx kept = carried[(size_t)plane][(size_t)k];
 					if (std::abs(a) < 1e-4 * peak && kept == cplx(0.0, 0.0))
 						continue; // inaudible (a node at the pluck point, a plane not plucked, nothing ringing on it)
