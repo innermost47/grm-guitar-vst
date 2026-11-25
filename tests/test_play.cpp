@@ -729,10 +729,13 @@ int main() {
             const double f1 = 82.4;
             return 1200.0 * std::log2(frequency(y, 0.03, 0.13, f1) / frequency(y, 0.9, 1.1, f1));
         };
-        const double hard_glide = settles(glide, 2.4), soft_glide = settles(glide, 0.2), no_glide = settles(free, 2.4);
-        std::printf("     hard attack: pitch glide %.2f cents (hard), %.2f (soft), %.2f (glide off)\n", hard_glide, soft_glide, no_glide);
-        ok("hard attack: a hard stroke starts sharp and settles", hard_glide > 2.0 && hard_glide > 4.0 * std::abs(no_glide) + 1.0);
-        ok("hard attack: a soft stroke hardly glides", soft_glide < 0.25 * hard_glide);
+        // the glide itself: against the same stroke without it (the bridge detunes the plane across the top, which
+        // dies first: the note moves a little without any glide, more under heavy strings)
+        const double no_glide = settles(free, 2.4), soft_off = settles(free, 0.2);
+        const double hard_glide = settles(glide, 2.4) - no_glide, soft_glide = settles(glide, 0.2) - soft_off;
+        std::printf("     hard attack: pitch glide %.2f cents (hard), %.2f (soft); %.2f without it\n", hard_glide, soft_glide, no_glide);
+        ok("hard attack: a hard stroke starts sharp and settles", hard_glide > 2.0);
+        ok("hard attack: a soft stroke hardly glides", std::abs(soft_glide) < 0.25 * hard_glide);
 
         // the pick: it pushes before it lets go (the bridge feels it), the scrape is louder on a wound string
         Voicing push = free;

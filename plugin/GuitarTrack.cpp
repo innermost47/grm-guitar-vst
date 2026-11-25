@@ -51,6 +51,8 @@ models::Settings GuitarTrack::readSettings() const
 	{ return (int)std::lround(param(id)); };
 	models::Settings s;
 	s.open_midi = openNotes();
+	s.string_set = c("string_set");
+	s.scale_mm = std::round(v("scale_mm"));
 	s.string_age = v("string_age");
 	s.brightness = v("brightness");
 	s.core = v("core");

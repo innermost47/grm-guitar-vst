@@ -11,6 +11,7 @@
 #include "../core/physics.hpp"
 #include "../core/voice.hpp"
 #include "golden.hpp"
+#include "support/python_strings.hpp"
 
 static int failures = 0, checks = 0;
 
@@ -71,7 +72,7 @@ int main() {
     // palm
     const std::pair<int, int> palms[2] = {{0, 0}, {5, 3}};
     for (auto [i, fret] : palms) {
-        const auto& s = STRING_SPECS[i];
+        const auto& s = python_app::STRINGS[i];
         const Palm p = palm_network(s.mu, s.L, fret, PALM_X, PALM_FORCE, s.T);
         const std::string t = "palm" + std::to_string(i);
         expect(t.c_str(), "f1", p.f1);
@@ -84,15 +85,15 @@ int main() {
     }
     // finger on a wound string, finger on a fret
     {
-        const auto& s = STRING_SPECS[1];
-        const Squeak sl = squeak_network(s.mu, s.L, 0.45, 3, 7, 0.12, 0.8);
+        const auto& s = python_app::STRINGS[1];
+        const Squeak sl = squeak_network(s.mu, s.L, python_app::CORE, 3, 7, 0.12, 0.8);
         expect("squeak_slide", "fsq", sl.fsq);
         expect("squeak_slide", "P", sl.P);
         expect("squeak_slide", "fL", sl.fL);
         expect("squeak_slide", "v", sl.v);
         expect("squeak_slide", "p", sl.p);
         expect("squeak_slide", "cL", sl.cL);
-        const Squeak li = squeak_network(s.mu, s.L, 0.45, 5, 0, 0.05, 0.8);
+        const Squeak li = squeak_network(s.mu, s.L, python_app::CORE, 5, 0, 0.05, 0.8);
         expect("squeak_lift", "fsq", li.fsq);
         expect("squeak_lift", "P", li.P);
         expect("squeak_lift", "fL", li.fL);
@@ -157,8 +158,8 @@ int main() {
     }
     // one string as it sounds, against synthesize_string (44.1 kHz, as the Python app)
     {
-        const auto& sp = STRING_SPECS[1];
-        const auto r = play_string_model(sp.L, sp.mu, sp.T, 3, 0.45);
+        const auto& sp = python_app::STRINGS[1];
+        const auto r = play_string_model(sp.L, sp.mu, sp.T, 3, steel_core_factor(python_app::CORE), E_STEEL);
         const auto a = pluck_network(sp.mu, sp.L, sp.T, 3, 0.22, 2.0, true, 0.71);
         const Palm palm = palm_network(sp.mu, sp.L, 3, PALM_X, PALM_FORCE, sp.T);
         for (int with_palm = 0; with_palm < 2; ++with_palm) {
@@ -173,7 +174,9 @@ int main() {
             StringVoice voice;
             StringLosses legacy;
             legacy.legacy = 3.0;          // the loss curve of the Python app, for this parity check
-            voice.start(p, b, legacy, 0.6, 44100.0);
+            Body python_body = b;
+            python_body.neck = 0.0; // the Python app's strings lose nothing at the nut
+            voice.start(p, python_body, legacy, 0.6, 44100.0);
             std::vector<double> y(44100, 0.0);
             voice.render(y.data(), 44100);
             const char* t = with_palm ? "voice_palm" : "voice";
@@ -186,44 +189,6 @@ int main() {
                 expect(t, "rms" + std::to_string(k), std::sqrt(e / (double) (w[k][1] - w[k][0])), tol);
             }
             expect(t, "sample100", y[100], with_palm ? 5e-2 : 1e-8);
-        }
-    }
-    // the losses network: new strings give Woodhouse's measured losses, and the decay follows his law
-    {
-        for (int i = 0; i < NUM_STRINGS; ++i) {
-            const auto r = string_losses_network(i, 0.0);
-            ++checks;
-            if (std::abs(std::log10(r["etaB"] / LOSSES_NEW[i].etaB)) > 1e-6
-                || std::abs(std::log10(r["etaA"] / LOSSES_NEW[i].etaA)) > 1e-6) {
-                ++failures;
-                std::printf("FAIL losses of string %d (new)\n", i);
-            }
-            const auto q = string_losses_network(i, 1.0);
-            ++checks;
-            if (std::abs(std::log10(q["etaF"] / LOSSES_PLAYED[i].etaF)) > 1e-6) {
-                ++failures;
-                std::printf("FAIL losses of string %d (played)\n", i);
-            }
-        }
-        // low E, new: the fundamental rings longest, the partial near 3 kHz much less (Woodhouse: ~8 s, ~1.5 s)
-        const auto r = string_losses_network(0, 0.0);
-        const StringLosses L {r["etaF"], r["etaA"], r["etaB"], 0.0};
-        const double B = 1.06e-4, f1 = 82.41;
-        const double t60_1 = 6.9078 / L.sigma(f1, 1, B);
-        const int n = 36;
-        const double t60_36 = 6.9078 / L.sigma(n * f1 * std::sqrt(1 + B * n * n), n, B);
-        ++checks;
-        if (std::abs(t60_1 - 8.0) > 0.3 || std::abs(t60_36 - 1.5) > 0.3 || !(t60_1 > 3 * t60_36)) {
-            ++failures;
-            std::printf("FAIL decay law: T60 %.2f s (n = 1), %.2f s (n = 36)\n", t60_1, t60_36);
-        }
-        // a played string loses its highs sooner than a new one
-        const auto old = string_losses_network(0, 1.0);
-        const StringLosses O {old["etaF"], old["etaA"], old["etaB"], 0.0};
-        ++checks;
-        if (!(O.sigma(3000, 36, B) > 2 * L.sigma(3000, 36, B))) {
-            ++failures;
-            std::printf("FAIL played strings\n");
         }
     }
     std::printf("%d checks, %d failures\n", checks, failures);

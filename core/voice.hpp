@@ -124,11 +124,11 @@ namespace grmg
 			const std::array<double, PLANES> heard = {1.0, radiated};
 			const std::array<double, PLANES> coupling = {1.0, voicing.h_coupling};
 			const std::array<double, PLANES> motion = {1.0, 1.0 / radiated}; // a slot's true force over the one it holds
-			set_coils(pickups);
+			set_coils(pickups, pl.magnetic);
 			const double split = std::pow(2.0, -voicing.split_cents / 1200.0);
 			// the last fret, its distance from the saddle, and the string's height over it: the string runs straight
 			// from the fret it is held on (or the nut) to the saddle, twice the action high there
-			const double fret_x = STRING_SPECS[p.string].L * std::pow(2.0, -NUM_FRETS / 12.0);
+			const double fret_x = pl.L * std::pow(2.0, -NUM_FRETS / 12.0);
 			const bool frets = voicing.action_mm > 0 && pl.Leff > 1.05 * fret_x;
 			clearance_ = frets ? 2.0 * voicing.action_mm / 1000.0 * (pl.Leff - fret_x) / pl.Leff : 0.0;
 			bounce_ = std::min(std::max(voicing.fret_bounce, 0.0), 1.0);
@@ -187,7 +187,7 @@ namespace grmg
 					if (std::abs(a) < 1e-4 * peak && kept == cplx(0.0, 0.0))
 						continue; // inaudible (a node at the pluck point, a plane not plucked, nothing ringing on it)
 					double f = plane == 0 ? f0 : (f0 - detune) * split;
-					double sg = losses.sigma(f0, n, pl.B) + coupling[(size_t)plane] * into_body;
+					double sg = losses.sigma(f0, n, pl.B) + coupling[(size_t)plane] * into_body + body.neck_loss(pl.c, pl.Leff, pl.Zs);
 					double sp = 0.0;
 					if (p.palm)
 					{
@@ -356,6 +356,7 @@ namespace grmg
 		// the coils under the string: their pickup, which coil of it, each slot's true displacement over it per unit of
 		// the slot's force, and its velocity there
 		std::array<MagneticPickup, 3> pickups_{};
+		double magnetic_ = 1.0; // the share of the string a magnetic pickup senses (its iron)
 		int coils_ = 0;
 		std::array<int, MAX_COILS> coil_pickup_{}, coil_index_{};
 		std::array<std::array<double, SLOTS>, MAX_COILS> coil_disp_{};
@@ -404,9 +405,10 @@ namespace grmg
 		using CoilMotion = std::array<std::array<double, MAX_COILS>, PLANES>;
 
 		// the coils of the pickups under the string, in order
-		void set_coils(const std::array<MagneticPickup, 3> &pickups)
+		void set_coils(const std::array<MagneticPickup, 3> &pickups, double magnetic)
 		{
 			pickups_ = pickups;
+			magnetic_ = magnetic;
 			coils_ = 0;
 			for (int q = 0; q < 3; ++q)
 				for (int c = 0; c < pickups[(size_t)q].coils(); ++c)
@@ -450,7 +452,7 @@ namespace grmg
 			{
 				const size_t c = (size_t)b.live[(size_t)k];
 				const int q = coil_pickup_[c];
-				o[(size_t)q + 1] += pickups_[(size_t)q].voltage(y[0][c], v[0][c], y[1][c], v[1][c]);
+				o[(size_t)q + 1] += magnetic_ * pickups_[(size_t)q].voltage(y[0][c], v[0][c], y[1][c], v[1][c]);
 			}
 		}
 
@@ -618,7 +620,7 @@ namespace grmg
 		void start_tension(const models::Place &pl, const models::Voicing &voicing)
 		{
 			// EA from the stiffness: B = pi^3 E d^4 / (64 T L^2) gives the core's d, so EA = 2 L sqrt(E T B / pi)
-			const double ea = 2.0 * pl.Leff * std::sqrt(E_STEEL * pl.T * std::max(pl.B, 0.0) / PI);
+			const double ea = 2.0 * pl.Leff * std::sqrt(pl.E * pl.T * std::max(pl.B, 0.0) / PI);
 			const bool on = voicing.glide > 0 || voicing.longitudinal > 0;
 			tension_k_ = on ? ea / (4.0 * pl.T * pl.T) : 0.0;
 			glide_gain_ = voicing.glide;
@@ -646,7 +648,7 @@ namespace grmg
 			slip_depth_ = depth * voicing.slip_stick * SLIP_MAX_DEPTH;
 			slip_chance_ = SLIP_RATE / sr_;
 			slip_decay_ = std::exp(-1.0 / (SLIP_RECOVER_S * sr_));
-			scrape_ = depth * voicing.scrape * SCRAPE_DEPTH * (STRING_SPECS[p.string].wound ? voicing.wound_scrape : 1.0);
+			scrape_ = depth * voicing.scrape * SCRAPE_DEPTH * (p.place.wound ? voicing.wound_scrape : 1.0);
 			scrape_coef_ = 1.0 - std::exp(-2 * PI * SCRAPE_CUTOFF_HZ / sr_);
 		}
 
@@ -707,7 +709,8 @@ namespace grmg
 				const double f = n * pl.f1 * std::sqrt(1.0 + pl.B * n * n);
 				if (f >= 0.45 * sr)
 					break;
-				double sg = losses.sigma(f, n, pl.B) + body.loss(f, pl.c, pl.Leff, pl.Zs) + body.coupling(f, pl.c, pl.Leff, pl.Zs);
+				double sg = losses.sigma(f, n, pl.B) + body.loss(f, pl.c, pl.Leff, pl.Zs) + body.coupling(f, pl.c, pl.Leff, pl.Zs) +
+							body.neck_loss(pl.c, pl.Leff, pl.Zs);
 				if (palm_net)
 					sg += palm_net->sigma_at((size_t)n - 1);
 				const size_t k = (size_t)count_++;
@@ -715,7 +718,7 @@ namespace grmg
 				drive_[k] = -body.admittance(f) / sr;
 				// its force gain_ Re z on the bridge, as the velocity the pickups hear: a string nobody plays moves little,
 				// each pickup hears it through its coils at the slope at rest (MagneticPickup::small_signal_shape)
-				const cplx base = cplx(-sg, 2 * PI * f) * gain_ * (pl.Leff / (pl.T * n * PI));
+				const cplx base = cplx(-sg, 2 * PI * f) * gain_ * (pl.Leff / (pl.T * n * PI)) * pl.magnetic;
 				for (int p = 0; p < 3; ++p)
 					pick3_[p][k] = base * pickups[(size_t)p].small_signal_shape(n, pl.Leff);
 				z_[k] = 0.0;

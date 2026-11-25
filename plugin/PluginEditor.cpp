@@ -344,13 +344,19 @@ void GRMGuitarEditor::rebuildGuitars()
 	std::vector<juce::String> strings = {"tuning"};
 	for (int i = NUM_STRINGS - 1; i >= 0; --i)
 		strings.push_back(OPEN_NOTE_PARAMS[i]);
-	for (const char *id : {"string_age", "brightness", "core", "stiff"})
+	for (const char *id : {"string_set", "scale_mm", "string_age", "brightness", "core", "stiff"})
 		strings.push_back(id);
 	addTab("Strings", strings, true,
 		   [this](ParamPanel &panel)
 		   {
 			   for (const char *id : OPEN_NOTE_PARAMS)
 				   panel.showOnlyWhen(processor.paramId(id), processor.paramId("tuning"), {CUSTOM_TUNING});
+			   // the wound-core setting: the sets whose wound strings have a steel core (Automatic's always do)
+			   std::vector<int> steelCores = {STRING_SET_AUTOMATIC};
+			   for (int k = 0; k < NUM_STRING_SETS; ++k)
+				   if (STRING_MATERIALS[STRING_SETS[k].wound_material].core_ratio <= 0.0)
+					   steelCores.push_back(k + 1);
+			   panel.showOnlyWhen(processor.paramId("core"), processor.paramId("string_set"), steelCores);
 			   panel.setFooter(std::make_unique<TensionView>(processor), appTheme.dimensions.tensionViewHeight);
 		   });
 	addTab("Attack & palm", withTunables({"attack", "pluck", "force", "pick", "palm_mm", "palm_intensity", "live_palm"}, VOICE_TUNABLES));

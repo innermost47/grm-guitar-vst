@@ -55,12 +55,13 @@ static void engine()
 
     // the low string tuned to B1 sounds B1; a MIDI keyboard's B1 finds it, open
     OfflineRenderer renderer(low, 48000.0);
-    const auto take = renderer.render_live({{0.0, 1.5, 35, 0.8, 1}}, 1.5);
+    // played softly: a slack string goes sharp under a hard stroke (the tension glide, test_play), not its tuning
+    const auto take = renderer.render_live({{0.0, 1.5, 35, 0.2, 1}}, 1.5);
     const auto &pl = renderer.model().place[0][0];
     timbre::PartialTracker tracker(48000.0);
     tracker.track(take.pickup, pl.f1, pl.f1, 0.0, 1.5);
     const double cents = timbre::PartialTracker::cents(tracker.median_frequency(0.6, 1.2), midi_hz(35));
-    std::printf("  B1 on the low string: %.1f cents from tempered (the attack's glide aside)\n", cents);
+    std::printf("  B1 on the low string: %.1f cents from tempered (a soft stroke)\n", cents);
     check(std::abs(cents) < 15.0, "the low string tuned to B1 sounds B1");
     Engine engine;
     engine.prepare(48000.0);

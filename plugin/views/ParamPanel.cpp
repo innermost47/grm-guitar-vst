@@ -135,11 +135,14 @@ void ParamPanel::setFooter(std::unique_ptr<juce::Component> component, int heigh
     layoutContent();
 }
 
-void ParamPanel::showOnlyWhen(const juce::String &id, const juce::String &switchId, std::initializer_list<int> values)
+void ParamPanel::showOnlyWhen(const juce::String &id, const juce::String &switchId, const std::vector<int> &values)
 {
     int mask = 0;
     for (int v : values)
+    {
+        jassert(v >= 0 && v < 31); // a switch of up to 31 entries
         mask |= (1 << v);
+    }
     const auto *value = state.getRawParameterValue(switchId);
     jassert(value != nullptr);
     for (auto &r : rows)

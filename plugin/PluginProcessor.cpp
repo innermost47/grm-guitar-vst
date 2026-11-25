@@ -71,6 +71,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout GRMGuitarProcessor::createLa
 			notes.add(note_name(m));
 		for (int i = 0; i < NUM_STRINGS; ++i)
 			choice(OPEN_NOTE_PARAMS[i], "String " + String(NUM_STRINGS - i) + " open note", notes, TUNINGS[0].midi[i] - OPEN_NOTE_LOWEST);
+		// the set of strings (Automatic: nickel under a magnetic pickup, bronze otherwise) and the scale they span
+		StringArray sets = ui::namesOf(STRING_SETS);
+		sets.insert(STRING_SET_AUTOMATIC, "Automatic");
+		choice("string_set", "String set", sets, STRING_SET_AUTOMATIC);
+		real("scale_mm", "Scale length (mm)", (float)SCALE_MM_MIN, (float)SCALE_MM_MAX, (float)SCALE_MM_DEFAULT, 0.0f, 1.0f);
 		real("string_age", "String age (0 new, 1 played)", 0.0f, 1.0f, 0.0f);
 		real("brightness", "Brightness", 0.0f, 1.0f, 0.6f);
 		real("core", "Wound core", 0.2f, 1.0f, 0.45f);

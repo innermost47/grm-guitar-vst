@@ -28,7 +28,7 @@
 
 namespace grmg
 {
-    inline double fret_position(int fret, double L = STRING_SPECS[0].L)
+    inline double fret_position(int fret, double L = SCALE_DEFAULT_M)
     { // m from the nut
         return L * (1.0 - std::pow(2.0, -fret / 12.0));
     }

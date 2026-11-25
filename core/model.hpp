@@ -19,6 +19,7 @@
 #include "feedback.hpp"
 #include "amp/amp_networks.hpp"
 #include "physics.hpp"
+#include "guitar_strings.hpp"
 
 namespace grmg
 {
@@ -28,6 +29,7 @@ namespace grmg
 	public:
 		models::Settings s;
 		double sample_rate = 48000.0;
+		std::array<models::GuitarString, NUM_STRINGS> strings{};
 		std::array<double, NUM_STRINGS> tension{};
 		std::array<std::array<models::Place, NUM_FRETS>, NUM_STRINGS> place{};
 		std::array<models::StringLosses, NUM_STRINGS> losses{};
@@ -54,11 +56,14 @@ namespace grmg
 		}
 
 		int open_midi(int i) const { return s.open_midi[(size_t)i]; }
-		double core_fraction(int i) const { return STRING_SPECS[i].wound ? s.core : 1.0; }
+		const models::GuitarString &string(int i) const { return strings[(size_t)i]; }
+		// the core against the diameter of an all-steel string of the same mass (the squeak network's measure)
+		double core_fraction(int i) const { return strings[(size_t)i].bending / steel_equivalent_diameter(strings[(size_t)i].mu); }
 
 		static bool same_strings(const models::Settings &a, const models::Settings &b)
 		{
-			return a.open_midi == b.open_midi && std::abs(a.core - b.core) < 1e-12 && a.stiff == b.stiff;
+			return a.open_midi == b.open_midi && string_set_index(a) == string_set_index(b) &&
+				   std::abs(a.scale_mm - b.scale_mm) < 1e-9 && std::abs(a.core - b.core) < 1e-12 && a.stiff == b.stiff;
 		}
 		static bool same_attack(const models::Settings &a, const models::Settings &b)
 		{
@@ -157,8 +162,8 @@ namespace grmg
 		{
 			for (int i = 0; i < NUM_STRINGS; ++i)
 			{
-				const auto r = string_losses_network(i, s.string_age);
-				losses[(size_t)i] = {r["etaF"], r["etaA"], r["etaB"], 0.0};
+				const auto r = string_losses_network(strings[(size_t)i], s.string_age);
+				losses[(size_t)i] = {r["etaF"], r["etaA"], r["etaB"], 0.0, r["etaA_sqrt"]};
 			}
 		}
 
@@ -167,6 +172,7 @@ namespace grmg
 			s = settings;
 			sample_rate = sr;
 			const bool keep_strings = previous && same_strings(previous->s, s);
+			strings = guitar_strings(s);
 			if (keep_strings)
 			{
 				tension = previous->tension;
@@ -177,11 +183,14 @@ namespace grmg
 			{
 				for (int i = 0; i < NUM_STRINGS; ++i)
 				{
-					const auto &sp = STRING_SPECS[i];
-					tension[(size_t)i] = tune_string_model(sp.L, sp.mu, midi_hz(open_midi(i)), core_fraction(i))["T"];
+					const auto &g = strings[(size_t)i];
+					const double bend = bending_factor(g.bending, g.mu);
+					// the tension the note asks (it does not depend on the stiffness), then the core's modulus under it
+					tension[(size_t)i] = tune_string_model(g.L, g.mu, midi_hz(open_midi(i)), bend, g.material->E)["T"];
+					const double E = string_modulus(g, tension[(size_t)i]);
 					for (int f = 0; f < NUM_FRETS; ++f)
 					{
-						const auto r = play_string_model(sp.L, sp.mu, tension[(size_t)i], f, core_fraction(i));
+						const auto r = play_string_model(g.L, g.mu, tension[(size_t)i], f, bend, E);
 						models::Place &p = place[(size_t)i][(size_t)f];
 						p.f1 = r["f1"];
 						p.B = s.stiff ? r["B"] : 0.0;
@@ -189,10 +198,14 @@ namespace grmg
 						p.Leff = r["Leff"];
 						p.c = r["c"];
 						p.Zs = r["Zs"];
+						p.L = g.L;
+						p.E = E;
+						p.magnetic = g.magnetic;
+						p.wound = g.wound;
 					}
 				}
 				for (int f = 0; f < NUM_FRETS; ++f)
-					action[(size_t)f] = action_network(STRING_SPECS[0].L, f);
+					action[(size_t)f] = action_network(strings[0].L, f);
 			}
 			solve_losses();
 			solve_pickup();
@@ -230,7 +243,7 @@ namespace grmg
 				for (int i = 0; i < NUM_STRINGS; ++i)
 					for (int f = 0; f < NUM_FRETS; ++f)
 					{
-						const auto &sp = STRING_SPECS[i];
+						const auto &sp = strings[(size_t)i];
 						const auto a = pluck_network(sp.mu, sp.L, tension[(size_t)i], f, s.pluck, s.force, s.pick, s.pick_mm);
 						y0[(size_t)i][(size_t)f] = a["y0"];
 						tau[(size_t)i][(size_t)f] = a["tau"];
@@ -293,7 +306,7 @@ namespace grmg
 				for (int i = 0; i < NUM_STRINGS; ++i)
 					for (int f = 0; f < NUM_FRETS; ++f)
 					{
-						const auto &sp = STRING_SPECS[i];
+						const auto &sp = strings[(size_t)i];
 						palm[(size_t)i][(size_t)f] =
 							std::make_shared<const models::Palm>(palm_network(sp.mu, sp.L, f, x, n, tension[(size_t)i]));
 					}

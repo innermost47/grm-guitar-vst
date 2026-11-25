@@ -192,7 +192,7 @@ static void strings_heard()
 {
     // a humbucker's coils 18 mm apart cancel the low E's partials whose half wave fits between them: n = L / d = 36.
     // Struck softly: struck hard, the pickup's own distortion fills the hole with its neighbours' products (physical)
-    const int null = (int)std::lround(STRING_SPECS[0].L / HUMBUCKER.coil_spacing_m);
+    const int null = (int)std::lround(SCALE_DEFAULT_M / HUMBUCKER.coil_spacing_m);
     const double single = partial_drop(0, null, null / 2, 0.1), hb = partial_drop(1, null, null / 2, 0.1);
     std::printf("  low E, partial %d against %d: single coil %.1f dB, humbucker %.1f dB\n", null, null / 2, single, hb);
     ok("a humbucker cancels the partials its coils straddle", hb < single - 20.0);

@@ -130,6 +130,7 @@ namespace grmg
         b.f_lo = r["f_lo"];
         b.f_hi = r["f_hi"];
         b.fb = r["fb"];
+        b.neck = NECK_CONDUCTANCE;
         return b;
     }
 

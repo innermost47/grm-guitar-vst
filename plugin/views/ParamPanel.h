@@ -11,7 +11,7 @@ public:
     ParamPanel(juce::AudioProcessorValueTreeState &state, const std::vector<juce::String> &ids);
     void resized() override;
     // the row `id` shows only while the parameter `switchId` (a choice or an index) takes one of `values`
-    void showOnlyWhen(const juce::String &id, const juce::String &switchId, std::initializer_list<int> values);
+    void showOnlyWhen(const juce::String &id, const juce::String &switchId, const std::vector<int> &values);
     // a component under the rows (what the parameters above it give), `height` high
     void setFooter(std::unique_ptr<juce::Component> component, int height);
 

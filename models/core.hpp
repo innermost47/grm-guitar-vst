@@ -231,6 +231,10 @@ namespace grmg::models
     struct Place
     {
         double f1 = 0, B = 0, T = 0, Leff = 0, c = 0, Zs = 0;
+        // the string itself: its open length, its core's Young's modulus there (under this tension), what a magnetic
+        // pickup senses of it, wound or plain
+        double L = 0.648, E = 2.0e11, magnetic = 1.0;
+        bool wound = false;
     };
 
     struct Palm
@@ -349,6 +353,11 @@ namespace grmg::models
             return (c / Leff) * Zs * std::max(admittance(freq).real(), 0.0);
         }
 
+        // the other end of the string: the fret (or the nut) and the neck behind it take their share in both planes,
+        // through their conductance `neck` (s/kg): a reflection there keeps 1 - 2 Zs G of the wave, once a period
+        double neck = 0.0;
+        double neck_loss(double c, double Leff, double Zs) const { return (c / Leff) * Zs * neck; }
+
         double coupling(double freq, double c, double Leff, double Zs) const
         {
             return (c / Leff) * Zs * std::abs(admittance(freq));
@@ -447,10 +456,46 @@ namespace grmg::models
         const char *slots[8];
     };
 
-    struct StringSpec
+    // What a string is made of: its core's stiffness, what a magnetic pickup senses of it, its internal losses (the
+    // air's are computed from its size). Losses: Woodhouse's eta_F (frequency-independent) and eta_B (bending),
+    // new and played (dirt between the windings).
+    struct StringMaterial
     {
-        double L, mu, T;
+        const char *name;
+        double E;            // Pa: the core's Young's modulus (nylon: unstressed)
+        double E_per_stress; // the core stiffens under stress: E + this * stress (nylon), 0 for metal
+        double core_ratio;   // a wound string's core against its gauge (0: the wound-core setting, a steel core)
+        bool magnetic_core, magnetic_wrap;
+        double etaF, etaB;               // new
+        double etaF_played, etaB_played; // played
+    };
+
+    // One string of a maker's set: its gauge and its unit weight as the maker's tension chart gives them
+    struct StringGauge
+    {
+        double inches;
+        double unit_weight; // lb per inch
         bool wound;
+    };
+
+    // A set of six strings, low to high, and the materials of its plain and its wound strings (STRING_MATERIALS)
+    struct StringSet
+    {
+        const char *name;
+        int plain_material, wound_material;
+        StringGauge strings[6];
+    };
+
+    // A string as the guitar holds it: its set's string on this guitar's scale
+    struct GuitarString
+    {
+        double L = 0.648;      // m: the scale
+        double mu = 1e-3;      // kg/m
+        double gauge = 5e-4;   // m: outer diameter
+        double bending = 5e-4; // m: the diameter that bends (the core of a wound string)
+        bool wound = false;
+        const StringMaterial *material = nullptr;
+        double magnetic = 1.0; // the share of its section a magnetic pickup senses
     };
 
     struct Tuning
@@ -465,19 +510,17 @@ namespace grmg::models
 
         double etaF = 0, etaA = 0, etaB = 0;
         double legacy = 0;
+        // the air's drag grows with the boundary layer around the string: eta_A = etaA + etaA_sqrt * sqrt(f)
+        // (Valette, via Pate et al. 2014: R_L = 2 pi eta + 2 pi d sqrt(pi eta rho f), eta_A = R_L / mu)
+        double etaA_sqrt = 0;
 
         double sigma(double f, int n, double B) const
         {
             if (legacy > 0)
                 return (1.0 + (f / 1800.0) * (f / 1800.0)) / legacy;
             const double w = 2 * PI * f, b = B * n * n;
-            return 0.5 * w * (etaF + etaA / w + etaB * b) / (1.0 + b);
+            return 0.5 * w * (etaF + (etaA + etaA_sqrt * std::sqrt(f)) / w + etaB * b) / (1.0 + b);
         }
-    };
-
-    struct MeasuredLosses
-    {
-        double etaF, etaA, etaB;
     };
 
     struct FeedbackSpec
@@ -539,6 +582,9 @@ namespace grmg::models
     {
         // the open strings' MIDI notes, low to high (standard tuning by default): a tuning chosen in a list or free
         std::array<int, 6> open_midi = {40, 45, 50, 55, 59, 64};
+        // the strings: a set of STRING_SETS (menu index: 0 Automatic, the set that suits the sensor) on a scale (mm)
+        int string_set = 0;
+        double scale_mm = 648.0;
         double core = 0.45;
         bool stiff = true;
         double string_age = 0.0;

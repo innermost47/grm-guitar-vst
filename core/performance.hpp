@@ -20,6 +20,7 @@
 
 #include <algorithm>
 #include <map>
+#include <optional>
 #include <memory>
 #include <random>
 #include <tuple>
@@ -67,15 +68,15 @@ namespace grmg
 			const auto [x, n] = Model::palm_snap(home + (x_stroke - PALM_X), n_stroke * m.s.palm_intensity);
 			const auto key = std::make_tuple(i, fret, std::lround(x * 1e4), std::lround(std::log10(n) * 1e3),
 											 std::lround(m.tension[(size_t)i] * 1e3));
-			if (std::get<0>(cache_key_) != m.s.open_midi || std::abs(std::get<1>(cache_key_) - m.s.core) > 1e-12)
+			if (!solved_for_ || !Model::same_strings(*solved_for_, m.s))
 			{
 				cache_.clear();
-				cache_key_ = {m.s.open_midi, m.s.core};
+				solved_for_ = m.s;
 			}
 			auto it = cache_.find(key);
 			if (it != cache_.end())
 				return it->second;
-			const auto &sp = STRING_SPECS[i];
+			const auto &sp = m.string(i);
 			const models::Palm *ref = m.palm_ready ? m.palm[(size_t)i][(size_t)fret].get() : nullptr;
 			auto p = std::make_shared<const models::Palm>(palm_network(sp.mu, sp.L, fret, x, n, m.tension[(size_t)i], 4, ref));
 			cache_[key] = p;
@@ -84,7 +85,7 @@ namespace grmg
 
 	private:
 		std::map<std::tuple<int, int, long, long, long>, std::shared_ptr<const models::Palm>> cache_;
-		std::pair<std::array<int, NUM_STRINGS>, double> cache_key_{{-1, -1, -1, -1, -1, -1}, 0.0}; // the strings it was solved for
+		std::optional<models::Settings> solved_for_; // the strings it was solved for
 	};
 
 	class Compiler
@@ -325,7 +326,7 @@ namespace grmg
 			};
 			for (int i = 0; i < NUM_STRINGS; ++i)
 			{
-				const auto &sp = STRING_SPECS[i];
+				const auto &sp = m.string(i);
 				std::vector<models::Played> mine;
 				for (const auto &p : played)
 					if (p.string == i)
@@ -473,7 +474,7 @@ namespace grmg
 			for (size_t j = 0; j + 1 < strings.size(); ++j)
 			{
 				const int i = strings[j];
-				const double leff = STRING_SPECS[i].L * std::pow(2.0, -std::max(frets[j], 0) / 12.0);
+				const double leff = m.string(i).L * std::pow(2.0, -std::max(frets[j], 0) / 12.0);
 				const double x = std::min(std::max(stroke.p, 0.05), 0.95);
 				const double k = m.tension[(size_t)i] / (leff * x * (1.0 - x));
 				const double d = FULL_DEPTH * std::min(1.0, std::max(base[j], 0.0));
@@ -609,7 +610,7 @@ namespace grmg
 
 		void add_squeak(Performance &perf, const Model &m, int i, int from, int to, double beat, double dur, unsigned seed)
 		{
-			const auto &sp = STRING_SPECS[i];
+			const auto &sp = m.string(i);
 			const models::Squeak v = squeak_network(sp.mu, sp.L, m.core_fraction(i), from, to, dur, m.s.finger_force);
 			std::vector<double> bumps;
 			if (from > 0 && to > 0)

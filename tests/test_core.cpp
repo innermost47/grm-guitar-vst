@@ -10,14 +10,9 @@
 
 #include "../core/guitar_networks.hpp"
 #include "golden.hpp"
+#include "support/python_strings.hpp"
 
-struct Strings { double L, mu, T, target; bool wound; };
-// the same six strings as grm_guitar.py (STRINGS)
-static const Strings STRINGS[6] = {
-    {0.648, 0.0061370673, 70.0, 82.4069, true}, {0.648, 0.0034443134, 70.0, 110.0, true},
-    {0.648, 0.0019330657, 70.0, 146.832, true}, {0.648, 0.0010848655, 70.0, 196.0, false},
-    {0.648, 0.0006834364, 70.0, 246.942, false}, {0.648, 0.0003835658, 70.0, 329.628, false},
-};
+using python_app::STRINGS;
 
 static int failures = 0, checks = 0;
 
@@ -56,18 +51,19 @@ static void check_sigma(const char* test, const char* node, const grm::Result& r
 int main() {
     for (int i = 0; i < 6; ++i) {
         const auto& s = STRINGS[i];
-        const double core = s.wound ? 0.45 : 1.0;
+        // the Python app's strings: a steel core (all of it for a plain string), of steel's modulus
+        const double core = grmg::steel_core_factor(s.wound ? python_app::CORE : 1.0);
         for (int fret : {0, 5}) {
-            auto net = grmg::string_network(fret, core);
-            auto r = grmg::play_string_model(s.L, s.mu, s.T, fret, core);
+            auto net = grmg::string_network(fret, core, grmg::E_STEEL);
+            auto r = grmg::play_string_model(s.L, s.mu, s.T, fret, core, grmg::E_STEEL);
             const std::string t = "string" + std::to_string(i) + "_fret" + std::to_string(fret);
             for (const char* n : {"f1", "c", "B", "Zs", "Leff", "d"}) {
                 check(t.c_str(), n, nullptr, r);
                 check_sigma(t.c_str(), n, r, net.index(n));
             }
         }
-        auto net = grmg::string_network(0, core);
-        auto r = grmg::tune_string_model(s.L, s.mu, s.target, core);
+        auto net = grmg::string_network(0, core, grmg::E_STEEL);
+        auto r = grmg::tune_string_model(s.L, s.mu, s.target, core, grmg::E_STEEL);
         const std::string t = "tune" + std::to_string(i);
         for (const char* n : {"T", "c", "B"}) {
             check(t.c_str(), n, nullptr, r);

@@ -217,14 +217,74 @@ namespace grmg
 
     constexpr int NUM_ARPEGGIO_PATTERNS = (int)(sizeof(ARPEGGIO_PATTERNS) / sizeof(ARPEGGIO_PATTERNS[0]));
 
-    constexpr models::StringSpec STRING_SPECS[NUM_STRINGS] = {
-        {0.648, 0.0061370673, 70.0, true},
-        {0.648, 0.0034443134, 70.0, true},
-        {0.648, 0.0019330657, 70.0, true},
-        {0.648, 0.0010848655, 70.0, false},
-        {0.648, 0.0006834364, 70.0, false},
-        {0.648, 0.0003835658, 70.0, false},
+    // ---- the strings: materials and makers' sets
+    constexpr double INCH_M = 0.0254;
+    constexpr double LB_PER_INCH_KG_M = 17.857967; // a unit weight in lb/in, in kg/m
+    // the air around a string (Pate et al. 2014, after Valette)
+    constexpr double AIR_VISCOSITY = 1.8e-5; // Pa s
+    constexpr double AIR_DENSITY = 1.2;      // kg/m^3
+    // The internal losses (Woodhouse's eta_F, eta_B; the air's are computed from each string's size):
+    //   - steel: eta_F = 1 / Q_disl, Q_disl = 5500 fitted by Pate et al. (JASA 2014) on an EXL110 G3 between rigid
+    //     ends (with the air above, the model gives that string's measured Q, 2100 to 3400 below 1 kHz); eta_B from
+    //     Woodhouse 2012 table I (Martin 80/20 set: plain strings 0.7 and 1.1e-2, wound 0.3 to 1.8e-2, geometric means);
+    //   - played wound strings (dirt between the windings, Woodhouse 2012): eta_F x 2.05, eta_B x 6.0 (geometric means
+    //     of his played / new ratios over the four wound strings); plain strings do not change. Nickel wound strings
+    //     are taken as his bronze ones (the same windings: no published measurement of their own);
+    //   - nylon (Woodhouse 2012 table I, Pro Arte Composites hard tension): eta_B 2.2e-2 for every string; eta_F 1e-4
+    //     on the trebles, so that with the air it gives his E4 and B3 losses at their fundamentals, 4.5e-5 on the
+    //     basses (his values). Its modulus stiffens with stress: E = 4.5 GPa + 39 x stress (Lynch-Aird & Woodhouse,
+    //     nylon harp strings), which gives his trebles' bending stiffness. The basses' multifilament core: 0.7 of the
+    //     gauge, 5 GPa (his basses' stiffness, within a factor 2).
+    constexpr double Q_DISLOCATION = 5500.0;
+    // The neck end of a string (the fret or the nut, the neck behind it): its conductance (s/kg), the same on every
+    // guitar. Pate et al. 2014 measured a G3 between rigid ends (Q 2100 to 3400) and on a solid body (1200 to 2300,
+    // the neck taking more than the bridge): this is what takes the string from the one to the other's middle (Q 1750
+    // at 196 Hz). Until the neck's own modes (its dead spots) replace it, its average.
+    constexpr double NECK_CONDUCTANCE = 5.7e-4;
+    enum StringMaterialId
+    {
+        STEEL_PLAIN,
+        NICKEL_WOUND,
+        BRONZE_WOUND,
+        NYLON_PLAIN,
+        NYLON_WOUND,
+        NUM_STRING_MATERIALS
     };
+    constexpr models::StringMaterial STRING_MATERIALS[NUM_STRING_MATERIALS] = {
+        {"Plain steel", 2.0e11, 0.0, 0.0, true, true, 1.0 / Q_DISLOCATION, 0.88e-2, 1.0 / Q_DISLOCATION, 0.88e-2},
+        {"Nickel-plated steel, round wound", 2.0e11, 0.0, 0.0, true, true, 1.0 / Q_DISLOCATION, 0.70e-2, 2.05 / Q_DISLOCATION, 4.2e-2},
+        {"Bronze, round wound", 2.0e11, 0.0, 0.0, true, false, 1.0 / Q_DISLOCATION, 0.70e-2, 2.05 / Q_DISLOCATION, 4.2e-2},
+        {"Nylon", 4.5e9, 39.0, 0.0, false, false, 1.0e-4, 2.2e-2, 1.0e-4, 2.2e-2},
+        {"Silver-plated copper on nylon", 5.0e9, 0.0, 0.7, false, false, 4.5e-5, 2.2e-2, 9.2e-5, 13.2e-2},
+    };
+
+    // Sets of six strings, low to high: gauges and unit weights from D'Addario's tension chart (catalog supplement,
+    // lb/in at 25.5"). Plain steel PL, nickel wound NW, phosphor bronze PB, 80/20 bronze BW, nylon J45xx / J46xx.
+    constexpr models::StringSet STRING_SETS[] = {
+        {"Nickel 9-42", STEEL_PLAIN, NICKEL_WOUND,
+         {{0.042, 0.00032279, true}, {0.032, 0.00019347, true}, {0.024, 0.00010857, true}, {0.016, 0.00005671, false}, {0.011, 0.00002680, false}, {0.009, 0.00001794, false}}},
+        {"Nickel 10-46", STEEL_PLAIN, NICKEL_WOUND,
+         {{0.046, 0.00038216, true}, {0.036, 0.00023964, true}, {0.026, 0.00012671, true}, {0.017, 0.00006402, false}, {0.013, 0.00003744, false}, {0.010, 0.00002215, false}}},
+        {"Nickel 11-49", STEEL_PLAIN, NICKEL_WOUND,
+         {{0.049, 0.00043014, true}, {0.038, 0.00026471, true}, {0.028, 0.00014666, true}, {0.018, 0.00007177, false}, {0.014, 0.00004342, false}, {0.011, 0.00002680, false}}},
+        {"Phosphor bronze 11-52", STEEL_PLAIN, BRONZE_WOUND,
+         {{0.052, 0.00055223, true}, {0.042, 0.00036722, true}, {0.030, 0.00018660, true}, {0.022, 0.00009876, true}, {0.015, 0.00004984, false}, {0.011, 0.00002680, false}}},
+        {"Phosphor bronze 12-53", STEEL_PLAIN, BRONZE_WOUND,
+         {{0.053, 0.00056962, true}, {0.042, 0.00036722, true}, {0.032, 0.00020184, true}, {0.024, 0.00011682, true}, {0.016, 0.00005671, false}, {0.012, 0.00003190, false}}},
+        {"80/20 bronze 12-53", STEEL_PLAIN, BRONZE_WOUND,
+         {{0.053, 0.00054852, true}, {0.042, 0.00034808, true}, {0.032, 0.00020352, true}, {0.024, 0.00011353, true}, {0.016, 0.00005671, false}, {0.012, 0.00003190, false}}},
+        {"Nylon, normal tension", NYLON_PLAIN, NYLON_WOUND,
+         {{0.043, 0.00030632, true}, {0.035, 0.00018416, true}, {0.029, 0.00010754, true}, {0.0403, 0.00004679, false}, {0.0322, 0.00002827, false}, {0.0280, 0.00002092, false}}},
+        {"Nylon, hard tension", NYLON_PLAIN, NYLON_WOUND,
+         {{0.044, 0.00031726, true}, {0.036, 0.00019521, true}, {0.030, 0.00011237, true}, {0.0410, 0.00004795, false}, {0.0327, 0.00002924, false}, {0.0285, 0.00002161, false}}},
+    };
+    constexpr int NUM_STRING_SETS = (int)(sizeof(STRING_SETS) / sizeof(STRING_SETS[0]));
+    // the string set menu: Automatic first (nickel under a magnetic pickup, bronze otherwise), then STRING_SETS
+    constexpr int STRING_SET_AUTOMATIC = 0;
+    constexpr int STRING_SET_ELECTRIC = 1, STRING_SET_ACOUSTIC = 4; // Automatic's choices, in STRING_SETS
+    // the scale (nut to saddle): 648 mm (25.5") Fender and most flat-tops, 628 mm Gibson, 650 mm classical
+    constexpr double SCALE_MM_DEFAULT = 648.0, SCALE_MM_MIN = 550.0, SCALE_MM_MAX = 770.0;
+    constexpr double SCALE_DEFAULT_M = SCALE_MM_DEFAULT / 1000.0;
 
 
     constexpr models::Tuning TUNINGS[] = {
@@ -260,22 +320,6 @@ namespace grmg
     inline double midi_hz(int note) { return 440.0 * std::pow(2.0, (note - 69) / 12.0); }
 
     constexpr double PALM_OFF = 0.005;
-
-    constexpr models::MeasuredLosses LOSSES_NEW[6] = {
-        {5e-5, 1.7, 0.3e-2},
-        {11e-5, 1.2, 0.4e-2},
-        {9e-5, 1.3, 1.1e-2},
-        {6e-5, 1.0, 1.1e-2},
-        {6e-5, 1.0, 1.1e-2},
-        {7e-5, 2.5, 0.7e-2}};
-
-    constexpr models::MeasuredLosses LOSSES_PLAYED[6] = {
-        {10e-5, 1.4, 3.8e-2},
-        {17e-5, 0.6, 2.9e-2},
-        {33e-5, 0.7, 4.1e-2},
-        {7e-5, 1.0, 1.1e-2},
-        {7e-5, 1.0, 1.1e-2},
-        {6e-5, 1.5, 0.7e-2}};
 
     constexpr double LOSS_SIGMA_DEX = 0.1;
 
