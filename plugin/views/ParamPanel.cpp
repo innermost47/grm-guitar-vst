@@ -61,7 +61,7 @@ ParamPanel::ParamPanel(juce::AudioProcessorValueTreeState &s, const std::vector<
     content.addAndMakeVisible(warningLabel);
 
     vblank = std::make_unique<juce::VBlankAttachment>(this, [this]
-                                                      { updateForSensor(); });
+                                                      { updateVisibility(); });
 }
 
 void ParamPanel::resized()
@@ -103,7 +103,8 @@ void ParamPanel::layoutContent()
     const int numVisible = (int)visible.size();
     const int totalRows = (numVisible + cols - 1) / cols;
 
-    const int neededH = margin * 2 + totalRows * (rowH + rowSpacing);
+    const int rowsH = totalRows * (rowH + rowSpacing);
+    const int neededH = margin * 2 + rowsH + footerHeight;
     const int targetH = std::max(viewH, neededH);
 
     const bool willScroll = neededH > viewH;
@@ -121,44 +122,47 @@ void ParamPanel::layoutContent()
         visible[k]->label->setBounds(area.removeFromLeft(std::min(150, area.getWidth() / 2)));
         visible[k]->control->setBounds(area.reduced(0, 1));
     }
+    if (footer)
+        footer->setBounds(margin, margin + rowsH, targetW - margin * 2, footerHeight);
 }
 
-void ParamPanel::setSensorId(const juce::String &id)
+void ParamPanel::setFooter(std::unique_ptr<juce::Component> component, int height)
 {
-    sensorId = id;
-    lastSensor = -1;
-    updateForSensor();
+    footer = std::move(component);
+    footerHeight = footer ? height : 0;
+    if (footer)
+        content.addAndMakeVisible(*footer);
+    layoutContent();
 }
 
-void ParamPanel::showOnlyForSensor(const juce::String &id, std::initializer_list<int> sensors)
+void ParamPanel::showOnlyWhen(const juce::String &id, const juce::String &switchId, std::initializer_list<int> values)
 {
     int mask = 0;
-    for (int s : sensors)
-        mask |= (1 << s);
+    for (int v : values)
+        mask |= (1 << v);
+    const auto *value = state.getRawParameterValue(switchId);
+    jassert(value != nullptr);
     for (auto &r : rows)
         if (r.id == id)
-            r.sensorMask = mask;
-    updateForSensor();
+        {
+            r.switchValue = value;
+            r.switchMask = mask;
+        }
+    updateVisibility();
 }
 
-void ParamPanel::updateForSensor()
+void ParamPanel::updateVisibility()
 {
-    if (sensorId.isEmpty())
-        return;
-    auto *v = state.getRawParameterValue(sensorId);
-    if (!v)
-        return;
-    const int sensor = juce::jlimit(0, 3, (int)std::lround(v->load()));
     bool anyChanged = false;
     for (auto &r : rows)
     {
-        const bool visible = (r.sensorMask == 0) || (((r.sensorMask >> sensor) & 1) != 0);
+        const int v = r.switchValue != nullptr ? (int)std::lround(r.switchValue->load()) : 0;
+        const bool visible = r.switchValue == nullptr || (v >= 0 && v < 31 && ((r.switchMask >> v) & 1) != 0);
         if (r.label->isVisible() != visible)
             anyChanged = true;
         r.label->setVisible(visible);
         r.control->setVisible(visible);
     }
-    lastSensor = sensor;
     if (anyChanged)
         layoutContent();
 }

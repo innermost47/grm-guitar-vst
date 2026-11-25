@@ -228,7 +228,7 @@ namespace
         for (bool human : {true, false})
         {
             auto s = rigs::named("pickup");
-            s.tuning = DROP_D;
+            s.open_midi = tuning_notes(DROP_D);
             s.pickup_mm = PICKUP_BRIDGE_MM;
             s.human = human;
             OfflineRenderer renderer(s, SR);
@@ -269,7 +269,7 @@ namespace
         for (int type = 0; type < NUM_PICKUP_TYPES; ++type)
         {
             auto s = rigs::named("pickup");
-            s.tuning = DROP_D;
+            s.open_midi = tuning_notes(DROP_D);
             s.pickup_mm = PICKUP_BRIDGE_MM;
             s.pickup_type = type;
             OfflineRenderer renderer(s, SR);
@@ -285,7 +285,7 @@ namespace
     {
         std::printf("\n== power chord held %.1f s: how much it moves inside\n", HELD_S);
         auto s = rigs::named("pickup");
-        s.tuning = DROP_D;
+        s.open_midi = tuning_notes(DROP_D);
         s.pickup_mm = PICKUP_BRIDGE_MM;
         OfflineRenderer renderer(s, SR);
         const timbre::SustainMovement movement(SR);
@@ -309,7 +309,7 @@ namespace
     {
         std::printf("\n== the model\n");
         auto s = rigs::named("pickup");
-        s.tuning = DROP_D;
+        s.open_midi = tuning_notes(DROP_D);
         Model m;
         m.solve(s, SR, nullptr, false);
         for (int fret : {1, 5, 12, 19})

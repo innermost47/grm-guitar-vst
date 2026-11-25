@@ -130,8 +130,10 @@ if(GRMG_BUILD_PLUGIN)
         plugin/widgets/EquationsPanel.cpp
         plugin/widgets/Modal.cpp
         plugin/services/UpdateChecker.cpp
+        plugin/services/GuitarTuning.cpp
         plugin/services/PresetLibrary.cpp
         plugin/widgets/PresetBar.cpp
+        plugin/widgets/TensionView.cpp
         plugin/views/MixerView.cpp
         plugin/views/NeckView.cpp
         plugin/views/NetworksView.cpp
@@ -212,5 +214,7 @@ if(GRMG_BUILD_PLUGIN)
         add_test(NAME interface_dialogs COMMAND test_modal)
         grmg_add_plugin_test(test_presets)
         add_test(NAME interface_presets COMMAND test_presets)
+        grmg_add_plugin_test(test_tuning)
+        add_test(NAME guitar_free_tuning COMMAND test_tuning)
     endif()
 endif()

@@ -266,7 +266,7 @@ void RollView::paint(juce::Graphics &g)
 		for (const auto &gh : ghosts)
 		{
 			const auto c = GUITAR_COLOURS[gh.guitar % 8];
-			const auto &tuning = TUNINGS[juce::jlimit(0, NUM_TUNINGS - 1, gh.tuning)];
+			const auto &open = gh.open;
 			double a = 0.0, b = gh.song.length_beats();
 			if (looping)
 				std::tie(a, b) = gh.song.loop_range();
@@ -301,7 +301,7 @@ void RollView::paint(juce::Graphics &g)
 					if (r.getWidth() > 22)
 					{
 						g.setFont(font(10.0f));
-						g.drawText(n.dead ? juce::String("x") : juce::MidiMessage::getMidiNoteName(tuning.midi[n.string] + n.fret, true, true, 3),
+						g.drawText(n.dead ? juce::String("x") : juce::MidiMessage::getMidiNoteName(open[(size_t)n.string] + n.fret, true, true, 3),
 								   r.reduced(3.0f, 0.0f).toNearestInt(), juce::Justification::centredRight);
 					}
 				}
@@ -400,13 +400,12 @@ void RollView::paint(juce::Graphics &g)
 	// gutter: the strings
 	g.setColour(PANEL);
 	g.fillRect(0, RULER, GUTTER, getHeight() - RULER);
-	const auto &curTuning = TUNINGS[juce::jlimit(0, NUM_TUNINGS - 1, tuning())];
-	const char *NOTE_NAMES[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+	const auto open = openNotes();
 
 	for (int row = 0; row < 6; ++row)
 	{
 		const int i = stringOfRow(row);
-		const int openMidi = curTuning.midi[i];
+		const int openMidi = open[(size_t)i];
 		const int pitchClass = ((openMidi % 12) + 12) % 12;
 		const bool isRoot = (pitchClass == ((song.key % 12) + 12) % 12);
 		const bool inScale = isRoot || (grmg::scale_step(openMidi, song.key, song.scale, 0) == openMidi);
@@ -607,7 +606,7 @@ void RollView::refreshGhosts()
 				const auto patSong = processor.guitar(g).getPattern(curPattern);
 				if (!patSong.notes.empty() || !patSong.strums.empty())
 				{
-					ghosts.push_back({g, (int)std::lround(processor.guitar(g).param("tuning")), patSong});
+					ghosts.push_back({g, processor.guitar(g).openNotes(), patSong});
 				}
 			}
 		}
@@ -674,9 +673,9 @@ void RollView::toggleStop(double beat)
 }
 
 // ------------------------------------------------------------------ chords, transposing, harmonizing
-int RollView::tuning() const { return (int)std::lround(processor.current().param("tuning")); }
+std::array<int, NUM_STRINGS> RollView::openNotes() const { return processor.current().openNotes(); }
 
-models::Chord RollView::currentChord() const { return grmg::chord_for(chordRoot, chordQuality, tuning()); }
+models::Chord RollView::currentChord() const { return grmg::chord_for(chordRoot, chordQuality, openNotes()); }
 
 bool RollView::selectionRange(double &from, double &to) const
 {
@@ -699,15 +698,15 @@ bool RollView::selectionRange(double &from, double &to) const
 
 void RollView::transposeSelected(int semitones)
 {
-	const int tun = tuning();
+	const auto open = openNotes();
 	changeSelected([semitones](models::RollNote &n)
 				   { n.fret = juce::jlimit(0, NUM_FRETS_UI - 1, n.fret + semitones); },
-				   [semitones, tun](models::RollStrum &t)
+				   [semitones, open](models::RollStrum &t)
 				   {
 					   const auto rq = grmg::parse_chord(t.chord);
 					   if (rq.first >= 0)
 					   { // a named chord: the same chord, a semitone away
-						   const auto c = grmg::chord_for(rq.first + semitones, rq.second, tun);
+						   const auto c = grmg::chord_for(rq.first + semitones, rq.second, open);
 						   t.frets = c.frets;
 						   t.chord = c.name;
 					   }
@@ -722,7 +721,7 @@ void RollView::transposeSelected(int semitones)
 
 void RollView::harmonizeSelected(int degrees)
 {
-	const auto &open = TUNINGS[juce::jlimit(0, NUM_TUNINGS - 1, tuning())].midi;
+	const auto open = openNotes();
 	const bool pick = processor.readSettings().pick;
 	edit([&](Song &s)
 		 {
@@ -1200,7 +1199,7 @@ void RollView::showMenu(const Selection &s)
 							   copySelectedToGuitar(id == 2099 ? -1 : id - 2000);
 						   else if (id >= 1000 && id < 2000)
 						   {
-							   const auto c = grmg::chord_for((id - 1000) / 32, (id - 1000) % 32, tuning());
+							   const auto c = grmg::chord_for((id - 1000) / 32, (id - 1000) % 32, openNotes());
 							   changeSelected(nullptr, [c](models::RollStrum &t)
 											  {
 						t.frets = c.frets;

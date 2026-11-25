@@ -77,7 +77,7 @@ int main() {
         pressure.palm_intensity = 0.3;
         checkRefresh("staged palm solve matches a fresh solve after changing pressure", pressure);
         auto tuning = model->s;
-        tuning.tuning = 2; // Drop D
+        tuning.open_midi = tuning_notes(2); // Drop D
         checkRefresh("staged palm solve matches a fresh solve after retuning", tuning);
 
         auto body = model->s;
@@ -361,27 +361,34 @@ int main() {
         for (const auto& e : perf->events) beside |= e.type == EventType::damp && e.string == 1 && e.beat > 1.9 && e.beat < 2.3;
         ok("ringing: a flat hand also stops the string beside", beside);
     }
-    // ---- every chord, on every tuning: a shape the left hand can play, the root in the bass, every needed tone
+    // ---- every chord, on every tuning of the list and on free ones (B standard, drop A, a baritone in F#): a shape
+    // the left hand can play, the root in the bass, every needed tone
     {
+        std::vector<std::pair<std::string, std::array<int, NUM_STRINGS>>> tunings;
+        for (int tun = 0; tun < NUM_TUNINGS; ++tun)
+            tunings.push_back({TUNINGS[tun].name, tuning_notes(tun)});
+        tunings.push_back({"B standard", {35, 40, 45, 50, 54, 59}});
+        tunings.push_back({"Drop A", {33, 40, 45, 50, 54, 59}});
+        tunings.push_back({"F# baritone", {30, 35, 40, 45, 49, 54}});
         bool all = true;
         std::string bad;
-        for (int tun = 0; tun < NUM_TUNINGS; ++tun)
+        for (const auto &[name, open] : tunings)
             for (int q = 0; q < (int) chord_qualities().size(); ++q)
                 for (int r = 0; r < 12; ++r) {
-                    const auto c = chord_for(r, q, tun);
+                    const auto c = chord_for(r, q, open);
                     std::vector<std::pair<int, int>> held;
                     int bass = -1;
                     std::set<int> tones;
                     for (int i = 0; i < 6; ++i)
                         if (c.frets[(size_t) i] >= 0) {
-                            const int iv = ((TUNINGS[tun].midi[i] + c.frets[(size_t) i] - r) % 12 + 12) % 12;
+                            const int iv = ((open[(size_t) i] + c.frets[(size_t) i] - r) % 12 + 12) % 12;
                             if (bass < 0) bass = iv;
                             tones.insert(iv);
                             if (c.frets[(size_t) i] > 0) held.push_back({i, c.frets[(size_t) i]});
                         }
                     bool ok_here = bass == 0 && left_hand(held).possible;
                     for (int need : chord_qualities()[(size_t) q].needed) ok_here = ok_here && tones.count(need);
-                    if (!ok_here && bad.empty()) bad = c.name + " in " + TUNINGS[tun].name;
+                    if (!ok_here && bad.empty()) bad = c.name + " in " + name;
                     all = all && ok_here;
                 }
         if (!all) std::printf("  first bad chord: %s\n", bad.c_str());
@@ -402,7 +409,7 @@ int main() {
         for (int i = 0; i < 6; ++i) am.frets[(size_t) i] = CHORD_SHAPES[3].frets[i];
         am.chord = "Am";
         song.strums.push_back(am);
-        const auto g = chord_for(7, 0, 0);
+        const auto g = chord_for(7, 0, tuning_notes(0));
         song.fill_strums_range(0.0, 12.0, 0, g.frets, g.name, 2.0);
         bool kept = true, before = true, past_bar = false;
         for (const auto& t : song.strums) {

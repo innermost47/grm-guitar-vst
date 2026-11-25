@@ -62,7 +62,15 @@ juce::AudioProcessorValueTreeState::ParameterLayout GRMGuitarProcessor::createLa
 		prefix = g == 0 ? String() : "G" + String(g + 1) + " ";
 		idPrefix = g == 0 ? String() : "g" + String(g + 1) + "_";
 		// strings
-		choice("tuning", "Tuning", ui::namesOf(TUNINGS), 0);
+		// the tuning: one of the list, or Custom (each open string's note, below)
+		StringArray tunings = ui::namesOf(TUNINGS);
+		tunings.add("Custom");
+		choice("tuning", "Tuning", tunings, 0);
+		StringArray notes;
+		for (int m = OPEN_NOTE_LOWEST; m <= OPEN_NOTE_HIGHEST; ++m)
+			notes.add(note_name(m));
+		for (int i = 0; i < NUM_STRINGS; ++i)
+			choice(OPEN_NOTE_PARAMS[i], "String " + String(NUM_STRINGS - i) + " open note", notes, TUNINGS[0].midi[i] - OPEN_NOTE_LOWEST);
 		real("string_age", "String age (0 new, 1 played)", 0.0f, 1.0f, 0.0f);
 		real("brightness", "Brightness", 0.0f, 1.0f, 0.6f);
 		real("core", "Wound core", 0.2f, 1.0f, 0.45f);
@@ -367,8 +375,7 @@ void GRMGuitarProcessor::setInternalPlaying(bool on)
 
 int GRMGuitarProcessor::getOpenMidi(int i) const
 {
-	const int t = juce::jlimit(0, grmg::NUM_TUNINGS - 1, (int)std::lround(current().param("tuning")));
-	return grmg::TUNINGS[t].midi[i];
+	return current().openNotes()[(size_t)juce::jlimit(0, NUM_STRINGS - 1, i)];
 }
 
 juce::String GRMGuitarProcessor::getStatus() const

@@ -58,6 +58,7 @@ namespace ui::theme
         int modalButtonWidth = 110;
         int modalButtonHeight = 28;
         int presetBarWidth = 320;    // the presets' menu and its two buttons
+        int tensionViewHeight = 44;  // the strings' notes and tensions (Strings tab)
         int minSmallBtnWidth = 24;
         int minSmallBtnHeight = 24;
         int iconButton = 24;
@@ -143,6 +144,7 @@ namespace ui::theme
             theme.dimensions.modalButtonWidth = static_cast<int>(110 * uiScale);
             theme.dimensions.modalButtonHeight = static_cast<int>(28 * uiScale);
             theme.dimensions.presetBarWidth = static_cast<int>(320 * uiScale);
+            theme.dimensions.tensionViewHeight = static_cast<int>(44 * uiScale);
             theme.dimensions.minSmallBtnWidth = static_cast<int>(24 * uiScale);
             theme.dimensions.minSmallBtnHeight = static_cast<int>(24 * uiScale);
             theme.dimensions.iconButton = static_cast<int>(24 * uiScale);

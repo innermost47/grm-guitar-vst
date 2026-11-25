@@ -19,6 +19,7 @@
 
 #include "../core/engine.hpp"
 #include "../core/listener_path.hpp"
+#include "services/GuitarTuning.h"
 
 using namespace grmg;
 
@@ -61,6 +62,8 @@ public:
 	juce::String paramId(const juce::String &id) const { return paramId(index, id); }
 	float param(const char *k) const;
 	models::Settings readSettings() const;
+	// the open strings' MIDI notes, low string to high: the tuning of the list, or the free one (Custom)
+	std::array<int, NUM_STRINGS> openNotes() const { return tuning.notes(); }
 	struct MixerValues
 	{
 		float gainDb, level, pan;
@@ -135,6 +138,7 @@ public:
 
 private:
 	juce::AudioProcessorValueTreeState &state;
+	GuitarTuning tuning;
 	std::shared_ptr<const grmg::Model> compiledModelShared;
 	const struct
 	{

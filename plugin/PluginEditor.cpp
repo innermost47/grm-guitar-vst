@@ -4,6 +4,7 @@
 #include "ParamPanel.h"
 #include "NetworksView.h"
 #include "MixerView.h"
+#include "TensionView.h"
 
 using namespace grmg;
 using namespace ui;
@@ -339,7 +340,19 @@ void GRMGuitarEditor::rebuildGuitars()
 			setup(*panel);
 		tabs.addTab(name, PANEL, panel, true);
 	};
-	addTab("Strings", {"tuning", "string_age", "brightness", "core", "stiff"});
+	// the strings: the tuning, each open string's note in a Custom tuning (high string first, as the roll shows them)
+	std::vector<juce::String> strings = {"tuning"};
+	for (int i = NUM_STRINGS - 1; i >= 0; --i)
+		strings.push_back(OPEN_NOTE_PARAMS[i]);
+	for (const char *id : {"string_age", "brightness", "core", "stiff"})
+		strings.push_back(id);
+	addTab("Strings", strings, true,
+		   [this](ParamPanel &panel)
+		   {
+			   for (const char *id : OPEN_NOTE_PARAMS)
+				   panel.showOnlyWhen(processor.paramId(id), processor.paramId("tuning"), {CUSTOM_TUNING});
+			   panel.setFooter(std::make_unique<TensionView>(processor), appTheme.dimensions.tensionViewHeight);
+		   });
 	addTab("Attack & palm", withTunables({"attack", "pluck", "force", "pick", "palm_mm", "palm_intensity", "live_palm"}, VOICE_TUNABLES));
 	addTab("Body", {"hollow", "wood", "density_pct", "body_size", "top_mm", "braces_g", "body_q", "coupling", "body_amount", "sympathy"});
 	addTab("Sensor",
@@ -350,18 +363,17 @@ void GRMGuitarEditor::rebuildGuitars()
 		   true,
 		   [this](ParamPanel &panel)
 		   {
-			   panel.setSensorId(processor.paramId("sensor"));
-			   panel.showOnlyForSensor(processor.paramId("pickup_mm"), {1});
-			   panel.showOnlyForSensor(processor.paramId("pickup_type"), {1});
-			   panel.showOnlyForSensor(processor.paramId("pickup_height_mm"), {1, 3});
-			   panel.showOnlyForSensor(processor.paramId("cable_pf"), {1, 3});
-			   panel.showOnlyForSensor(processor.paramId("pickup_bridge_on"), {3});
-			   panel.showOnlyForSensor(processor.paramId("pickup_middle_on"), {3});
-			   panel.showOnlyForSensor(processor.paramId("pickup_neck_on"), {3});
-			   panel.showOnlyForSensor(processor.paramId("pickup_bridge_split"), {3});
-			   panel.showOnlyForSensor(processor.paramId("pickup_bridge_type"), {3});
-			   panel.showOnlyForSensor(processor.paramId("pickup_middle_type"), {3});
-			   panel.showOnlyForSensor(processor.paramId("pickup_neck_type"), {3});
+			   panel.showOnlyWhen(processor.paramId("pickup_mm"), processor.paramId("sensor"), {1});
+			   panel.showOnlyWhen(processor.paramId("pickup_type"), processor.paramId("sensor"), {1});
+			   panel.showOnlyWhen(processor.paramId("pickup_height_mm"), processor.paramId("sensor"), {1, 3});
+			   panel.showOnlyWhen(processor.paramId("cable_pf"), processor.paramId("sensor"), {1, 3});
+			   panel.showOnlyWhen(processor.paramId("pickup_bridge_on"), processor.paramId("sensor"), {3});
+			   panel.showOnlyWhen(processor.paramId("pickup_middle_on"), processor.paramId("sensor"), {3});
+			   panel.showOnlyWhen(processor.paramId("pickup_neck_on"), processor.paramId("sensor"), {3});
+			   panel.showOnlyWhen(processor.paramId("pickup_bridge_split"), processor.paramId("sensor"), {3});
+			   panel.showOnlyWhen(processor.paramId("pickup_bridge_type"), processor.paramId("sensor"), {3});
+			   panel.showOnlyWhen(processor.paramId("pickup_middle_type"), processor.paramId("sensor"), {3});
+			   panel.showOnlyWhen(processor.paramId("pickup_neck_type"), processor.paramId("sensor"), {3});
 		   });
 	// the amplifier: the rig's own knobs, each channel (voicing and knobs), the pedal, the cabinet; then the larsen.
 	// All of it for a magnetic pickup only.
@@ -381,9 +393,8 @@ void GRMGuitarEditor::rebuildGuitars()
 	addTab("Amp & Feedback", amp, true,
 		   [this, amp](ParamPanel &panel)
 		   {
-			   panel.setSensorId(processor.paramId("sensor"));
 			   for (const auto &id : amp)
-				   panel.showOnlyForSensor(processor.paramId(id), {1, 3});
+				   panel.showOnlyWhen(processor.paramId(id), processor.paramId("sensor"), {1, 3});
 		   });
 	addTab("Room", {"room_on", "room_size", "room_material", "room_distance"});
 	addTab("Player", withTunables({"human", "human_amount", "swing_cm", "finger_noises", "finger_force"}, HAND_TUNABLES));

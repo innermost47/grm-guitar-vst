@@ -67,10 +67,10 @@ namespace grmg
 			const auto [x, n] = Model::palm_snap(home + (x_stroke - PALM_X), n_stroke * m.s.palm_intensity);
 			const auto key = std::make_tuple(i, fret, std::lround(x * 1e4), std::lround(std::log10(n) * 1e3),
 											 std::lround(m.tension[(size_t)i] * 1e3));
-			if (std::get<0>(cache_key_) != m.s.tuning || std::abs(std::get<1>(cache_key_) - m.s.core) > 1e-12)
+			if (std::get<0>(cache_key_) != m.s.open_midi || std::abs(std::get<1>(cache_key_) - m.s.core) > 1e-12)
 			{
 				cache_.clear();
-				cache_key_ = {m.s.tuning, m.s.core};
+				cache_key_ = {m.s.open_midi, m.s.core};
 			}
 			auto it = cache_.find(key);
 			if (it != cache_.end())
@@ -84,7 +84,7 @@ namespace grmg
 
 	private:
 		std::map<std::tuple<int, int, long, long, long>, std::shared_ptr<const models::Palm>> cache_;
-		std::pair<int, double> cache_key_{-1, 0.0};
+		std::pair<std::array<int, NUM_STRINGS>, double> cache_key_{{-1, -1, -1, -1, -1, -1}, 0.0}; // the strings it was solved for
 	};
 
 	class Compiler

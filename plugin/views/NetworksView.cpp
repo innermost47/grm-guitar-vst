@@ -32,7 +32,7 @@ void NetworksView::updateNetworks()
     for (int i = 5; i >= 0; --i)
     {
         const auto &p = m->place[(size_t)i][0];
-        t << "  " << (6 - i) << "  " << STRING_NAMES[i] << "  T = " << num(p.T, 2) << " N   f1 = " << num(p.f1, 2)
+        t << "  " << (6 - i) << "  " << juce::String(note_name(m->open_midi(i))) << "  T = " << num(p.T, 2) << " N   f1 = " << num(p.f1, 2)
           << " Hz   B = " << juce::String(p.B, 7) << "   Zs = " << num(p.Zs, 3) << " kg/s\n";
     }
     t << "\nATTACK at the 3rd fret, set force and pluck point:  release height y0, release time tau\n";

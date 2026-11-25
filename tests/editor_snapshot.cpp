@@ -60,6 +60,20 @@ int main(int argc, char** argv) {
     lead.stops.push_back(9.0);
     g->setSong(lead);
     g->params.getParameter("midi_mode")->setValueNotifyingHost(1.0f);
+    // the second guitar in a free tuning, its low string down to B1: the Strings tab shows it slack
+    auto setByHand = [&](const juce::String &id, float value)
+    {
+        auto *p = g->params.getParameter(GuitarTrack::paramId(1, id));
+        p->beginChangeGesture();
+        p->setValueNotifyingHost(p->convertTo0to1(value));
+        p->endChangeGesture();
+    };
+    setByHand("tuning", (float)grmg::CUSTOM_TUNING);
+    setByHand(grmg::OPEN_NOTE_PARAMS[0], (float)(35 - grmg::OPEN_NOTE_LOWEST));
+    for (int k = 0; k < 100; ++k) { // its networks solved again
+        plugin->processBlock(buf, midi);
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
     std::unique_ptr<juce::AudioProcessorEditor> editor(plugin->createEditorIfNeeded());
     editor->setSize(1280, 820);
     // let the editor's timers fill the views (the message loop, a few times)

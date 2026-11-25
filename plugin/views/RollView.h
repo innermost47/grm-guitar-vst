@@ -31,7 +31,7 @@ public:
 	// the tools of the toolbar
 	int chordRoot = 7, chordQuality = 0; // the chord of new strums and fills (G major)
 	models::Chord currentChord() const;	 // its shape on this guitar's tuning (chords.hpp: the hand chooses it)
-	int tuning() const;
+	std::array<int, NUM_STRINGS> openNotes() const; // this guitar's open strings, low to high
 	// the span of the selection (false: nothing selected)
 	bool selectionRange(double &from, double &to) const;
 	void transposeSelected(int semitones); // notes a fret up or down, strums a semitone (their chord follows)
@@ -79,7 +79,7 @@ private:
 	struct Ghost
 	{
 		int guitar;
-		int tuning;
+		std::array<int, NUM_STRINGS> open; // its open strings, low to high
 		grmg::Song song;
 	};
 	std::vector<Ghost> ghosts;

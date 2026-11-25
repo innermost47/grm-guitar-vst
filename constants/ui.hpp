@@ -71,6 +71,7 @@ namespace ui
     inline const juce::Colour PANEL{juce::Colour(theme::defaultPalette.charcoalDark)};
     inline const juce::Colour TEXT{juce::Colour(theme::defaultPalette.mediumGrey)};
     inline const juce::Colour WAVE{juce::Colour(theme::defaultPalette.cyan)};
+    inline const juce::Colour WARNING{juce::Colour(theme::defaultPalette.terracottaLight)}; // something to look at
 
     inline const juce::Colour STRING_COLOURS[6] = {
         juce::Colour(theme::defaultPalette.gold),

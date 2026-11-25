@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Anthony Charretier
 #pragma once
+#include <algorithm>
+#include <array>
 #include <cmath>
 #include <string>
 #include <vector>
@@ -224,7 +226,6 @@ namespace grmg
         {0.648, 0.0003835658, 70.0, false},
     };
 
-    constexpr const char *STRING_NAMES[NUM_STRINGS] = {"E2", "A2", "D3", "G3", "B3", "E4"};
 
     constexpr models::Tuning TUNINGS[] = {
         {"Standard", {40, 45, 50, 55, 59, 64}},
@@ -236,6 +237,25 @@ namespace grmg
     };
 
     constexpr int NUM_TUNINGS = (int)(sizeof(TUNINGS) / sizeof(TUNINGS[0]));
+    constexpr int CUSTOM_TUNING = NUM_TUNINGS; // the tuning menu's last entry: each open string's note chosen freely
+    // the notes an open string may be tuned to (C1 to E5: from the deepest baritone drop to a high open tuning)
+    constexpr int OPEN_NOTE_LOWEST = 24, OPEN_NOTE_HIGHEST = 76;
+    // an open string under about 10 lb (45 N) feels floppy under the pick and buzzes on the frets (players' rule of
+    // thumb, string makers' tension charts sit at 13 to 20 lb)
+    constexpr double STRING_SLACK_N = 45.0;
+    // the parameters of the open strings' notes in a Custom tuning, low string to high
+    inline constexpr const char *OPEN_NOTE_PARAMS[NUM_STRINGS] = {"open_note_0", "open_note_1", "open_note_2",
+                                                                  "open_note_3", "open_note_4", "open_note_5"};
+
+    // a tuning of the list as the open strings' notes, low to high
+    inline std::array<int, NUM_STRINGS> tuning_notes(int tuning)
+    {
+        const auto &t = TUNINGS[std::min(std::max(tuning, 0), NUM_TUNINGS - 1)];
+        std::array<int, NUM_STRINGS> notes{};
+        for (int i = 0; i < NUM_STRINGS; ++i)
+            notes[(size_t)i] = t.midi[i];
+        return notes;
+    }
 
     inline double midi_hz(int note) { return 440.0 * std::pow(2.0, (note - 69) / 12.0); }
 
@@ -338,7 +358,12 @@ namespace grmg
     };
 
     inline constexpr const char *NOTE_NAMES[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
-    inline constexpr const char *STRING_LABELS[6] = {"6  E", "5  A", "4  D", "3  G", "2  B", "1  e"};
+
+    // a MIDI note's name with its octave ("E2", "C#3")
+    inline std::string note_name(int midi)
+    {
+        return std::string(NOTE_NAMES[((midi % 12) + 12) % 12]) + std::to_string(midi / 12 - 1);
+    }
 
     inline constexpr const char *GUITAR_PARAMS[] = {
         "tuning", "string_age", "brightness", "core", "stiff", "attack", "pluck", "force", "pick", "palm_mm",

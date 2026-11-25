@@ -53,12 +53,12 @@ namespace grmg
 			return ++counter;
 		}
 
-		int open_midi(int i) const { return TUNINGS[s.tuning].midi[i]; }
+		int open_midi(int i) const { return s.open_midi[(size_t)i]; }
 		double core_fraction(int i) const { return STRING_SPECS[i].wound ? s.core : 1.0; }
 
 		static bool same_strings(const models::Settings &a, const models::Settings &b)
 		{
-			return a.tuning == b.tuning && std::abs(a.core - b.core) < 1e-12 && a.stiff == b.stiff;
+			return a.open_midi == b.open_midi && std::abs(a.core - b.core) < 1e-12 && a.stiff == b.stiff;
 		}
 		static bool same_attack(const models::Settings &a, const models::Settings &b)
 		{

@@ -4,8 +4,20 @@
 
 using namespace grmg;
 
+namespace
+{
+	// the parameters of one guitar's open strings' notes (Custom tuning), low string to high
+	std::array<juce::String, NUM_STRINGS> openNoteIds(int guitar)
+	{
+		std::array<juce::String, NUM_STRINGS> ids;
+		for (int k = 0; k < NUM_STRINGS; ++k)
+			ids[(size_t)k] = GuitarTrack::paramId(guitar, OPEN_NOTE_PARAMS[k]);
+		return ids;
+	}
+}
+
 GuitarTrack::GuitarTrack(juce::AudioProcessorValueTreeState &s, int i)
-	: index(i), state(s),
+	: index(i), state(s), tuning(s, paramId(i, "tuning"), openNoteIds(i)),
 	  mixParams{s.getRawParameterValue(paramId("mix_gain")), s.getRawParameterValue(paramId("mix_level")),
 				s.getRawParameterValue(paramId("mix_pan")), s.getRawParameterValue(paramId("mix_mute")),
 				s.getRawParameterValue(paramId("mix_solo")), s.getRawParameterValue(paramId("mix_out"))},
@@ -38,7 +50,7 @@ models::Settings GuitarTrack::readSettings() const
 	auto c = [&](const char *id)
 	{ return (int)std::lround(param(id)); };
 	models::Settings s;
-	s.tuning = juce::jlimit(0, grmg::NUM_TUNINGS - 1, c("tuning"));
+	s.open_midi = openNotes();
 	s.string_age = v("string_age");
 	s.brightness = v("brightness");
 	s.core = v("core");

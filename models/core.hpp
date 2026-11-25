@@ -537,7 +537,8 @@ namespace grmg::models
 
     struct Settings
     {
-        int tuning = 0;
+        // the open strings' MIDI notes, low to high (standard tuning by default): a tuning chosen in a list or free
+        std::array<int, 6> open_midi = {40, 45, 50, 55, 59, 64};
         double core = 0.45;
         bool stiff = true;
         double string_age = 0.0;

@@ -176,16 +176,16 @@ namespace grmg
     }
 
     // the same with a cache (shapes are asked often by the roll)
-    inline models::Chord chord_for(int root, int quality, int tuning)
+    inline models::Chord chord_for(int root, int quality, const std::array<int, NUM_STRINGS> &open_midi)
     {
         static std::mutex lock;
-        static std::map<std::tuple<int, int, int>, models::Chord> cache;
+        static std::map<std::tuple<int, int, std::array<int, NUM_STRINGS>>, models::Chord> cache;
         std::lock_guard<std::mutex> g(lock);
-        const auto key = std::make_tuple(((root % 12) + 12) % 12, quality, tuning);
+        const auto key = std::make_tuple(((root % 12) + 12) % 12, quality, open_midi);
         auto it = cache.find(key);
         if (it != cache.end())
             return it->second;
-        const auto c = voice_chord(root, quality, TUNINGS[std::min(std::max(tuning, 0), NUM_TUNINGS - 1)].midi);
+        const auto c = voice_chord(root, quality, open_midi.data());
         cache[key] = c;
         return c;
     }
