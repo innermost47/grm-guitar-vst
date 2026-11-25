@@ -32,9 +32,11 @@ public:
         return added;
     }
 
-    // the usual rows: a link (in the accent colour, left aligned), a checkbox
+    // the usual rows: a link (in the accent colour, left aligned), a checkbox, a line of text to type (it takes
+    // the keyboard when the dialog is shown; Escape closes the dialog from it too)
     juce::HyperlinkButton &addLink(const juce::String &text, const juce::URL &url);
     juce::ToggleButton &addCheckbox(const juce::String &text);
+    juce::TextEditor &addTextField(const juce::String &placeholder, int maxLength);
 
     // a button of the bottom row, from left to right; onClick runs, then the dialog closes
     juce::TextButton &addButton(const juce::String &text, std::function<void()> onClick = nullptr);

@@ -15,6 +15,7 @@
 #include "ScopeView.h"
 #include "IconButton.h"
 #include "Modal.h"
+#include "PresetBar.h"
 #include "UpdateChecker.h"
 
 class GRMGuitarEditor : public juce::AudioProcessorEditor
@@ -76,6 +77,7 @@ private:
 	std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> ghostsAttachment;
 	int shownGuitarVersion = -1;
 	void rebuildGuitars();
+	PresetBar presets; // the selected guitar's
 	IconButton followButton{Icon::crosshair, "Follow playhead: the roll scrolls with the playhead. Off: it stays where you are editing", Behaviour::toggle};
 	juce::Label patternLabel, midiLabel, keyHint;
 	std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> midiModeAttachment;
@@ -86,7 +88,9 @@ private:
 
 	// the latest release, asked once per host process; shown in a dialog when it is newer
 	juce::SharedResourcePointer<UpdateChecker> updates;
-	std::unique_ptr<Modal> modal;
+	// the dialog shown (one at a time); one replaced by another from its own button waits for the next frame to go
+	std::unique_ptr<Modal> modal, retiredModal;
+	void openDialog(std::unique_ptr<Modal> dialog);
 	void showUpdate(const grmg::models::Release &release);
 
 	void updateEditor();

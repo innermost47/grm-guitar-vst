@@ -26,6 +26,15 @@ GRMGuitarEditor::GRMGuitarEditor(GRMGuitarProcessor &p)
 	{ processor.removeGuitar(processor.getSelectedGuitar()); };
 	addAndMakeVisible(ghostsButton);
 	ghostsAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.params, "ghosts", ghostsButton);
+	presets.capture = [this](const std::string &name)
+	{ return processor.capturePreset(processor.getSelectedGuitar(), name); };
+	presets.apply = [this](const grmg::models::Preset &preset)
+	{ processor.applyPreset(processor.getSelectedGuitar(), preset); };
+	presets.currentName = [this]
+	{ return processor.getPresetName(processor.getSelectedGuitar()); };
+	presets.showDialog = [this](std::unique_ptr<Modal> dialog)
+	{ openDialog(std::move(dialog)); };
+	addAndMakeVisible(presets);
 	rebuildGuitars();
 
 	addAndMakeVisible(playButton);
@@ -308,6 +317,7 @@ void GRMGuitarEditor::rebuildGuitars()
 	}
 	addGuitarButton.setEnabled(count < GRMGuitarProcessor::MAX_GUITARS);
 	removeGuitarButton.setEnabled(count > 1);
+	presets.refresh();
 
 	const int shownTab = juce::jmax(0, tabs.getCurrentTabIndex());
 	tabs.clearTabs();
@@ -416,22 +426,32 @@ void GRMGuitarEditor::togglePlay()
 void GRMGuitarEditor::showUpdate(const grmg::models::Release &release)
 {
 	const juce::String version(release.version);
-	modal = std::make_unique<Modal>("A new GRM Guitar is out");
-	modal->setMessage("GRM Guitar " + version + " is available (this one is " + juce::String(UpdateChecker::currentVersion()) +
+	auto dialog = std::make_unique<Modal>("A new GRM Guitar is out");
+	dialog->setMessage("GRM Guitar " + version + " is available (this one is " + juce::String(UpdateChecker::currentVersion()) +
 					  "). Its release page tells what is new and has the downloads for every system.");
-	modal->addLink("Get GRM Guitar " + version, juce::URL(release.url));
-	auto &again = modal->addCheckbox("Don't ask me again for this version");
-	modal->addButton("Close");
-	modal->onDismiss = [this, &again, version]
+	dialog->addLink("Get GRM Guitar " + version, juce::URL(release.url));
+	auto &again = dialog->addCheckbox("Don't ask me again for this version");
+	dialog->addButton("Close");
+	dialog->onDismiss = [this, &again, version]
 	{
 		if (again.getToggleState())
 			updates->skip(version.toStdString());
 	};
+	openDialog(std::move(dialog));
+}
+
+void GRMGuitarEditor::openDialog(std::unique_ptr<Modal> dialog)
+{
+	retiredModal = std::move(modal); // its button may still be running
+	if (retiredModal != nullptr)
+		retiredModal->dismiss();
+	modal = std::move(dialog);
 	modal->show(*this);
 }
 
 void GRMGuitarEditor::updateEditor()
 {
+	retiredModal.reset();
 	if (modal != nullptr && modal->isDismissed())
 		modal.reset(); // closed during the last frame
 	if (modal == nullptr)
@@ -523,6 +543,8 @@ void GRMGuitarEditor::resized()
 
 	{
 		auto bar = area.removeFromTop(28).reduced(8, 2);
+		const int presetWidth = juce::jmin(appTheme.dimensions.presetBarWidth, bar.getWidth() / 3);
+		presets.setBounds(bar.removeFromRight(presetWidth).withSizeKeepingCentre(presetWidth, iconSize));
 		for (auto &b : guitarButtons)
 		{
 			b->setBounds(bar.removeFromLeft(84));

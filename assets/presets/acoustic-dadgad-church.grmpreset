@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<GRMGuitarPreset name="DADGAD in a church" category="Acoustic" version="0.3.9">
+  <PARAM id="tuning" value="3"/>
+  <PARAM id="attack" value="1"/>
+  <PARAM id="wood" value="3"/>
+  <PARAM id="pluck" value="0.2"/>
+  <PARAM id="force" value="1.5"/>
+  <PARAM id="room_size" value="3"/>
+  <PARAM id="room_material" value="0"/>
+  <PARAM id="room_distance" value="3.0"/>
+</GRMGuitarPreset>

@@ -407,12 +407,37 @@ namespace grmg
         return room;
     }
 
-    // direct sound, image sources up to the second order, a diffuse tail decaying band by band
-    inline std::vector<double> room_impulse(const models::Room &room, const models::RoomSize &size, double distance, double sr, unsigned seed = 3)
+    // the way from the guitar to an ear `distance` metres in front of it (within the room), above it
+    inline double direct_path(const models::RoomSize &size, double distance)
+    {
+        const double d = std::min(distance, LISTENER_REACH * size.L);
+        return std::sqrt(d * d + LISTENER_HEIGHT * LISTENER_HEIGHT);
+    }
+
+    // the listener at `distance`: each ear hears the direct sound after its way, and the room's reverberation (heard
+    // from ROOM_REF_DISTANCE, relative to its direct sound) scaled as the direct sound falls: the reflections and the
+    // diffuse field stay, the direct sound goes as 1 / r (direct to reverberant: (rc / r)^2, the critical distance).
+    // The direct sound keeps its level (the guitar is not quieter, the room is louder); `wet` scales the room.
+    inline models::ListenerTaps listener_taps(const models::RoomSize &size, double distance, double wet)
+    {
+        models::ListenerTaps taps;
+        for (int ear = 0; ear < 2; ++ear)
+        {
+            const double r = direct_path(size, distance + EAR_SPACING * ear);
+            taps.delay_s[(size_t)ear] = r / C_ROOM;
+            taps.send[(size_t)ear] = wet * r / direct_path(size, ROOM_REF_DISTANCE + EAR_SPACING * ear);
+        }
+        return taps;
+    }
+
+    // what an ear at ROOM_REF_DISTANCE (+ `ear_offset`) hears of the room, without the direct sound, from the direct
+    // sound's arrival on (it is at 0, of level 1): image sources up to the second order, a diffuse tail decaying band
+    // by band. The direct sound and the listener's distance are listener_taps'.
+    inline std::vector<double> room_reverb(const models::Room &room, const models::RoomSize &size, double ear_offset, double sr, unsigned seed = 3)
     {
         const double L = size.L, W = size.W, H = size.H;
         const double src[3] = {0.35 * L, 0.5 * W, 1.0};
-        const double lis[3] = {src[0] + std::min(distance, 0.55 * L), src[1], src[2] + 0.2};
+        const double lis[3] = {src[0] + std::min(ROOM_REF_DISTANCE + ear_offset, LISTENER_REACH * L), src[1], src[2] + LISTENER_HEIGHT};
         double rtmax = 0;
         for (double r : room.RT)
             rtmax = std::max(rtmax, r);
@@ -430,19 +455,18 @@ namespace grmg
                 for (int nz = -2; nz <= 2; ++nz)
                 {
                     const int order = std::abs(nx) + std::abs(ny) + std::abs(nz);
-                    if (order > 2)
-                        continue;
+                    if (order == 0 || order > 2)
+                        continue; // the direct sound is the listener's
                     const double img[3] = {nx * L + ((nx % 2 == 0) ? src[0] : L - src[0]),
                                            ny * W + ((ny % 2 == 0) ? src[1] : W - src[1]),
                                            nz * H + ((nz % 2 == 0) ? src[2] : H - src[2])};
                     const double r = dist(img, lis);
-                    const size_t k = (size_t)(r / C_ROOM * sr);
+                    const size_t k = (size_t)((r - r_direct) / C_ROOM * sr);
                     if (k < length)
                     {
                         const double a = std::pow(reflect, order) * r_direct / r;
                         h[k] += a;
-                        if (order)
-                            early += a * a;
+                        early += a * a;
                     }
                 }
         const double rev_energy = std::max((r_direct / room.rc) * (r_direct / room.rc) - early, 0.0);
@@ -478,7 +502,7 @@ namespace grmg
             double e = 0;
             for (size_t i = 0; i < length; ++i)
             {
-                const double t = i / sr;
+                const double t = i / sr + r_direct / C_ROOM; // since the guitar played
                 const double env = std::exp(-6.91 * std::max(t - t0, 0.0) / room.RT[(size_t)b]) * (t >= t0 * 0.6 ? 1.0 : 0.0);
                 piece[i] = band[i].real() * env;
                 e += piece[i] * piece[i];

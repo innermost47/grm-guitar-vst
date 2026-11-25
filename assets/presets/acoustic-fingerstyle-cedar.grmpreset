@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<GRMGuitarPreset name="Fingerstyle cedar" category="Acoustic" version="0.3.9">
+  <PARAM id="attack" value="1"/>
+  <PARAM id="wood" value="2"/>
+  <PARAM id="pluck" value="0.15"/>
+  <PARAM id="force" value="1.2"/>
+  <PARAM id="brightness" value="0.5"/>
+  <PARAM id="room_distance" value="0.8"/>
+</GRMGuitarPreset>

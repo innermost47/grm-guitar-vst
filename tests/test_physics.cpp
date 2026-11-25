@@ -134,11 +134,21 @@ int main() {
         ++checks;
         if (!finite || e <= 0) { ++failures; std::printf("FAIL body impulse\n"); }
         const auto room = room_network(ROOMS[1], 1);
-        const auto h = room_impulse(room, ROOMS[1], 1.0, 48000.0);
+        const auto h = room_reverb(room, ROOMS[1], 0.0, 48000.0);
         double eh = 0;
         for (double x : h) { eh += x * x; finite &= std::isfinite(x); }
         ++checks;
         if (!finite || eh <= 0 || std::abs(h[0]) > 0) { ++failures; std::printf("FAIL room impulse\n"); }
+        // the listener: at the reference it hears the room as solved; farther, the same room louder against the
+        // direct sound (as r), later; it cannot leave the room
+        const auto ref = listener_taps(ROOMS[1], ROOM_REF_DISTANCE, 1.0), far = listener_taps(ROOMS[1], 2.0, 0.5);
+        const auto out = listener_taps(ROOMS[0], 5.0, 1.0), wall = listener_taps(ROOMS[0], 1.925, 1.0);
+        ++checks;
+        if (std::abs(ref.send[0] - 1.0) > 1e-12 || std::abs(ref.send[1] - 1.0) > 1e-12 || far.send[0] <= 0.5 * 1.8 ||
+            far.delay_s[0] <= ref.delay_s[0] || ref.delay_s[1] <= ref.delay_s[0] || std::abs(out.delay_s[0] - wall.delay_s[0]) > 1e-12) {
+            ++failures;
+            std::printf("FAIL listener taps\n");
+        }
         const auto sq = synthesize_squeak(1500, 0.1, 0.12, 1500, 0.3, 0.3, 48000.0, 7, {0.5}, 0.8);
         double es = 0;
         for (double x : sq) { es += x * x; finite &= std::isfinite(x); }

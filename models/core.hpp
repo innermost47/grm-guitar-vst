@@ -50,6 +50,14 @@ namespace grmg::models
     {
         double V = 0, S = 0, rc = 0, fs = 0;
         std::array<double, 6> RT{}, alpha{};
+        int size = -1, material = -1; // which one (ROOMS, MATERIALS)
+    };
+
+    // where the listener hears a guitar from, per ear: the direct sound's way (s) and the level sent to the room's
+    // reverberation (solved from ROOM_REF_DISTANCE), against the direct sound
+    struct ListenerTaps
+    {
+        std::array<double, 2> delay_s{}, send{};
     };
 
     enum class EventType

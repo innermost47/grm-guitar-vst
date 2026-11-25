@@ -10,7 +10,8 @@ GuitarTrack::GuitarTrack(juce::AudioProcessorValueTreeState &s, int i)
 				s.getRawParameterValue(paramId("mix_pan")), s.getRawParameterValue(paramId("mix_mute")),
 				s.getRawParameterValue(paramId("mix_solo")), s.getRawParameterValue(paramId("mix_out"))},
 	  bodyAmount(s.getRawParameterValue(paramId("body_amount"))),
-	  roomOn(s.getRawParameterValue(paramId("room_on")))
+	  roomOn(s.getRawParameterValue(paramId("room_on"))),
+	  roomDistance(s.getRawParameterValue(paramId("room_distance")))
 {
 	for (size_t k = 0; k < voiceParams.size(); ++k)
 		voiceParams[k] = s.getRawParameterValue(paramId(VOICE_TUNABLES[k].id));
@@ -99,7 +100,7 @@ models::Settings GuitarTrack::readSettings() const
 	s.room_on = roomOn->load() > 0.5f;
 	s.room_size = juce::jlimit(0, 3, c("room_size"));
 	s.room_material = juce::jlimit(0, 5, c("room_material"));
-	s.room_distance = std::round(v("room_distance") * 10.0) / 10.0;
+	s.room_distance = v("room_distance"); // heard as it moves (the listener glides), solved for nothing
 	s.human = b("human");
 	s.human_amount = std::round(v("human_amount") * 20.0) / 20.0;
 	s.swing_cm = v("swing_cm");
@@ -369,8 +370,10 @@ void GuitarTrack::prepare(double sr, int block)
 	dry.setSize(1, block);
 	pickupBuf.setSize(1, block);
 	out.setSize(2, block);
-	ampRoomBuf.setSize(2, block, false, false, true);
+	send.setSize(2, block);
 	bodyMix.reset(sr, 0.05);
+	listener.prepare(sr);
+	listening = ownRoomBefore = false;
 }
 
 float GuitarTrack::param(const char *k) const
@@ -541,10 +544,9 @@ void GuitarTrack::renderTo(int at, const SongClock &clock)
 long GuitarTrack::roomKey() const
 {
 	const auto *m = engine.model();
-	if (!m || roomOn->load() <= 0.5f)
+	if (!m || roomOn->load() <= 0.5f || m->room.size < 0 || m->room_ir[0].empty())
 		return -1;
-
-	return 1 + m->s.room_size + 4L * m->s.room_material + 24L * std::lround(m->s.room_distance * 10.0) + 24L * 1000L * std::lround(m->sample_rate);
+	return 1 + m->room.size + (long)std::size(grmg::ROOMS) * (m->room.material + (long)std::size(grmg::MATERIALS) * std::lround(m->sample_rate));
 }
 
 juce::AudioBuffer<float> *GuitarTrack::roomShare()
@@ -556,10 +558,10 @@ void GuitarTrack::finish(int n, bool ownRoom)
 {
 	// a value that is not a number would silence the convolutions for good: start the strings again instead
 	{
-		float *d0 = dry.getWritePointer(0);
+		const float *d0 = dry.getReadPointer(0), *p0 = pickupBuf.getReadPointer(0);
 		bool bad = false;
 		for (int t = 0; t < n; ++t)
-			bad |= !std::isfinite(d0[t]);
+			bad |= !std::isfinite(d0[t]) || !std::isfinite(p0[t]);
 		if (bad)
 		{
 			dry.clear();
@@ -568,68 +570,61 @@ void GuitarTrack::finish(int n, bool ownRoom)
 			engine.reset_strings();
 			bodyConv.reset();
 			roomConv.reset();
+			listener.reset();
 		}
 	}
 	const auto *model = engine.model();
 	const int sensor = model ? model->s.sensor : 0;
 	const float *d = dry.getReadPointer(0);
-	out.clear();
-	if (sensor != 0)
+	float *guitar = out.getWritePointer(0); // the guitar, mono, at the output scale
+	if (sensor == 1 || sensor == 3) // the engine's pickup output is the jack's: pickups, cable, amplifier
 	{
 		const float *heard = pickupBuf.getReadPointer(0);
-		float *w0 = out.getWritePointer(0);
-		if (sensor == 1 || sensor == 3) // the engine's pickup output is the jack's: pickups, cable, amplifier
-		{
-			for (int t = 0; t < n; ++t)
-				w0[t] = OUTPUT_SCALE * (float)(grmg::PICKUP_LEVEL * heard[t]);
-		}
-		else
-		{
-			for (int t = 0; t < n; ++t)
-				w0[t] = OUTPUT_SCALE * (float)(grmg::PIEZO_LEVEL * d[t]);
-		}
-
-		out.copyFrom(1, 0, out, 0, 0, n);
-
-		if (model && model->s.room_on && roomLoaded && model->s.amp.room_mix > 0.001f)
-		{
-			ampRoomBuf.copyFrom(0, 0, out, 0, 0, n);
-			ampRoomBuf.copyFrom(1, 0, out, 0, 0, n);
-
-			juce::dsp::AudioBlock<float> block(ampRoomBuf.getArrayOfWritePointers(), 2, (size_t)n);
-			roomConv.process(juce::dsp::ProcessContextReplacing<float>(block));
-
-			const float wet = (float)model->s.amp.room_mix;
-			const float dry = 1.0f - wet;
-
-			out.applyGain(0, 0, n, dry);
-			out.applyGain(1, 0, n, dry);
-
-			out.addFrom(0, 0, ampRoomBuf, 0, 0, n, wet);
-			out.addFrom(1, 0, ampRoomBuf, 1, 0, n, wet);
-		}
-
-		return;
+		for (int t = 0; t < n; ++t)
+			guitar[t] = OUTPUT_SCALE * (float)(grmg::PICKUP_LEVEL * heard[t]);
 	}
-
-	bodyMix.setTargetValue(bodyAmount->load());
-	out.copyFrom(0, 0, dry, 0, 0, n);
+	else if (sensor == 2)
 	{
+		for (int t = 0; t < n; ++t)
+			guitar[t] = OUTPUT_SCALE * (float)(grmg::PIEZO_LEVEL * d[t]);
+	}
+	else
+	{
+		bodyMix.setTargetValue(bodyAmount->load());
+		out.copyFrom(0, 0, dry, 0, 0, n);
 		juce::dsp::AudioBlock<float> block(out.getArrayOfWritePointers(), 1, (size_t)n);
 		bodyConv.process(juce::dsp::ProcessContextReplacing<float>(block));
+		for (int t = 0; t < n; ++t)
+		{
+			const float a = bodyMix.getNextValue();
+			guitar[t] = OUTPUT_SCALE * ((1.0f - a) * d[t] + a * guitar[t]);
+		}
 	}
-	float *w0 = out.getWritePointer(0);
-	for (int t = 0; t < n; ++t)
+
+	// no room: the guitar as it is, on both sides
+	if (roomKey() < 0)
 	{
-		const float a = bodyMix.getNextValue();
-		w0[t] = OUTPUT_SCALE * ((1.0f - a) * d[t] + a * w0[t]);
+		out.copyFrom(1, 0, out, 0, 0, n);
+		send.clear(); // nothing for a room it may be leaving
+		listening = ownRoomBefore = false;
+		return;
 	}
-	out.copyFrom(1, 0, out, 0, 0, n);
+	// the listener in the room: the direct sound after its way to the ears, and the same sound sent to the room (an
+	// amplifier sends its share of it: amp_room_mix). Moving the listener glides; the room's response stays.
+	const double wet = sensor == 1 || sensor == 3 ? model->s.amp.room_mix : 1.0;
+	listener.place(grmg::listener_taps(grmg::ROOMS[model->room.size], roomDistance->load(), wet), listening);
+	listening = true;
+	listener.process(guitar, out.getArrayOfWritePointers(), send.getArrayOfWritePointers(), n);
 	if (ownRoom && roomLoaded)
 	{
-		juce::dsp::AudioBlock<float> block(out.getArrayOfWritePointers(), 2, (size_t)n);
+		if (!ownRoomBefore)
+			roomConv.reset(); // what it held is from the last time it was used
+		juce::dsp::AudioBlock<float> block(send.getArrayOfWritePointers(), 2, (size_t)n);
 		roomConv.process(juce::dsp::ProcessContextReplacing<float>(block));
+		out.addFrom(0, 0, send, 0, 0, n);
+		out.addFrom(1, 0, send, 1, 0, n);
 	}
+	ownRoomBefore = ownRoom && roomLoaded;
 }
 
 grmg::Song GuitarTrack::getPattern(int k) const

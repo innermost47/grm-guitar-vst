@@ -37,6 +37,7 @@ namespace ui
         caretDown,
         caretLeft,
         caretRight,
+        floppyDisk,
         count
     };
 

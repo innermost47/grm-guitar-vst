@@ -18,6 +18,7 @@
 #include <JuceHeader.h>
 
 #include "../core/engine.hpp"
+#include "../core/listener_path.hpp"
 
 using namespace grmg;
 
@@ -103,6 +104,7 @@ public:
 		dry.setSize(1, n, false, false, true);
 		pickupBuf.setSize(1, n, false, false, true);
 		out.setSize(2, n, false, false, true);
+		send.setSize(2, n, false, false, true);
 	}
 	void begin(bool patternMode, bool internalPlaying); // takes the newest networks and performances
 	// MIDI for this guitar, at sample `at` of the block (render up to there first with renderTo)
@@ -111,14 +113,17 @@ public:
 	bool holdsMidiNote(int channel, int pitch) const;
 	void releaseKeys(); // the host stopped: patterns held by keys stop too
 	void renderTo(int at, const SongClock &clock);
-	// body (and the room if ownRoom) or pickup: the stereo `out`, before the mixer. The plugin shares one room
-	// among the guitars that have the same one (ownRoom false): it is the heaviest part of the sound.
+	// body or pickup, heard by the listener: the stereo `out` (the direct sound, and the room if ownRoom) and `send`
+	// (what goes to the room's reverberation), before the mixer. The plugin shares one room among the guitars that
+	// are in the same one (ownRoom false): it is the heaviest part of the sound.
 	void finish(int n, bool ownRoom);
-	// which room this guitar is in (-1: none): guitars with the same key can share one room
+	// which room this guitar is in (-1: none): guitars with the same key share one room (where each one stands in it
+	// is its own: the listener's distance is not in the key)
 	long roomKey() const;
 	// a copy of this guitar's room response for the shared room (null once taken, until the next networks)
 	juce::AudioBuffer<float> *roomShare();
-	juce::AudioBuffer<float> out; // this block, stereo, at the output scale
+	juce::AudioBuffer<float> out;  // this block, stereo, at the output scale
+	juce::AudioBuffer<float> send; // what this block sends to the room's reverberation (when roomKey() >= 0)
 	grmg::Engine engine;
 	int playingPattern() const { return playing.load(); }
 	double shownBeat() const { return engine.shown_beat.load(); }
@@ -136,7 +141,7 @@ private:
 		const std::atomic<float> *gainDb, *level, *pan, *mute, *solo, *ownOutput;
 	} mixParams;
 	const std::atomic<float> *const bodyAmount;
-	const std::atomic<float> *const roomOn;
+	const std::atomic<float> *const roomOn, *const roomDistance;
 	std::array<const std::atomic<float> *, std::size(VOICE_TUNABLES)> voiceParams{}; // read at every block
 
 	// patterns, edited on the message thread, read by the solver
@@ -172,13 +177,13 @@ private:
 	unsigned loadedBody = 0, loadedRoom = 0;
 	juce::dsp::Convolution bodyConv{juce::dsp::Convolution::NonUniform{512}};
 	juce::dsp::Convolution roomConv{juce::dsp::Convolution::NonUniform{512}};
-	bool roomLoaded = false;
+	bool roomLoaded = false, ownRoomBefore = false, listening = false;
+	grmg::ListenerPath listener;
 	juce::AudioBuffer<float> dry, pickupBuf;
 	juce::SmoothedValue<float> bodyMix;
 	int heldKey = -1, heldChannel = 0, heldPattern = -1, shownPattern = -1;
 	double patternBeat = 0.0;
 	int pos = 0;
-	juce::AudioBuffer<float> ampRoomBuf;
 	struct UiPluck
 	{
 		int string, fret;

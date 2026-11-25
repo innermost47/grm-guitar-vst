@@ -398,6 +398,55 @@ int main(int argc, char** argv) {
         solve();
         check("room toggle retains the solved model and compiled pattern",
               track.getShownModel() == model && track.engine.performance() == performance);
+
+        fixture.params.getParameter("room_on")->setValueNotifyingHost(1.0f);
+        const long room = track.roomKey();
+        fixture.params.getParameter("room_distance")->setValueNotifyingHost(0.9f);
+        solve();
+        check("moving the listener solves nothing again and keeps its room",
+              track.getShownModel() == model && track.roomKey() == room);
+    }
+    // moving the listener while the guitar rings: no click (the steepest step of the sound stays as when it stands)
+    {
+        GRMGuitarProcessor room;
+        room.setPlayConfigDetails(0, 2, sr, block);
+        room.prepareToPlay(sr, block);
+        juce::AudioBuffer<float> b(2, block);
+        juce::MidiBuffer none, chordOn;
+        for (int k = 0; k < 400; ++k) { // the networks, as above
+            b.clear();
+            room.processBlock(b, none);
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        auto* distance = room.params.getParameter("room_distance");
+        for (int k = 0; k < 6; ++k) chordOn.addEvent(juce::MidiMessage::noteOn(1, chord[k], (juce::uint8) 100), 0);
+        // the steepest second difference after the attack, the listener standing or walking from 0.3 m to 6 m
+        auto steepest = [&](bool walking) {
+            distance->setValueNotifyingHost(0.0f);
+            for (int k = 0; k < 40; ++k) { b.clear(); room.processBlock(b, none); } // the last chord has rung out
+            for (int k = 0; k < 6; ++k) { juce::MidiBuffer off; off.addEvent(juce::MidiMessage::noteOff(1, chord[k]), 0); b.clear(); room.processBlock(b, off); }
+            b.clear();
+            room.processBlock(b, chordOn);
+            float prev[2][2] = {}, worst = 0.0f;
+            const int blocks = (int) (2.0 * sr / block), skip = (int) (0.3 * sr / block);
+            for (int k = 0; k < blocks; ++k) {
+                if (walking) distance->setValueNotifyingHost(juce::jlimit(0.0f, 1.0f, (float) (k - skip) / (float) (blocks - skip)));
+                b.clear();
+                room.processBlock(b, none);
+                for (int ch = 0; ch < 2; ++ch)
+                    for (int t = 0; t < block; ++t) {
+                        const float x = b.getSample(ch, t);
+                        if (k > skip) worst = std::max(worst, std::abs(x - 2.0f * prev[ch][0] + prev[ch][1]));
+                        prev[ch][1] = prev[ch][0];
+                        prev[ch][0] = x;
+                    }
+            }
+            return worst;
+        };
+        const float standing = steepest(false), walking = steepest(true);
+        std::printf("listener: steepest step %.5f standing, %.5f walking\n", standing, walking);
+        check("moving the listener does not click", standing > 0.0f && walking < 1.5f * standing);
+        room.releaseResources();
     }
     plugin->releaseResources();
     return finite && peak > 1e-3 && failures == 0 ? 0 : 1;

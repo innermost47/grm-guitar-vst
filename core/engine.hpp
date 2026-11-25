@@ -249,6 +249,9 @@ namespace grmg
 			fb_force_.fill(0.0);
 		}
 
+		// how many times a sound that was not a number had to be thrown away (it should stay 0)
+		int recoveries() const { return recoveries_; }
+
 		void reset_strings()
 		{
 			for (auto &v : voices_)
@@ -340,6 +343,30 @@ namespace grmg
 		FeedbackProcessor feedback_proc_;
 		std::array<double, BLOCK> fb_force_{};
 		std::array<float, BLOCK> speaker_{};
+		int recoveries_ = 0;
+
+		// a sound that is not a number would stay in every loop (the strings, the larsen's air, the amplifier's
+		// filters) and silence the guitar for good: it is thrown away, they start again from silence
+		void recover_if_lost(float *out, float *pk, int n)
+		{
+			bool lost = false;
+			for (int t = 0; t < n; ++t)
+				lost |= !std::isfinite(out[t]) || (pk != nullptr && !std::isfinite(pk[t]));
+			if (!lost)
+				return;
+			++recoveries_;
+			for (int t = 0; t < n; ++t)
+			{
+				out[t] = 0.0f;
+				if (pk != nullptr)
+					pk[t] = 0.0f;
+			}
+			all_off();
+			reset_strings();
+			single_filter_.z1 = single_filter_.z2 = 0;
+			for (auto &f : pickup_filter_)
+				f.z1 = f.z2 = 0;
+		}
 
 		static constexpr double CARRY_BEATS = 16.0;
 		std::array<models::Pending, 64> pending_{};
@@ -638,6 +665,7 @@ namespace grmg
 						feedback_proc_.push(amp ? (double)speaker_[(size_t)t] : (double)pk[t]);
 				}
 			}
+			recover_if_lost(out, pk, n);
 			for (int i = 0; i < NUM_STRINGS; ++i)
 				shown_level[(size_t)i].store(std::max(level[i], shown_level[(size_t)i].load() * 0.97f));
 		}

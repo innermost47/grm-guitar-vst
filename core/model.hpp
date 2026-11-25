@@ -78,8 +78,7 @@ namespace grmg
 		}
 		static bool same_room(const models::Settings &a, const models::Settings &b)
 		{
-			return a.room_size == b.room_size && a.room_material == b.room_material &&
-				   std::abs(a.room_distance - b.room_distance) < 1e-9;
+			return a.room_size == b.room_size && a.room_material == b.room_material; // the listener moves alone
 		}
 		static bool same_pickups(const models::Settings &a, const models::Settings &b)
 		{
@@ -253,7 +252,9 @@ namespace grmg
 				body_ir.assign(ir.begin(), ir.end());
 				body_id = next_id();
 			}
-			if (previous && same_room(previous->s, s) && std::abs(previous->sample_rate - sr) < 1e-6 && !previous->room_ir[0].empty())
+			// (the room the previous networks hear, not the one they were asked: quick networks keep the old one)
+			if (previous && previous->room.size == s.room_size && previous->room.material == s.room_material &&
+				std::abs(previous->sample_rate - sr) < 1e-6 && !previous->room_ir[0].empty())
 			{
 				room = previous->room;
 				room_ir = previous->room_ir;
@@ -263,12 +264,21 @@ namespace grmg
 			{
 				const auto &size = ROOMS[s.room_size];
 				room = room_network(size, s.room_material);
+				room.size = s.room_size;
+				room.material = s.room_material;
 				for (int ear = 0; ear < 2; ++ear)
 				{
-					const auto h = room_impulse(room, size, s.room_distance + 0.09 * ear, sr, 3u + (unsigned)ear);
+					const auto h = room_reverb(room, size, EAR_SPACING * ear, sr, 3u + (unsigned)ear);
 					room_ir[(size_t)ear].assign(h.begin(), h.end());
 				}
 				room_id = next_id();
+			}
+			else if (previous && std::abs(previous->sample_rate - sr) < 1e-6)
+			{
+				// the quick networks: the room heard until the new one is solved (it says which one it is)
+				room = previous->room;
+				room_ir = previous->room_ir;
+				room_id = previous->room_id;
 			}
 			if (s.palm_intensity < PALM_OFF)
 			{

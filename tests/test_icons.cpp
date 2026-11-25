@@ -96,7 +96,7 @@ static void interfaceIconButtonsAreDescribedAndSquare()
         // transport 3, roll tools 6, patterns 5, guitars 2, roll toggles 2
         std::unique_ptr<juce::AudioProcessorEditor> editor(plugin->createEditorIfNeeded());
         editor->setSize(1420, 820);
-        checkIconButtons(*editor, 18, "editor");
+        checkIconButtons(*editor, 20, "editor"); // with the presets' save and delete
 
         // mute and solo on each guitar's strip
         MixerView mixer(processor);

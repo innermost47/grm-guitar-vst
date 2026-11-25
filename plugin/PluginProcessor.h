@@ -14,6 +14,7 @@
 #include "GuitarTrack.h"
 #include "SolverThread.h"
 #include "../core/offline.hpp"
+#include "../models/preset.hpp"
 
 // The plugin: several guitars (GuitarTrack), a mixer (each guitar's gain, level, pan, mute, solo and output),
 // a main stereo output and one stereo output per guitar slot (the host enables the ones it wants).
@@ -60,6 +61,13 @@ public:
 	void addGuitar();		  // a new guitar (the next free slot), selected
 	void removeGuitar(int g); // never the last one
 	juce::String getGuitarName(int g) const;
+
+	// presets: the sound of guitar g, every parameter but its mixer strip (applied: one the preset does not name goes
+	// to its default), and the name of the preset it was last given (empty: none)
+	grmg::models::Preset capturePreset(int g, const std::string &name) const;
+	void applyPreset(int g, const grmg::models::Preset &preset);
+	juce::String getPresetName(int g) const;
+	void setPresetName(int g, const juce::String &name);
 	int getGuitarVersion() const { return guitarVersion.load(); } // changes when guitars are added, removed, chosen
 	GuitarTrack &guitar(int g) { return *tracks[(size_t)juce::jlimit(0, MAX_GUITARS - 1, g)]; }
 	const GuitarTrack &guitar(int g) const { return *tracks[(size_t)juce::jlimit(0, MAX_GUITARS - 1, g)]; }
@@ -168,7 +176,12 @@ private:
 		juce::AudioBuffer<float> buf;
 	};
 	std::array<RoomGroup, MAX_GUITARS> rooms;
+	mutable std::mutex presetLock;
+	std::array<juce::String, MAX_GUITARS> presetNames;
 	std::array<int, MAX_GUITARS> roomOf{}; // per guitar this block: its shared room, -1 none, -2 its own
+	// a guitar that changes rooms sends to the old one less and less and to the new one more and more, over
+	// ROOM_SWITCH_S (no step in either): its room of the last block, the one it leaves, the samples left of the fade
+	std::array<int, MAX_GUITARS> roomBefore{}, roomLeaving{}, roomFadeLeft{};
 
 	// mixer (audio thread)
 	const std::atomic<float> *const volumeParam = params.getRawParameterValue("volume");

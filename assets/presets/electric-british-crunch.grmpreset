@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<GRMGuitarPreset name="British crunch" category="Electric" version="0.3.9">
+  <PARAM id="sensor" value="1"/>
+  <PARAM id="hollow" value="0.0"/>
+  <PARAM id="amp_on" value="1"/>
+  <PARAM id="wood" value="3"/>
+  <PARAM id="pickup_type" value="1"/>
+  <PARAM id="pickup_mm" value="70"/>
+  <PARAM id="amp_lead_model" value="1"/>
+  <PARAM id="amp_lead_gain" value="6.0"/>
+  <PARAM id="amp_channel_mix" value="1.0"/>
+  <PARAM id="amp_gate" value="-60.0"/>
+</GRMGuitarPreset>

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<GRMGuitarPreset name="Lead solo, neck pickup" category="Electric" version="0.3.9">
+  <PARAM id="sensor" value="1"/>
+  <PARAM id="hollow" value="0.0"/>
+  <PARAM id="amp_on" value="1"/>
+  <PARAM id="wood" value="3"/>
+  <PARAM id="pickup_type" value="1"/>
+  <PARAM id="pickup_mm" value="190"/>
+  <PARAM id="amp_lead_model" value="2"/>
+  <PARAM id="amp_lead_gain" value="7.0"/>
+  <PARAM id="amp_lead_middle" value="0.65"/>
+  <PARAM id="amp_channel_mix" value="1.0"/>
+  <PARAM id="amp_gate" value="-60.0"/>
+  <PARAM id="amp_room_mix" value="0.3"/>
+</GRMGuitarPreset>

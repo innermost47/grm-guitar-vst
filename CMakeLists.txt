@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 Anthony Charretier
 cmake_minimum_required(VERSION 3.22)
-project(GRMGuitar VERSION 0.3.8 LANGUAGES C CXX)
+project(GRMGuitar VERSION 0.3.9 LANGUAGES C CXX)
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the build type" FORCE)
@@ -71,6 +71,19 @@ if(GRMG_BUILD_PLUGIN)
             assets/fonts/noto-italic.ttf
             assets/fonts/noto-regular.ttf
             assets/images/grm-equations.svg
+            assets/presets/acoustic-dadgad-church.grmpreset
+            assets/presets/acoustic-dreadnought-studio.grmpreset
+            assets/presets/acoustic-fingerstyle-cedar.grmpreset
+            assets/presets/acoustic-hard-strum.grmpreset
+            assets/presets/acoustic-old-parlour.grmpreset
+            assets/presets/acoustic-piezo-stage.grmpreset
+            assets/presets/electric-british-crunch.grmpreset
+            assets/presets/electric-clean-single-coil.grmpreset
+            assets/presets/electric-djent.grmpreset
+            assets/presets/electric-lead-neck.grmpreset
+            assets/presets/electric-metal-drop-d.grmpreset
+            assets/presets/electric-overdrive-blues.grmpreset
+            assets/presets/electric-punk.grmpreset
             assets/icons/arpeggio.svg
             assets/icons/arrow-clockwise.svg
             assets/icons/arrow-counter-clockwise.svg
@@ -86,6 +99,7 @@ if(GRMG_BUILD_PLUGIN)
             assets/icons/eraser.svg
             assets/icons/export.svg
             assets/icons/file-plus.svg
+            assets/icons/floppy-disk.svg
             assets/icons/ghost.svg
             assets/icons/headphones.svg
             assets/icons/minus.svg
@@ -110,6 +124,8 @@ if(GRMG_BUILD_PLUGIN)
         plugin/widgets/EquationsPanel.cpp
         plugin/widgets/Modal.cpp
         plugin/services/UpdateChecker.cpp
+        plugin/services/PresetLibrary.cpp
+        plugin/widgets/PresetBar.cpp
         plugin/views/MixerView.cpp
         plugin/views/NeckView.cpp
         plugin/views/NetworksView.cpp
@@ -188,5 +204,7 @@ if(GRMG_BUILD_PLUGIN)
         add_test(NAME interface_icons COMMAND test_icons)
         grmg_add_plugin_test(test_modal)
         add_test(NAME interface_dialogs COMMAND test_modal)
+        grmg_add_plugin_test(test_presets)
+        add_test(NAME interface_presets COMMAND test_presets)
     endif()
 endif()

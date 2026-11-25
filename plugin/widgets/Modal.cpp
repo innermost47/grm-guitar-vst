@@ -35,6 +35,19 @@ juce::ToggleButton &Modal::addCheckbox(const juce::String &text)
     return addRow(std::make_unique<juce::ToggleButton>(text));
 }
 
+juce::TextEditor &Modal::addTextField(const juce::String &placeholder, int maxLength)
+{
+    auto &field = addRow(std::make_unique<juce::TextEditor>());
+    field.setFont(ui::font(appTheme.typography.regular));
+    field.setTextToShowWhenEmpty(placeholder, ui::BRIGHT.withAlpha(ui::theme::defaultOpacity.alpha04));
+    field.setInputRestrictions(maxLength);
+    field.setIndents(appTheme.spacing.base, 0);
+    field.setJustification(juce::Justification::centredLeft);
+    field.onEscapeKey = [this]
+    { dismiss(); };
+    return field;
+}
+
 juce::TextButton &Modal::addButton(const juce::String &text, std::function<void()> onClick)
 {
     auto button = std::make_unique<juce::TextButton>(text);
@@ -56,6 +69,13 @@ void Modal::show(juce::Component &parent)
     parent.addAndMakeVisible(this);
     setBounds(parent.getLocalBounds());
     toFront(true);
+    // a line to type takes the keyboard, or else the dialog does (Escape)
+    for (auto &row : rows)
+        if (auto *field = dynamic_cast<juce::TextEditor *>(row.get()))
+        {
+            field->grabKeyboardFocus();
+            return;
+        }
     grabKeyboardFocus();
 }
 

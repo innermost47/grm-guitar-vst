@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<GRMGuitarPreset name="Djent, tight" category="Electric" version="0.3.9">
+  <PARAM id="sensor" value="1"/>
+  <PARAM id="hollow" value="0.0"/>
+  <PARAM id="amp_on" value="1"/>
+  <PARAM id="tuning" value="2"/>
+  <PARAM id="wood" value="3"/>
+  <PARAM id="pickup_type" value="1"/>
+  <PARAM id="pickup_mm" value="55"/>
+  <PARAM id="amp_lead_model" value="3"/>
+  <PARAM id="amp_lead_gain" value="7.5"/>
+  <PARAM id="amp_lead_bass" value="0.45"/>
+  <PARAM id="amp_lead_middle" value="0.6"/>
+  <PARAM id="amp_lead_treble" value="0.6"/>
+  <PARAM id="amp_lead_presence" value="0.65"/>
+  <PARAM id="amp_channel_mix" value="1.0"/>
+  <PARAM id="amp_od_on" value="1"/>
+  <PARAM id="amp_od_drive" value="0.0"/>
+  <PARAM id="amp_od_level" value="1.0"/>
+  <PARAM id="amp_gate" value="-45.0"/>
+  <PARAM id="amp_cab" value="2"/>
+  <PARAM id="amp_cab_mic" value="0.2"/>
+  <PARAM id="amp_room_mix" value="0.1"/>
+  <PARAM id="palm_intensity" value="1.5"/>
+  <PARAM id="force" value="3.5"/>
+  <PARAM id="pick" value="1.5"/>
+</GRMGuitarPreset>

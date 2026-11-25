@@ -37,6 +37,7 @@ namespace ui
         {IconId::caretDown, "caret-down.svg"},
         {IconId::caretLeft, "caret-left.svg"},
         {IconId::caretRight, "caret-right.svg"},
+        {IconId::floppyDisk, "floppy-disk.svg"},
     }};
 
     // ---- the plugin on the net: its releases, the GRM it shows off
@@ -48,6 +49,14 @@ namespace ui
     // the plugin's own settings, shared by every project (a file in the user's application data)
     inline constexpr const char *SETTINGS_NAME = "GRM Guitar";
     inline constexpr const char *SKIPPED_VERSION_KEY = "skipped_version";
+
+    // ---- presets: a guitar's sound, kept for every project (the user's in the plugin's folder, the factory's embedded)
+    inline constexpr const char *PRESET_EXTENSION = ".grmpreset";
+    inline constexpr const char *PRESET_FOLDER = "Presets";
+    inline constexpr const char *PRESET_TAG = "GRMGuitarPreset";
+    inline constexpr const char *PRESET_USER_CATEGORY = "User";
+    inline constexpr const char *PRESET_CATEGORIES[] = {"Acoustic", "Electric", PRESET_USER_CATEGORY}; // the menu's order
+    inline constexpr int PRESET_NAME_MAX = 48;
 
     // ---- the dialogs: the equations a GRM network brought up, discreet on their left
     inline constexpr const char *EQUATIONS_FILE = "grm-equations.svg";

@@ -512,15 +512,21 @@ namespace grmg
 			if (++retune_count_ >= TENSION_UPDATE)
 			{
 				retune_count_ = 0;
-				const double glide = glide_gain_ * tension_avg_ / (2.0 * what.place.T);
-				const double change = glide - glide_;
-				for (int m = 0; m < count_; ++m)
+				// at most TENSION_GLIDE_MAX: a string driven without end (a larsen) cannot push its modes past the
+				// Nyquist frequency. Each mode turns by th, by (1 + i th / 2) / (1 - i th / 2): of modulus exactly 1
+				// (the turn 1 - th^2 / 2 + i th it was grew by a little each time: over a long larsen the modes ran
+				// away to infinity), for a division instead of an exponential
+				const double glide = std::min(glide_gain_ * tension_avg_ / (2.0 * what.place.T), TENSION_GLIDE_MAX);
+				if (std::abs(glide - glide_) > 1e-9)
 				{
-					// e^(i th) for the small turn th: 1 - th^2 / 2 + i th
-					const double th = rate_[(size_t)m].imag() * change / sr_;
-					step_[(size_t)m] = cmul(step_[(size_t)m], cplx(1.0 - 0.5 * th * th, th));
+					const double change = glide - glide_;
+					for (int m = 0; m < count_; ++m)
+					{
+						const double th = rate_[(size_t)m].imag() * change / sr_, q = 0.25 * th * th, inv = 1.0 / (1.0 + q);
+						step_[(size_t)m] = cmul(step_[(size_t)m], cplx((1.0 - q) * inv, th * inv));
+					}
+					glide_ = glide;
 				}
-				glide_ = glide;
 			}
 			pull_hp_ = pull_coef_ * (pull_hp_ + added - pull_last_);
 			pull_last_ = added;

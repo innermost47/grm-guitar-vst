@@ -19,7 +19,7 @@
 #include "noise_gate.hpp"
 #include "overdrive.hpp"
 #include "oversampler.hpp"
-#include "smoothed.hpp"
+#include "../smoothed.hpp"
 
 namespace grmg
 {

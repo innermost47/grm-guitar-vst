@@ -19,7 +19,7 @@
 
 #include "../../models/amp.hpp"
 #include "one_pole.hpp"
-#include "smoothed.hpp"
+#include "../smoothed.hpp"
 
 namespace grmg
 {

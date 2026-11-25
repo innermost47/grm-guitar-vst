@@ -7,10 +7,13 @@
 #include <cmath>
 #include <complex>
 #include <cstdio>
+#include <memory>
+#include <utility>
 #include <vector>
 
 #include "../core/amp/amp_networks.hpp"
 #include "../core/amp/amp_rig.hpp"
+#include "../core/engine.hpp"
 
 using namespace grmg;
 
@@ -265,6 +268,45 @@ int main()
         };
         std::printf("     overdrive: gain %.0f above %.0f Hz; a soft note comes out x%.2f at 80 Hz, x%.2f at 1 kHz\n", m.gain, m.hp_hz, pedal(80), pedal(1000));
         ok("overdrive: it pushes the mids, the lows pass (a tight low end)", pedal(1000) > 2.0 * pedal(80));
+    }
+
+    // ---- the most violent larsen, held: it sings on, it never turns into what is not a number (it did, after a
+    // while: the strings' pitch, pushed up by their vibration, ran away past the Nyquist frequency)
+    for (const auto &[distance, withAmp] : {std::pair<double, bool>{0.2, false}, {1.0, true}})
+    {
+        models::Settings s;
+        s.sensor = 1;
+        s.hollow = 0.0;
+        s.feedback_amount = 1.0;
+        s.feedback_distance = distance;
+        s.amp.on = withAmp;
+        s.amp.lead.gain = 8.0;
+        auto model = std::make_shared<Model>();
+        model->solve(s, SR, nullptr, false);
+        Engine engine;
+        engine.prepare(SR);
+        engine.set_model(model.get());
+        for (int i = 0; i < 6; ++i)
+            engine.pluck_string(i, 2, 1.0);
+        models::Transport still;
+        std::vector<float> out(256), pk(256);
+        bool finite = true;
+        double last = 0.0;
+        const int blocks = (int)(25 * SR / 256); // 25 s
+        for (int b = 0; b < blocks; ++b)
+        {
+            engine.render(out.data(), 256, still, pk.data());
+            for (int t = 0; t < 256; ++t)
+            {
+                finite &= std::isfinite(out[t]) && std::isfinite(pk[t]);
+                if (b >= blocks - (int)(SR / 256))
+                    last = std::max(last, (double)std::abs(pk[t]));
+            }
+        }
+        std::printf("     larsen at %.1f m%s: after 25 s the pickup still at %.3g, %d recoveries\n", distance,
+                    withAmp ? " (amplifier)" : "", last, engine.recoveries());
+        ok(withAmp ? "a violent larsen through the amplifier stays a sound" : "a violent larsen without amplifier stays a sound",
+           finite && engine.recoveries() == 0 && last > 0.1);
     }
 
     std::printf("%d checks, %d failures\n", checks, failures);

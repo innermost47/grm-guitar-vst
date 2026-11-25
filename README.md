@@ -6,6 +6,8 @@ pickups and the room. Several guitars in one plugin, a guitar roll that knows a 
 that refuse what no guitarist can play. Free software under the AGPL-3.0 (JUCE 8 is itself available under the
 AGPL-3.0).
 
+Featured on [Bedroom Producers Blog](https://bedroomproducersblog.com/2026/11/24/innermost47-grm-guitar/).
+
 ## Tracks composed with GRM Guitar
 
 - [A New Path To Trace](https://anthony-charretier.fr/post.php?slug=a-new-path-to-trace)
@@ -53,7 +55,9 @@ the literature on guitars (string losses, wood, pickups, hands): see [Sources](#
   classic selector position, from the bridge alone to the neck alone and back through the in-between combinations
   — or a **piezo** under the saddle (the force on the bridge).
 - **Room.** Reverberation by band, critical distance, image sources, a tail per ear. Guitars in the same room
-  going to the same output share one room (it costs as much as the strings).
+  going to the same output share one room (it costs as much as the strings), each one standing where it wants in
+  it: the **listener's distance** moves the direct sound (its way to the ears) and the level of the room against
+  it (the direct sound falls as 1 / r, the reverberation stays), smoothly, while the guitar plays.
 - **Sympathetic strings.** The strings nobody plays answer the others through the bridge.
 - **Amplifier.** A whole rig behind the magnetic pickups, its circuits solved by GRM networks: an overdrive pedal
   (op-amp gain above its corner, soft diode clipping), clean and lead channels to blend, each a voicing (American
@@ -63,6 +67,16 @@ the literature on guitars (string losses, wood, pickups, hands): see [Sources](#
   a cabinet from its speaker's Thiele-Small parameters and a close microphone, and a noise gate keyed by the guitar.
   Four times oversampled.
 - **Acoustic Feedback (Larsen).** Real-time closed-loop acoustic coupling between the virtual speaker and the strings. Sound travels through virtual air ($d/c$), exciting the string modes to create natural, self-sustaining singing feedback that responds dynamically to distance, palm mutes, and selectable harmonic targets.
+
+## Presets
+
+A preset is a guitar's whole sound: every setting but its patterns and its mixer strip. The menu above the
+settings has the factory's (acoustic: dreadnought, fingerstyle cedar, hard strum, DADGAD in a church, old strings,
+piezo; electric: clean single coil, overdrive blues, British crunch, neck lead, punk, drop-D metal, djent) and yours:
+the disk button saves the selected guitar's sound under a name, the bin deletes one of your own. Yours are files in
+the plugin's folder (`%APPDATA%\GRM Guitar\Presets`, `~/Library/Application Support/GRM Guitar/Presets`,
+`~/.config/GRM Guitar/Presets`): every project, in every host, sees them, and they can be shared. A setting a
+preset does not name goes to its default.
 
 ## The player
 
@@ -149,21 +163,24 @@ Up to 8 guitars in one plugin, each with its own settings, patterns, player and 
 
 ## Tests
 
-`ctest` runs the first six:
+`ctest` runs the first seven:
 - `test_core`: 210 checks that the C++ GRM gives the same numbers as the Python one (values to 1e-9).
-- `test_physics`: 153 checks of the networks (body, bridge, room, palm, finger, action, player, strum, string
-  losses, loaded top) and of one string's sound against the proof of concept.
+- `test_physics`: 154 checks of the networks (body, bridge, room, palm, finger, action, player, strum, string
+  losses, loaded top, the listener's distance) and of one string's sound against the proof of concept.
 - `test_play`: 74 checks of the playing (hands, sweep, pinch, muscle, picking, palm, loop flags, ringing, endings,
   hand stops, chords on every tuning, scales, fills, dead notes, endings across a pattern change, legato on one
   string, the string's two planes, the hard attack: frets, pick push and scrape, pitch glide).
-- `test_amp`: 38 checks of the amplifier (operating points, tone stacks against their H(s), cabinet, clean and high
-  gain, compression, aliasing, hiss and gate, presence, the overdrive's tight lows).
+- `test_amp`: 40 checks of the amplifier (operating points, tone stacks against their H(s), cabinet, clean and high
+  gain, compression, aliasing, hiss and gate, presence, the overdrive's tight lows) and of the most violent larsen
+  held for 25 s, with and without the amplifier.
 - `test_modal`: 21 checks of the dialogs and the update check (versions compared as numbers, GitHub's answer, the
   equations and the grm-core link on the left of a dialog, closing it).
+- `test_presets`: 22 checks of the presets (the factory's name real settings within their ranges, one's own written,
+  found again, replaced, deleted, a sound into a preset and back with the mixer strip kept, the session, the menu).
 - `test_icons`: every icon is embedded and drawn, every icon button of the interface has its tooltip and its
   design-system size.
 - `plugin_host_test`: the plugin called as a host would (MIDI, patterns, sensors, several guitars, own outputs,
-  sessions of 0.2.0, state).
+  sessions of 0.2.0, state, the listener moved while the guitar rings without a click).
 - `plugin_cpu_test [guitars]`: the share of each audio block the plugin takes with several guitars.
 - `render_offline [out.wav] [song.txt] [acoustic | clean | crunch | lead | metal]`: the whole path without a host,
   acoustic or through the amplifier.
@@ -223,7 +240,7 @@ with `-DGRMG_PORTABLE_CPU=ON` (or pass `-DCMAKE_CXX_FLAGS="-march=x86-64"`). You
 ## Next
 
 Slides, hammer-ons, pull-offs and bends between notes; automation lanes under the roll (palm, force...); the guitar
-drawn as it is at each moment; presets and custom tunings shared between projects; a strum and arpeggio editor;
+drawn as it is at each moment; custom tunings shared between projects; a strum and arpeggio editor;
 a new look (light and dark); modulators; one network holding all the others (the whole hand, the whole guitar);
 12-string guitar and bass.
 

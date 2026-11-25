@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<GRMGuitarPreset name="Metal rhythm, drop D" category="Electric" version="0.3.9">
+  <PARAM id="sensor" value="1"/>
+  <PARAM id="hollow" value="0.0"/>
+  <PARAM id="amp_on" value="1"/>
+  <PARAM id="tuning" value="2"/>
+  <PARAM id="wood" value="3"/>
+  <PARAM id="pickup_type" value="1"/>
+  <PARAM id="pickup_mm" value="60"/>
+  <PARAM id="amp_lead_model" value="3"/>
+  <PARAM id="amp_lead_gain" value="6.5"/>
+  <PARAM id="amp_channel_mix" value="1.0"/>
+  <PARAM id="amp_od_on" value="1"/>
+  <PARAM id="amp_od_drive" value="0.1"/>
+  <PARAM id="amp_od_level" value="0.9"/>
+  <PARAM id="amp_gate" value="-50.0"/>
+  <PARAM id="amp_cab" value="2"/>
+  <PARAM id="force" value="3.0"/>
+  <PARAM id="pick" value="1.2"/>
+</GRMGuitarPreset>

@@ -78,11 +78,22 @@ namespace grmg
     constexpr double SCRAPE_DEPTH = 0.1;      // the scrape noise at full slider, as a share of the displacement
     constexpr double SCRAPE_CUTOFF_HZ = 6000.0;
     constexpr double TENSION_SMOOTH_S = 0.005; // the pitch follows the tension averaged over this
+    constexpr double TENSION_GLIDE_MAX = 0.12; // the vibration raises the pitch by two semitones at most
     constexpr int TENSION_UPDATE = 32;        // samples between two retunings of the modes
     constexpr double TENSION_PULL_HP_HZ = 20.0;
 
     constexpr double ROOM_BANDS[6] = {125.0, 250.0, 500.0, 1000.0, 2000.0, 4000.0};
     constexpr double C_ROOM = 343.0;
+    // the listener: the room's reverberation is solved once, heard from ROOM_REF_DISTANCE; moving the listener only
+    // moves the direct sound (its way to the ears) and the level of the reverberation against it, which glide over
+    // LISTENER_GLIDE_S (nothing to solve again, nothing to reload: no click)
+    constexpr double ROOM_REF_DISTANCE = 1.0;
+    constexpr double LISTENER_HEIGHT = 0.2;     // the ears above the guitar
+    constexpr double EAR_SPACING = 0.09;        // the right ear, this much farther
+    constexpr double LISTENER_REACH = 0.55;     // the listener stays within this share of the room's length
+    constexpr double LISTENER_GLIDE_S = 0.05;
+    constexpr double LISTENER_MAX_DELAY_S = 0.06; // the longest way to the ears (a church, its far end)
+    constexpr double ROOM_SWITCH_S = 0.02;        // a guitar moved to another room fades from one to the other
 
     constexpr int MODE_QS[7] = {16, 22, 25, 28, 30, 32, 35};
 
@@ -387,6 +398,9 @@ namespace grmg
 
     // the id of a channel's knob
     inline std::string amp_channel_id(const models::AmpChannelParams &channel, const char *knob) { return std::string(channel.prefix) + knob; }
+
+    // a guitar's mixer strip (mix_gain...): where it plays in the mix, not its sound (a preset leaves it)
+    inline bool is_mixer_param(const std::string &id) { return id.rfind("mix_", 0) == 0; }
 
     // every parameter a guitar has (its slot is copied, reset or moved as a whole)
     template <class Visit>

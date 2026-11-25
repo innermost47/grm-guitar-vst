@@ -187,6 +187,7 @@ void GRMGuitarProcessor::addGuitar()
 	empty.key = getPersistentSongKey();
 	empty.scale = getPersistentSongScale();
 	tracks[(size_t)count]->setPatterns({empty}, 0);
+	setPresetName(count, {});
 	guitarCount.store(count + 1);
 	selected.store(count);
 	guitarVersion.fetch_add(1);
@@ -208,6 +209,7 @@ void GRMGuitarProcessor::removeGuitar(int g)
 			if (to && from)
 				to->setValueNotifyingHost(from->getValue()); });
 		tracks[(size_t)k]->setPatterns(tracks[(size_t)k + 1]->getPatterns(), tracks[(size_t)k + 1]->getEditingPattern());
+		setPresetName(k, getPresetName(k + 1));
 	}
 	guitarCount.store(count - 1);
 	selected.store(juce::jmin(selected.load(), count - 2));
@@ -216,6 +218,57 @@ void GRMGuitarProcessor::removeGuitar(int g)
 }
 
 juce::String GRMGuitarProcessor::getGuitarName(int g) const { return "Guitar " + juce::String(g + 1); }
+
+// ================================================================== presets
+grmg::models::Preset GRMGuitarProcessor::capturePreset(int g, const std::string &name) const
+{
+	grmg::models::Preset preset;
+	preset.name = name;
+	preset.category = ui::PRESET_USER_CATEGORY;
+	for_each_guitar_param([&](const std::string &id)
+						  {
+		if (is_mixer_param(id))
+			return;
+		if (auto *p = params.getParameter(GuitarTrack::paramId(g, id)))
+			preset.values[id] = p->convertFrom0to1(p->getValue()); });
+	return preset;
+}
+
+void GRMGuitarProcessor::applyPreset(int g, const grmg::models::Preset &preset)
+{
+	if (g < 0 || g >= guitarCount.load())
+		return;
+	for_each_guitar_param([&](const std::string &id)
+						  {
+		if (is_mixer_param(id))
+			return;
+		auto *p = params.getParameter(GuitarTrack::paramId(g, id));
+		if (p == nullptr)
+			return;
+		const auto value = preset.values.find(id);
+		const float target = value == preset.values.end() ? p->getDefaultValue() : p->convertTo0to1(value->second);
+		if (std::abs(target - p->getValue()) > 1e-7f)
+		{
+			p->beginChangeGesture();
+			p->setValueNotifyingHost(target);
+			p->endChangeGesture();
+		} });
+	setPresetName(g, preset.name);
+	solver.notify();
+}
+
+juce::String GRMGuitarProcessor::getPresetName(int g) const
+{
+	std::lock_guard<std::mutex> lock(presetLock);
+	return g >= 0 && g < MAX_GUITARS ? presetNames[(size_t)g] : juce::String();
+}
+
+void GRMGuitarProcessor::setPresetName(int g, const juce::String &name)
+{
+	std::lock_guard<std::mutex> lock(presetLock);
+	if (g >= 0 && g < MAX_GUITARS)
+		presetNames[(size_t)g] = name;
+}
 
 // ================================================================== the roll of the selected guitar
 void GRMGuitarProcessor::setSong(const grmg::Song &s)
@@ -446,6 +499,9 @@ void GRMGuitarProcessor::prepareToPlay(double sr, int samplesPerBlock)
 		r.buf.setSize(2, samplesPerBlock);
 		r.key = -1;
 	}
+	roomBefore.fill(-1);
+	roomLeaving.fill(-1);
+	roomFadeLeft.fill(0);
 	volume.reset(sr, 0.05);
 	for (int g = 0; g < MAX_GUITARS; ++g)
 	{
@@ -636,6 +692,14 @@ void GRMGuitarProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
 		if (slot >= 0)
 			rooms[(size_t)slot].used = true;
 	}
+	const int roomFade = juce::jmax(1, (int)(grmg::ROOM_SWITCH_S * sr));
+	for (int g = 0; g < count; ++g)
+		if (roomOf[(size_t)g] != roomBefore[(size_t)g])
+		{
+			roomLeaving[(size_t)g] = roomBefore[(size_t)g];
+			roomFadeLeft[(size_t)g] = roomFade;
+			roomBefore[(size_t)g] = roomOf[(size_t)g];
+		}
 
 	for (int g = 0; g < count; ++g)
 	{
@@ -676,13 +740,17 @@ void GRMGuitarProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
 		stripPan[(size_t)g].setTargetValue(values.pan);
 		const bool own = values.ownOutput && usable(g + 1);
 		const int room = roomOf[(size_t)g];
-		juce::AudioBuffer<float> roomBuf;
-		if (room >= 0)
-			roomBuf.setDataToReferTo(rooms[(size_t)room].buf.getArrayOfWritePointers(), 2, n);
-		auto bus = room >= 0 ? roomBuf : own ? getBusBuffer(buffer, false, g + 1)
-											 : mainBus;
-		const float *l = t.out.getReadPointer(0);
-		const float *r = t.out.getReadPointer(1);
+		auto bus = own ? getBusBuffer(buffer, false, g + 1) : mainBus;
+		// the direct sound to the output, what it sends to its shared room (if it is in one) to that room, and while
+		// it changes rooms, to the one it leaves (fading out)
+		auto roomSide = [&](int slot, int ch)
+		{ return slot >= 0 && rooms[(size_t)slot].key >= 0 ? rooms[(size_t)slot].buf.getWritePointer(ch) : nullptr; };
+		float *roomL = roomSide(room, 0), *roomR = roomSide(room, 1);
+		const int leaving = roomFadeLeft[(size_t)g] > 0 ? roomLeaving[(size_t)g] : -1;
+		float *leftL = roomSide(leaving, 0), *leftR = roomSide(leaving, 1);
+		int &fadeLeft = roomFadeLeft[(size_t)g];
+		const float *l = t.out.getReadPointer(0), *r = t.out.getReadPointer(1);
+		const float *sendL = t.send.getReadPointer(0), *sendR = t.send.getReadPointer(1);
 		for (int k = 0; k < n; ++k)
 		{
 			const float gain = stripGain[(size_t)g].getNextValue(), pan = stripPan[(size_t)g].getNextValue();
@@ -696,6 +764,18 @@ void GRMGuitarProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
 			{
 				bus.addSample(0, k, gl * l[k]);
 				bus.addSample(1, k, gr * r[k]);
+			}
+			const float leave = fadeLeft > 0 ? (float)fadeLeft / (float)roomFade : 0.0f;
+			fadeLeft = juce::jmax(0, fadeLeft - 1);
+			if (roomL != nullptr)
+			{
+				roomL[k] += (1.0f - leave) * gl * sendL[k];
+				roomR[k] += (1.0f - leave) * gr * sendR[k];
+			}
+			if (leftL != nullptr)
+			{
+				leftL[k] += leave * gl * sendL[k];
+				leftR[k] += leave * gr * sendR[k];
 			}
 		}
 	}
@@ -784,6 +864,7 @@ void GRMGuitarProcessor::getStateInformation(juce::MemoryBlock &destData)
 		for (size_t k = 0; k < patterns.size(); ++k)
 			state.setProperty(key("pattern_" + juce::String((int)k)), juce::String(patterns[k].to_text()), nullptr);
 		state.setProperty(key("editing"), tracks[(size_t)g]->getEditingPattern(), nullptr);
+		state.setProperty(key("preset"), getPresetName(g), nullptr);
 	}
 	state.setProperty("seed", (int)seed.load(), nullptr);
 
@@ -834,6 +915,8 @@ void GRMGuitarProcessor::setStateInformation(const void *data, int sizeInBytes)
 		tracks[(size_t)g]->setPatterns(loaded, (int)tree.getProperty(key("editing"), 0));
 		tree.removeProperty(key("pattern_count"), nullptr);
 		tree.removeProperty(key("editing"), nullptr);
+		setPresetName(g, tree.getProperty(key("preset")).toString());
+		tree.removeProperty(key("preset"), nullptr);
 		for (int k = 0; k < n; ++k)
 			tree.removeProperty(key("pattern_" + juce::String(k)), nullptr);
 	}

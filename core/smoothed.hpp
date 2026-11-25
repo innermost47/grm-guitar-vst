@@ -3,19 +3,20 @@
 //
 // smoothed.hpp
 //
-// A gain a knob moves: it glides to its new value over LEVEL_SMOOTH_S instead of jumping (no zipper, no click).
+// A value a knob moves: it glides to its new value (over LEVEL_SMOOTH_S by default) instead of jumping (no zipper,
+// no click).
 #pragma once
 
 #include <cmath>
 
-#include "../../constants/core.hpp"
+#include "../constants/core.hpp"
 
 namespace grmg
 {
     class Smoothed
     {
     public:
-        void prepare(double sr) { coef_ = 1.0 - std::exp(-1.0 / (LEVEL_SMOOTH_S * sr)); }
+        void prepare(double sr, double glide_s = LEVEL_SMOOTH_S) { coef_ = 1.0 - std::exp(-1.0 / (glide_s * sr)); }
         void set(double target) { target_ = target; }
         void jump(double value) { value_ = target_ = value; }
         double next() { return value_ += (target_ - value_) * coef_; }

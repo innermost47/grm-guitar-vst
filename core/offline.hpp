@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "fft.hpp"
+#include "listener_path.hpp"
 #include "model.hpp"
 
 namespace grmg
@@ -24,17 +25,25 @@ namespace grmg
         for (size_t t = 0; t < force.size(); ++t)
             guitar[t] = (1 - a) * force[t] + a * wet[t];
         std::array<std::vector<double>, 2> out;
-        for (int ear = 0; ear < 2; ++ear)
+        if (!m.s.room_on || m.room_ir[0].empty() || m.room.size < 0)
+            return {guitar, guitar};
+        // the listener: the direct sound to each ear, and what it sends to the room's reverberation
+        ListenerPath listener;
+        listener.prepare(m.sample_rate);
+        listener.place(listener_taps(ROOMS[m.room.size], m.s.room_distance, 1.0), false);
+        const std::vector<float> in(guitar.begin(), guitar.end());
+        std::array<std::vector<float>, 2> direct, send;
+        for (auto *v : {&direct[0], &direct[1], &send[0], &send[1]})
+            v->resize(in.size());
+        float *const d[2] = {direct[0].data(), direct[1].data()};
+        float *const r[2] = {send[0].data(), send[1].data()};
+        listener.process(in.data(), d, r, (int)in.size());
+        for (size_t ear = 0; ear < 2; ++ear)
         {
-            if (m.s.room_on && !m.room_ir[(size_t)ear].empty())
-            {
-                std::vector<double> h(m.room_ir[(size_t)ear].begin(), m.room_ir[(size_t)ear].end());
-                out[(size_t)ear] = convolve(guitar, h);
-            }
-            else
-            {
-                out[(size_t)ear] = guitar;
-            }
+            const std::vector<double> h(m.room_ir[ear].begin(), m.room_ir[ear].end());
+            out[ear] = convolve(std::vector<double>(send[ear].begin(), send[ear].end()), h);
+            for (size_t t = 0; t < direct[ear].size() && t < out[ear].size(); ++t)
+                out[ear][t] += direct[ear][t];
         }
         return out;
     }
