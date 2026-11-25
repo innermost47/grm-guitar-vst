@@ -11,6 +11,7 @@
 #include "../plugin/PluginEditor.h"
 #include "../plugin/style/IconLibrary.h"
 #include "../plugin/views/MixerView.h"
+#include "../plugin/widgets/StepLane.h"
 
 using ui::IconId;
 
@@ -120,12 +121,41 @@ static void interfaceIconButtonsAreDescribedAndSquare()
     plugin->releaseResources();
 }
 
+// a Feel lane shows the roll's grid (Anthony, 25/11/2026: no step, beat or bar lines under the roll) and a line
+// between it and the lane above (which lane the mouse is in)
+static void feelLanesShowTheGrid()
+{
+    const int gutter = 60, perBeat = 40;
+    const std::vector<double> steps(64, 0.0);
+    StepLane::Host host;
+    host.values = [&]() -> const std::vector<double> & { return steps; };
+    host.beatToX = [=](double b) { return (float)(gutter + b * perBeat); };
+    host.xToBeat = [=](float x) { return (double)(x - gutter) / perBeat; };
+    host.beatsPerBar = [] { return 4; };
+    host.edit = [](const std::function<void(std::vector<double> &)> &, int, bool) {};
+    host.maxSteps = [] { return 1024; };
+    host.undo = host.redo = [] {};
+    StepLane lane("Palm", ui::FEEL_PALM, false, gutter, host);
+    lane.setSize(gutter + 8 * perBeat, 40);
+    const auto image = lane.createComponentSnapshot(lane.getLocalBounds(), false);
+
+    const int y = 16; // clear of the lane's horizontal lines and of its steps
+    auto at = [&](double beat) { return image.getPixelAt((int)host.beatToX(beat), y).getBrightness(); };
+    const float bar = at(4.0), beat = at(5.0), step = at(5.25), none = at(5.125);
+    check(bar > beat && beat > step && step > none,
+          "feel lane: the bar, beat and step lines (" + juce::String(bar) + ", " + juce::String(beat) + ", " +
+              juce::String(step) + " over " + juce::String(none) + ")");
+    check(image.getPixelAt(gutter / 2, 0).getBrightness() > image.getPixelAt(gutter / 2, 2).getBrightness(),
+          "feel lane: a line between it and the lane above, across the name too");
+}
+
 int main()
 {
     juce::ScopedJuceInitialiser_GUI init;
     everyIconHasOneFile();
     everyIconLoadsAndDraws();
     interfaceIconButtonsAreDescribedAndSquare();
+    feelLanesShowTheGrid();
     if (failures == 0)
         std::printf("icons: all checks passed\n");
     return failures == 0 ? 0 : 1;

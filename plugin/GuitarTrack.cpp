@@ -419,19 +419,24 @@ void GuitarTrack::begin(bool patternModeNow, bool internalPlaying)
 		}
 	}
 	if (auto *set = perfBox.take())
+	{
+		// the old set lives until the solver frees it: the engine moves to the same pattern in the new one now,
+		// even while no key holds a pattern (it would otherwise keep a performance about to be freed)
 		perfSet = set;
+		playPattern(enginePattern, false);
+	}
 	patternMode = patternModeNow;
 	keys = patternMode && !internalPlaying;
 	if (!keys)
 	{
 		const int k = editing.load();
-		engine.set_performance(perfSet ? perfSet->at(k) : nullptr, k != shownPattern); // another pattern: carry the endings
+		playPattern(k, k != shownPattern); // another pattern: carry the endings
 		shownPattern = k;
 		heldKey = heldPattern = -1;
 	}
 	else if (heldPattern >= 0)
 	{
-		engine.set_performance(perfSet ? perfSet->at(heldPattern) : nullptr);
+		playPattern(heldPattern, false);
 	}
 	engine.live_palm = param("live_palm") > 0.5f;
 	for (size_t k = 0; k < voiceParams.size(); ++k)
@@ -500,13 +505,19 @@ void GuitarTrack::midi(const juce::MidiMessage &msg)
 				heldChannel = channel;
 				heldPattern = k;
 				patternBeat = 0.0;
-				engine.set_performance(perfSet->at(k), true); // the old pattern's notes end as they were asked
+				playPattern(k, true); // the old pattern's notes end as they were asked
 			}
 		}
 		return;
 	}
 	if (msg.isNoteOn())
 		engine.note_on(msg.getNoteNumber(), msg.getFloatVelocity(), channel);
+}
+
+void GuitarTrack::playPattern(int k, bool carry)
+{
+	engine.set_performance(perfSet ? perfSet->at(k) : nullptr, carry);
+	enginePattern = k;
 }
 
 void GuitarTrack::releaseKeys()

@@ -30,11 +30,48 @@ namespace grmg
             return lo + std::round((std::clamp(v, lo, 1.0) - lo) / (1.0 - lo) * FEEL_NOTCHES) / FEEL_NOTCHES * (1.0 - lo);
         }
 
-        // the pattern's lanes, written out from its preset when it has none
+        // the pattern's lanes, written out from its preset when it has none, and over the whole pattern when it grew
+        // (lanes written past the pattern's end are kept, as notes are)
         static void ensure_lanes(Song &song)
         {
-            if ((int)song.feel.force.size() != song.steps())
+            if ((int)song.feel.force.size() < song.steps())
                 song.feel = resized(song);
+        }
+
+        // the most steps a lane holds: as far as notes can be written
+        static int max_steps(const Song &song) { return (int)std::lround(song.max_beats() / FEEL_STEP_BEATS); }
+
+        // the lanes made to reach step `upto` (an edit past the pattern's end): the new steps carry on the pattern's
+        // feel, as it would play there
+        static void reach(Song &song, int upto)
+        {
+            ensure_lanes(song);
+            upto = std::min(upto, max_steps(song));
+            const int period = song.steps();
+            auto grow = [&](std::vector<double> &lane)
+            {
+                for (int s = (int)lane.size(); s < upto; ++s)
+                    lane.push_back(lane[(size_t)(s % period)]);
+            };
+            grow(song.feel.force);
+            grow(song.feel.timing);
+            grow(song.feel.palm);
+        }
+
+        // another preset for the pattern: a preset only says which strokes hit harder, so it draws the Force lane again
+        // and keeps the Timing and Palm lanes as written (a pattern with no lanes written simply follows the preset)
+        static void apply_preset(Song &song, int preset)
+        {
+            if (song.feel.empty())
+            {
+                song.feel_preset = preset;
+                return;
+            }
+            ensure_lanes(song);
+            song.feel_preset = preset;
+            const auto drawn = FeelCurve::preset_lanes(preset, song.meter(), (int)song.feel.force.size());
+            for (size_t s = 0; s < song.feel.force.size(); ++s)
+                song.feel.force[s] = notch(drawn.force[s]);
         }
 
         static void clone(Song &song, int from, int count)

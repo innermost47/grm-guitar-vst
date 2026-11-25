@@ -81,6 +81,12 @@ namespace ui
     inline const juce::Colour FEEL_FORCE{juce::Colour(theme::defaultPalette.gold)};
     inline const juce::Colour FEEL_TIMING{juce::Colour(theme::defaultPalette.cyan)};
     inline const juce::Colour FEEL_PALM{juce::Colour(theme::defaultPalette.mauve)};
+    // the time grid of the roll and its lanes (TimeGrid): a bar, a beat, a step; the line between two lanes
+    inline const juce::Colour GRID_BAR{TEXT.withAlpha(0.6f)};
+    inline const juce::Colour GRID_BEAT{GRID.brighter(0.25f)};
+    inline const juce::Colour LANE_DIVIDER{TEXT.withAlpha(0.45f)};
+    inline const juce::Colour PASTE_MARKER{BRIGHT.withAlpha(0.8f)}; // where Ctrl+V pastes
+    constexpr float PASTE_MARKER_SIZE = 7.0f;                        // the width of its triangle
     // the master strip's name plate, and the ticks along a mixer fader
     inline const juce::Colour MASTER_PLATE{juce::Colour(theme::defaultPalette.terracotta)};
     constexpr int FADER_TICKS = 11;

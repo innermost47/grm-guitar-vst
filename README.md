@@ -6,7 +6,18 @@ pickups and the room. Several guitars in one plugin, a guitar roll that knows a 
 that refuse what no guitarist can play. Free software under the AGPL-3.0 (JUCE 8 is itself available under the
 AGPL-3.0).
 
-Featured on [Bedroom Producers Blog](https://bedroomproducersblog.com/2026/11/24/innermost47-grm-guitar/).
+Curious how it works, want to add a feature, or build your own instrument on the same engine? Read the
+**[developer documentation](docs/README.md)**.
+
+## Featured on
+
+- [Bedroom Producers Blog](https://bedroomproducersblog.com/2026/11/24/innermost47-grm-guitar/)
+- [SoundShockAudio](https://soundshockaudio.com/grm-guitar/)
+- [project of napskint](https://projectofnapskint.com/grm-guitar/) (in Japanese)
+
+Thank you to all three for taking the time to try it and write about it.
+
+![GRM Guitar playing its demo song](docs/screenshot.png)
 
 ## Tracks composed with GRM Guitar
 
@@ -25,20 +36,33 @@ Featured on [Bedroom Producers Blog](https://bedroomproducersblog.com/2026/11/24
 - **[grm-core](https://github.com/innermost47/grm-core)**: the Global Relational Model, the research it comes
   from, its tests and the equation found between the data. The guitar was first written there as a Python proof of
   concept (`grm_guitar.py`); this plugin is the product.
+- **[cppgrm](https://github.com/innermost47/cppgrm)**: the GRM engine of this plugin, one C++17 header with no
+  dependency, fetched by CMake. Build your own instrument on it: see
+  [Your own plugin with cppgrm](docs/your-own-plugin.md).
 - **[pygrm](https://pypi.org/project/pygrm/)** (`pip install pygrm`): the GRM engine as a Python package, to solve
-  your own networks. The C++ engine of this plugin (`core/grm.hpp`) is the same algorithm, step by step.
+  your own networks. cppgrm is the same algorithm, step by step, and gives the same numbers.
 
 A GRM network is a set of quantities (nodes) tied by relations, some of them measured, with their uncertainties.
 The network finds every value that agrees with all the relations at once. Here the measured quantities come from
-the literature on guitars (string losses, wood, pickups, hands): see [Sources](#sources).
+the literature on guitars (string losses, wood, pickups, hands): see [Sources](#sources), and
+[The GRM in practice](docs/grm.md) for a network in code.
 
 ## The sound
 
-- **Strings.** Each string at each fret is a network: tuning, tension, inharmonicity (the stiffness of the steel),
-  wound strings. In the engine, each string is a bank of up to 80 modes pushing on the bridge.
-- **How long each partial rings** follows the losses measured on real steel strings (Woodhouse 2012): inside the
-  string, in the air, in the steel as it bends. The low partials ring longest, the high ones go first. **String
-  age** moves the strings from new to played (played strings lose their highs sooner).
+- **Strings.** Real string sets (nickel 9-42, 10-46, 11-49; phosphor bronze 11-52, 12-53; 80/20 bronze 12-53;
+  nylon normal and hard tension), each string with its maker's gauge and weight, on a **scale length** from 550 to
+  770 mm. **Automatic** picks nickel under a magnetic pickup and bronze otherwise. Each string at each fret is a
+  network: tuning, tension, inharmonicity (the stiffness of its core; nylon stiffens under tension). The tension of
+  each string is shown, with a warning when a string is too slack. In the engine, each string is a bank of up to 80
+  modes pushing on the bridge.
+- **Tunings**: standard, half step down, drop D, DADGAD, open G, open D, or **Custom**, each open string its own note from
+  C1 to E5.
+- **How long each partial rings** comes from what the string is made of and the air around it: the air's losses
+  computed from the gauge and mass (Valette), the material's internal losses measured on real strings (Woodhouse
+  2012). The low partials ring longest, the high ones go first; nylon loses its highs sooner than steel. **String
+  age** moves the strings from new to played (played wound strings get duller).
+- **The neck** takes its share of the energy and has its own resonances: a few notes die sooner, the dead spots of
+  a real neck (Paté et al. 2014).
 - **Attack.** Pick or fingers, force, pluck point, pick thickness: the attack network gives the shape the string
   leaves the pick with.
 - **Palm.** The exact modes of a string under a strip of skin, at the palm's place and pressure. The pressure acts
@@ -48,8 +72,11 @@ the literature on guitars (string losses, wood, pickups, hands): see [Sources](#
   carries its braces and the bridge (a top weighs about 200 g with them) and every mode has the measured Q (about
   50). **Wood**: 8 species with their density and stiffness (Wood Handbook), and the piece's density against its
   species' average. **Body: solid to hollow**: from a flat-top acoustic to a solid body (no cavity, a 44.5 mm slab).
-- **Sensor.** A **microphone** (body and room), a **magnetic pickup** (the string's velocity where the pickup sits,
-  through the coil, the cable and the volume pot: a 1970s single coil or a hotter one, measured values), **three
+- **Sensor.** A **microphone** (body and room), a **magnetic pickup** (it listens to a short stretch of string over
+  its poles, a humbucker through its two coils; the closer the string to the poles, the more it pulls the sound, from
+  the measured flux of a real magnet; it hears only what is magnetic in a string: nylon is silent under it, a
+  bronze-wound string much quieter than a nickel one; then the coil, the cable and the volume pot: a 1970s single
+  coil or a hotter one, measured values; **pickup height** from 1.5 to 8 mm), **three
   magnetic pickups (HSS)** — bridge, middle and neck, each with its own on/off switch, the bridge splittable from
   humbucker to single coil, the cable shared by all three, each through its own coil and load then mixed: every
   classic selector position, from the bridge alone to the neck alone and back through the in-between combinations
@@ -90,11 +117,21 @@ preset does not name goes to its default.
   natural spread). A pick cannot jump a string; the fingers can, five at most. One hand cannot strum and pick
   single notes at the same moment. The roll refuses an edit no guitarist can play, says why, and **greys the
   places the hand cannot reach** with the fret being written.
-- **The right hand.** Notes struck together with a pick are one sweep (about 5 ms between strings, the later ones
-  a little softer); single notes are picked down and up; with the fingers, a pinch (the thumb slightly first).
+- **The right hand.** A strum spreads across the strings as measured guitarists' do (about 8 to 11 ms from string
+  to string at slow tempos, the later strings a little softer), and the beat lands on the B and G strings, so a
+  downstroke starts just before it. Chords written as notes on the roll are strummed with the same gesture as the
+  Strums lane. Single notes are picked down and up; with the fingers, a pinch (the thumb slightly first).
+- **A groove.** The player stresses the bar as its meter asks, plays each place of the bar its own way bar after
+  bar, lets its tempo and energy breathe slowly, and keeps the small error of every gesture: successive strokes
+  lean early and late as measured musicians' do, not as random noise. One network weighs these aims against the
+  arm's continuity (a pendulum does not jump).
 - **The arm** swings, tires on long runs, comes back fresh after a rest. **Human feel** and **Looseness** set how
   far the player strays from the grid (timing, force, pluck point); **New take** plays the same roll again with
   other imprecisions.
+- **Imperfection**: a neighbouring string brushed, a last string missed, a string choking under a slipping finger.
+- **The hand on a ringing string.** A palm or a hand lands on a string over a few milliseconds instead of cutting
+  it: a palm keeps the bass and takes the middle (its thud); when it leaves, the note opens up again. Palm-muted
+  strokes in a row keep the palm down between them.
 - **The fingers on the frets** lift, land and slide on wound strings (finger noises).
 
 ## The guitar roll
@@ -122,6 +159,18 @@ One lane per string (string 1 on top, as in a tablature) and a lane of strums.
   between two instances), undo, arrows, Ctrl+wheel zoom, Space play. The roll follows the playhead or not
   ("Follow playhead").
 
+## The Feel lanes
+
+Under the roll, three lanes give each pattern its feel, one step per sixteenth: **Force** (which strokes hit
+harder), **Timing** (which ones lean ahead or behind) and **Palm** (a light palm on some strokes; the Palm mute of a
+note stays the full one).
+- Steps are drawn in notches (Shift: freely); the player plays a smooth curve through them. Select, copy, cut,
+  paste (where the marker shows, past the pattern's end too, as notes), duplicate and undo as on the roll.
+- **Feel presets** drawn from the pattern's signature: Natural, Backbeat, Offbeat, Gallop, Waltz, Flat. Odd
+  signatures are grouped (7/4 as 2+2+3, 3+2+2...), set in the transport bar.
+- **Clone** a bar over the next ones, ask for a **variation**, or roll the dice for a **new groove**.
+- **Palm against the accents** (Player tab): the harder a stroke, the less palm, or the other way round.
+
 ## Patterns
 
 Each guitar has up to 24 patterns (New, Duplicate, Delete, Copy, Paste). **MIDI keys** chooses what the keyboard
@@ -136,36 +185,35 @@ does:
 ## Several guitars
 
 Up to 8 guitars in one plugin, each with its own settings, patterns, player and mixer strip.
-- **Mixer**: gain (dB), level, pan, mute, solo, and the output: the main one or the guitar's own (enable
-  "Guitar 1" to "Guitar 8" in the host to put each guitar on its own channel with its own effects).
+- **Mixer**: gain (dB), level with graduated faders, pan, mute, solo, a level meter, and the output: the main one
+  or the guitar's own (enable "Guitar 1" to "Guitar 8" in the host to put each guitar on its own channel with its
+  own effects). A **master** strip for the main output stays in place while the guitars' strips scroll.
 - **The other guitars, faint, behind the roll**, with the name of each note and of each chord where it changes, in
   their colour ("Other guitars"). A shorter pattern is drawn as many times as it repeats under a longer one.
-- The header shows where the pattern is and where the whole song is.
+- The **transport bar** shows where the pattern is and where the whole song is (in bars and in minutes), the
+  tempo and play / stop (standalone), the pattern's signature and grouping, the loop and the roll following the
+  playhead; the standalone app can go full screen.
 - Sessions of 0.2.0 open as one guitar, as they were: guitar 1 keeps every parameter of the one-guitar versions.
 
 ## Architecture
 
-- `core/grm.hpp`: the GRM engine in C++ (header only), the algorithm of grm-core and pygrm.
-- `core/guitar_networks.hpp`, `core/physics.hpp`: the networks (strings and their losses, attack, palm, body,
-  pickup (one, or three for the HSS set), room, fingers, player, strums).
-- `core/model.hpp`: everything the networks give for the current settings, solved off the audio thread.
-- `core/song.hpp`, `core/chords.hpp`, `core/ringing.hpp`, `core/playability.hpp`: the roll, the chords and scales,
-  how long notes ring, the hands.
-- `core/performance.hpp`: the roll turned into what the hands do (player network, sweep, pinch, palm, lifts,
-  landings, endings, hand stops).
-- `core/voice.hpp`, `core/engine.hpp`: the real time part. Its output is the force on the bridge in newtons (and
-  the string velocity under the pickup).
-- `plugin/GuitarTrack.*`: one guitar (settings, patterns, networks, strings, sensor, body and room); the processor
-  holds the guitars, the shared rooms, the mixer and the outputs. A track is the place another GRM instrument
-  would plug in.
-- Networks are solved in a background thread; the audio thread takes finished results between two blocks, without
-  locks or allocation (`grmg::Mailbox`).
+The GRM networks are solved in a background thread when a setting or the roll changes, never in the audio
+callback; the audio thread only plays their results (banks of modes, convolutions, the amplifier), handed over
+without locks or allocation.
+
+- `core/`, `models/`, `constants/`: the networks, their data with its sources, and the real-time engine, in plain
+  C++17 without JUCE (tested and rendered offline).
+- `plugin/`: the JUCE plugin: parameters, guitars, solver thread, interface.
+
+The whole story, with diagrams and examples, is in the **[developer documentation](docs/README.md)**:
+[the GRM in practice](docs/grm.md), [architecture](docs/architecture.md), [contributing](docs/contributing.md)
+and [your own plugin with cppgrm](docs/your-own-plugin.md).
 
 ## Tests
 
-`ctest` runs the first seven:
+Configure with `-DGRMG_BUILD_TESTS=ON`. `ctest` runs the first fifteen:
 - `test_core`: 210 checks that the C++ GRM gives the same numbers as the Python one (values to 1e-9).
-- `test_physics`: 154 checks of the networks (body, bridge, room, palm, finger, action, player, strum, string
+- `test_physics`: 140 checks of the networks (body, bridge, room, palm, finger, action, player, strum, string
   losses, loaded top, the listener's distance) and of one string's sound against the proof of concept.
 - `test_play`: 74 checks of the playing (hands, sweep, pinch, muscle, picking, palm, loop flags, ringing, endings,
   hand stops, chords on every tuning, scales, fills, dead notes, endings across a pattern change, legato on one
@@ -173,18 +221,37 @@ Up to 8 guitars in one plugin, each with its own settings, patterns, player and 
 - `test_amp`: 40 checks of the amplifier (operating points, tone stacks against their H(s), cabinet, clean and high
   gain, compression, aliasing, hiss and gate, presence, the overdrive's tight lows) and of the most violent larsen
   held for 25 s, with and without the amplifier.
+- `test_pickup`: 38 checks of the magnetic pickups (the poles' window, the humbucker's two coils, the flux against
+  the string's distance, what a string's material gives them).
+- `test_strings`: 18 checks of the string sets (tensions against the maker's chart, scale lengths, Automatic, the
+  losses of each material against Paté's measured Q, the neck's dead spots, nylon).
+- `test_tuning`: 18 checks of the tunings (the list, Custom and its notes, set by a host, each guitar its own,
+  sessions saved in Custom, the slack-string warning).
+- `test_live_playing`: 21 checks of the player (the bar's accents, the groove from bar to bar, successive timings
+  leaning early and late, the measured strum spread, Imperfection, chords on the roll strummed as strums).
+- `test_hand_contact`: 4 checks of a hand on a ringing string (the palm landing and lifting, what it keeps and
+  takes).
+- `test_feel_lanes`: 29 checks of the Feel lanes (the meter and its groupings, the curve through the steps, the
+  presets, a new preset keeping the Timing and Palm lanes, lanes written past the pattern's end, clone, variation, the dice, palm against the accents,
+  saved and loaded).
+- `test_host_resume`: 4 checks of a host that plays patterns from the keys, stops, lets a setting change, then
+  plays again (the engine never keeps a pattern the solver has freed).
 - `test_modal`: 21 checks of the dialogs and the update check (versions compared as numbers, GitHub's answer, the
   equations and the grm-core link on the left of a dialog, closing it).
 - `test_presets`: 22 checks of the presets (the factory's name real settings within their ranges, one's own written,
   found again, replaced, deleted, a sound into a preset and back with the mixer strip kept, the session, the menu).
 - `test_icons`: every icon is embedded and drawn, every icon button of the interface has its tooltip and its
-  design-system size.
+  design-system size at the editor's smallest size, the mixer follows the guitars.
+- `timbre_probe <folder> [take.wav]`: the sound's yardstick: renders and measures the decay and Q of each partial,
+  tuning, brightness, a strum's spread, a held chord's motion, and compares the tonal balance with a real recording
+  (ctest checks that every sound it renders is finite and audible).
 - `plugin_host_test`: the plugin called as a host would (MIDI, patterns, sensors, several guitars, own outputs,
   sessions of 0.2.0, state, the listener moved while the guitar rings without a click).
 - `plugin_cpu_test [guitars]`: the share of each audio block the plugin takes with several guitars.
 - `render_offline [out.wav] [song.txt] [acoustic | clean | crunch | lead | metal]`: the whole path without a host,
   acoustic or through the amplifier.
 - `editor_snapshot out.png`: the editor drawn to a picture.
+- `app_screenshot out.png [seconds]`: the screenshot above, the standalone's interface playing its demo song.
 
 Measured on the build machine (Linux, 48 kHz, 256-sample blocks): one guitar about 5 % of a block on average,
 four guitars about 14 %.
@@ -226,21 +293,21 @@ cmake --build build
 - The body has seven modes below about 1.4 kHz: its resonances stand out more than on a real guitar, whose modes
   get denser up high (moving the body settings changes the "vowel" more than a real guitar would).
 - Some chord shapes chosen by the hand network are unusual (they are playable; edit them in the roll).
-- A magnetic pickup listens at one point (the width of its magnetic window is not modelled yet); the HSS set uses
-  three fixed positions (65 mm, 160 mm, 255 mm from the saddle) and the three pickups share one cable capacitance.
-- On a solid body, a real low E fundamental may ring longer than the measured string losses give here (Zollner's
-  measurements on electric guitars): to be checked.
+- The HSS set uses three fixed positions (65 mm, 160 mm, 255 mm from the saddle) and the three pickups share one
+  cable capacitance.
+- The string losses are checked against Paté's measured Q of a G3 on a solid body; the wound strings' sustain on a
+  solid body has no such measurement to check against yet (Zollner suggests a low E may ring longer).
+- The body goes from a flat-top acoustic to a solid body: there is no classical guitar body yet (nylon strings
+  play on a flat-top).
+- Signatures count quarter notes (1/4 to 12/4): no 6/8 or 7/8 yet.
+- Some chord names on the roll do not follow a transposed or retuned shape.
 - Live MIDI playing has no finger noises (they are computed for the roll).
-- Linux: the same commands with the default generator (needs the ALSA, X11, Xrandr, Xinerama, Xcursor, freetype
-and fontconfig development packages). On x86_64, release builds target `x86-64-v3` (requiring **AVX**, **AVX2**,
-and **FMA**); if a prebuilt binary fails with `SIGILL` (signal 4) or if the target CPU lacks AVX2, build from source
-with `-DGRMG_PORTABLE_CPU=ON` (or pass `-DCMAKE_CXX_FLAGS="-march=x86-64"`). You can check CPU support with
-`lscpu | grep -iE "avx|fma"`.
 
 ## Next
 
-Slides, hammer-ons, pull-offs and bends between notes; automation lanes under the roll (palm, force...); the guitar
-drawn as it is at each moment; custom tunings shared between projects; a strum and arpeggio editor;
+Slides, hammer-ons, pull-offs and bends between notes (and a slide between chords); more lanes under the roll
+(automation) and Feel curves recorded from your own playing; signatures in eighth notes; a classical guitar body;
+the guitar drawn as it is at each moment; custom tunings shared between projects; a strum and arpeggio editor;
 a new look (light and dark); modulators; one network holding all the others (the whole hand, the whole guitar);
 12-string guitar and bass.
 
@@ -253,6 +320,19 @@ a new look (light and dark); modulators; one network holding all the others (the
 - US Forest Products Laboratory, Wood Handbook, tables 5-3b and 5-5b: wood density and stiffness.
 - H. Lemme's pickup measurements (via ozvalveamps.org): pickup inductance, resistance, capacitance.
 - M. Zollner, Physics of the Electric Guitar, ch. 7.7: string decay on electric guitars.
+- A. Paté, J.-L. Le Carrou, B. Fabre, "Predicting the decay time of solid body electric guitar tones", JASA 135
+  (2014): the Q of a string between rigid ends and on a solid body, the neck's dead spots; after C. Valette's air
+  losses of a string.
+- D'Addario string tension chart: the gauge and unit weight of each string of each set.
+- A. Novak et al., DAFx 2018: the magnetic pickup's flux against the string's distance, its window.
+- J. Woodhouse (2012) and N. Lynch-Aird & J. Woodhouse (nylon harp strings): the internal losses of nylon strings
+  and their stiffening under tension.
+- Freire et al., SMC 2018 (hexaphonic pickups on a nylon guitar played with a pick): how a strum spreads across the
+  strings and where it falls against the beat.
+- E. Räsänen et al., PLoS ONE (2015), on the hi-hat of a virtuoso drum track: how successive intervals lean early
+  and late, and how much of the accents repeats from bar to bar.
+- H. Hennig et al., "The nature and perception of fluctuations in human musical rhythms", PLoS ONE (2011):
+  long-range correlated timing, and what listeners prefer.
 - J. Wolfe, UNSW, "How does a guitar work?": the lowest air and top resonances.
 
 ## Credits

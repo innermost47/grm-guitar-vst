@@ -231,14 +231,14 @@ GRMGuitarEditor::GRMGuitarEditor(GRMGuitarProcessor &p)
 	feelLabel.setText("Feel", juce::dontSendNotification);
 	for (int k = 0; k < NUM_FEEL_PRESETS; ++k)
 		feelBox.addItem(FEEL_PRESET_NAMES[k], k + 1);
-	feelBox.setTooltip("The Feel of this pattern: its lanes (force, timing, palm under the roll) drawn again from this "
-					   "preset and its meter (undo brings them back)");
+	feelBox.setTooltip("The Feel of this pattern: its Force lane drawn again from this preset and its meter; the Timing "
+					   "and Palm lanes stay as written (undo brings the Force back)");
 	feelBox.onChange = [this]
 	{
 		const int preset = feelBox.getSelectedId() - 1;
 		if (preset >= 0 && preset != roll.getSong().feel_preset)
 			roll.edit([preset](Song &s)
-					  { s.feel_preset = preset; s.feel = {}; }, false);
+					  { FeelGenerator::apply_preset(s, preset); }, false);
 	};
 	feelDepth.setSliderStyle(juce::Slider::LinearHorizontal);
 	feelDepth.setTextBoxStyle(juce::Slider::NoTextBox, true, 0, 0);

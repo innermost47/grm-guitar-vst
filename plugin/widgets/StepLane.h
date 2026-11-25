@@ -25,8 +25,11 @@ public:
         std::function<const std::vector<double> &()> values; // one per sixteenth from the pattern's start
         std::function<float(double)> beatToX;
         std::function<double(float)> xToBeat;
-        // a change of the lane: `gesture` true for the first change of a gesture (the roll keeps one undo for it)
-        std::function<void(const std::function<void(std::vector<double> &)> &, bool gesture)> edit;
+        std::function<int()> beatsPerBar; // the roll's bar, for the grid's bar lines
+        // a change of the lane, which first reaches step `upto` (it may be written past the pattern's end); `gesture`
+        // true for the first change of a gesture (the roll keeps one undo for it)
+        std::function<void(const std::function<void(std::vector<double> &)> &, int upto, bool gesture)> edit;
+        std::function<int()> maxSteps; // as far as a lane can be written
         std::function<void()> undo, redo;
     };
 
@@ -40,6 +43,10 @@ public:
     void mouseDown(const juce::MouseEvent &) override;
     void mouseDrag(const juce::MouseEvent &) override;
     void mouseUp(const juce::MouseEvent &) override;
+    void mouseEnter(const juce::MouseEvent &) override { repaint(); }
+    void mouseExit(const juce::MouseEvent &) override { repaint(); }
+    void focusGained(FocusChangeType) override { repaint(); } // the paste marker shows
+    void focusLost(FocusChangeType) override { repaint(); }
     bool keyPressed(const juce::KeyPress &) override;
 
 private:

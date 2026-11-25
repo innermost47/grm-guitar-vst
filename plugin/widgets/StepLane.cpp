@@ -5,6 +5,7 @@
 #include <cmath>
 
 #include "../../constants/core.hpp"
+#include "TimeGrid.h"
 
 using namespace ui;
 
@@ -29,7 +30,7 @@ bool StepLane::selection(int &from, int &to) const
     return true;
 }
 
-int StepLane::stepAt(float x) const { return (int)std::floor(host.xToBeat(x) * 4.0); }
+int StepLane::stepAt(float x) const { return (int)std::floor(host.xToBeat(x) / grmg::FEEL_STEP_BEATS); }
 
 float StepLane::yOf(double v) const
 {
@@ -51,7 +52,7 @@ double StepLane::valueAt(float y, bool fine) const
 
 void StepLane::draw(int step, double value)
 {
-    if (step < 0)
+    if (step < 0 || step >= host.maxSteps())
         return;
     // from the last step drawn to this one, every step between gets its share (a fast drag leaves no hole)
     const int from = lastStep < 0 ? step : lastStep;
@@ -66,7 +67,7 @@ void StepLane::draw(int step, double value)
                 lane[(size_t)s] = v0 + u * (value - v0);
             }
         },
-        !gesture);
+        std::max(from, step) + 1, !gesture);
     gesture = true;
     lastStep = step;
     lastValue = value;
@@ -75,10 +76,17 @@ void StepLane::draw(int step, double value)
 void StepLane::paint(juce::Graphics &g)
 {
     g.fillAll(PANEL);
-    g.setColour(TEXT);
+    // the lane's name, lit while the mouse is over it: the lane it draws in
+    g.setColour(isMouseOver(true) ? colour : TEXT);
     g.setFont(font(11.0f));
     g.drawText(name, 8, 0, gutter - 10, getHeight(), juce::Justification::centredLeft);
-    g.reduceClipRegion(gutter, 0, getWidth() - gutter, getHeight());
+    // the line between this lane and the one above, across the whole width
+    g.setColour(LANE_DIVIDER);
+    g.drawHorizontalLine(0, 0.0f, (float)getWidth());
+    g.reduceClipRegion(gutter, 1, getWidth() - gutter, getHeight() - 1);
+    // the roll's grid: a line every step, the beats and the bars brighter
+    TimeGrid::paint(g, host.beatToX, host.xToBeat, grmg::FEEL_STEP_BEATS, host.beatsPerBar(), (float)gutter, (float)getWidth(), 0.0f,
+                    (float)getHeight());
     // the middle line (or the floor), and a faint line every quarter of the lane
     g.setColour(GRID);
     for (double v : signedLane ? std::initializer_list<double>{-0.5, 0.0, 0.5} : std::initializer_list<double>{0.25, 0.5, 0.75})
@@ -88,7 +96,7 @@ void StepLane::paint(juce::Graphics &g)
     const float base = yOf(signedLane ? 0.0 : 0.0);
     for (int s = first; s <= last; ++s)
     {
-        const float x0 = host.beatToX(0.25 * s) + 1.0f, x1 = host.beatToX(0.25 * (s + 1)) - 1.0f;
+        const float x0 = host.beatToX(grmg::FEEL_STEP_BEATS * s) + 1.0f, x1 = host.beatToX(grmg::FEEL_STEP_BEATS * (s + 1)) - 1.0f;
         const float y = yOf(lane[(size_t)s]);
         const bool selected = s >= selFrom && s < selTo;
         if (selected)
@@ -99,15 +107,16 @@ void StepLane::paint(juce::Graphics &g)
         g.setColour(selected ? colour.brighter(0.4f) : colour.withAlpha(0.85f));
         g.fillRect(juce::Rectangle<float>(x0, std::min(y, base), std::max(1.0f, x1 - x0), std::max(1.0f, std::abs(base - y))));
     }
-    g.setColour(GRID);
-    g.drawHorizontalLine(0, (float)gutter, (float)getWidth());
+    // where Ctrl+V pastes in this lane: the step last clicked, while the lane has the keyboard
+    if (hasKeyboardFocus(false))
+        TimeGrid::paintPasteMarker(g, host.beatToX(grmg::FEEL_STEP_BEATS * pasteAt), 1.0f, (float)getHeight());
 }
 
 void StepLane::mouseDown(const juce::MouseEvent &e)
 {
     grabKeyboardFocus();
     const int step = stepAt(e.position.x);
-    pasteAt = std::max(0, step);
+    pasteAt = juce::jlimit(0, host.maxSteps() - 1, step);
     gesture = false;
     lastStep = -1;
     selecting = e.mods.isCommandDown();
@@ -121,6 +130,7 @@ void StepLane::mouseDown(const juce::MouseEvent &e)
     }
     selFrom = selTo = -1;
     draw(step, valueAt(e.position.y, e.mods.isShiftDown()));
+    repaint(); // the paste marker moves
 }
 
 void StepLane::mouseDrag(const juce::MouseEvent &e)
@@ -157,7 +167,7 @@ bool StepLane::keyPressed(const juce::KeyPress &key)
                 for (int s = std::max(0, from); s < std::min(to, (int)l.size()); ++s)
                     l[(size_t)s] = value(s);
             },
-            true);
+            to, true);
     };
     int from = 0, to = 0;
     const bool any = selection(from, to);
@@ -193,7 +203,7 @@ bool StepLane::keyPressed(const juce::KeyPress &key)
         const int at = pasteAt;
         set_range(at, at + (int)copied.size(), [copied, at](int s) { return copied[(size_t)(s - at)]; });
         selFrom = at;
-        selTo = std::min(n, at + (int)copied.size());
+        selTo = std::min(host.maxSteps(), at + (int)copied.size());
         return true;
     }
     if (ctrl && (code == 'D' || code == 'd') && any)
@@ -202,7 +212,7 @@ bool StepLane::keyPressed(const juce::KeyPress &key)
         const int at = to;
         set_range(at, at + (int)part.size(), [part, at](int s) { return part[(size_t)(s - at)]; });
         selFrom = at;
-        selTo = std::min(n, at + (int)part.size());
+        selTo = std::min(host.maxSteps(), at + (int)part.size());
         return true;
     }
     if ((code == juce::KeyPress::deleteKey || code == juce::KeyPress::backspaceKey) && any)

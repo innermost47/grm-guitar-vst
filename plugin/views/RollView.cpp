@@ -25,11 +25,13 @@ RollView::RollView(GRMGuitarProcessor &p) : processor(p)
 		host.values = [this, k]() -> const std::vector<double> & { return feelLane(shownFeel, k); };
 		host.beatToX = [this](double b) { return beatToX(b); };
 		host.xToBeat = [this](float x) { return xToBeat(x); };
-		host.edit = [this, k](const std::function<void(std::vector<double> &)> &change, bool gesture)
+		host.beatsPerBar = [this] { return song.beats_per_bar; };
+		host.maxSteps = [this] { return FeelGenerator::max_steps(song); };
+		host.edit = [this, k](const std::function<void(std::vector<double> &)> &change, int upto, bool gesture)
 		{
 			if (gesture)
 				pushUndo();
-			FeelGenerator::ensure_lanes(song);
+			FeelGenerator::reach(song, upto);
 			change(feelLane(song.feel, k));
 			commit(false, false);
 		};
@@ -182,18 +184,8 @@ void RollView::paint(juce::Graphics &g)
 		g.fillRect(a, (float)RULER, b - a, (float)(getHeight() - RULER - SCROLL));
 	}
 	// grid: snap, beats, bars
-	const double first = std::max(0.0, std::floor(viewBeat / snap) * snap);
-	for (double b = first; beatToX(b) < right; b += snap)
-	{
-		const float x = beatToX(b);
-		if (x < GUTTER)
-			continue;
-		const bool bar = std::abs(std::fmod(b, (double)song.beats_per_bar)) < 1e-6;
-		const bool beat = std::abs(b - std::round(b)) < 1e-6;
-		g.setColour(bar ? TEXT.withAlpha(0.6f) : beat ? GRID.brighter(0.25f)
-													  : GRID);
-		g.drawVerticalLine((int)x, (float)RULER, (float)(getHeight() - SCROLL));
-	}
+	TimeGrid::paint(g, [this](double b) { return beatToX(b); }, [this](float x) { return xToBeat(x); }, snap,
+					song.beats_per_bar, (float)GUTTER, (float)right, (float)RULER, (float)(getHeight() - SCROLL));
 	// ruler
 	g.setColour(PANEL);
 	g.fillRect(0, 0, right, RULER);
@@ -226,6 +218,9 @@ void RollView::paint(juce::Graphics &g)
 			g.drawVerticalLine((int)x, 0.0f, (float)RULER);
 		}
 	}
+	// where Ctrl+V pastes: the last place clicked
+	if (const float x = beatToX(pasteBeat); x >= GUTTER && x <= right)
+		TimeGrid::paintPasteMarker(g, x, 2.0f, (float)RULER);
 	// strums, and the strings they reach (ghosts in the string lanes)
 	for (size_t k = 0; k < song.strums.size(); ++k)
 	{
@@ -1310,6 +1305,7 @@ void RollView::mouseDown(const juce::MouseEvent &e)
 	bool edge = false;
 	const auto hit = hitTest(p, edge);
 	pasteBeat = juce::jlimit(0.0, song.max_beats() - snap, snapDown(std::max(0.0, xToBeat(p.x))));
+	repaint(0, 0, getWidth(), RULER); // the paste marker moves
 	stopAt = stopBeat(p.x);
 	if (e.mods.isPopupMenu())
 	{

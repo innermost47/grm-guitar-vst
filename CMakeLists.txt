@@ -154,6 +154,7 @@ if(GRMG_BUILD_PLUGIN)
         plugin/widgets/VuMeter.cpp
         plugin/widgets/SideTabs.cpp
         plugin/widgets/StepLane.cpp
+        plugin/widgets/TimeGrid.cpp
         plugin/views/MixerView.cpp
         plugin/views/MasterStrip.cpp
         plugin/views/TransportBar.cpp
@@ -230,6 +231,7 @@ if(GRMG_BUILD_PLUGIN)
         grmg_add_plugin_test(plugin_host_test)
         grmg_add_plugin_test(plugin_cpu_test)
         grmg_add_plugin_test(editor_snapshot)
+        grmg_add_plugin_test(app_screenshot)
         grmg_add_plugin_test(test_icons)
         add_test(NAME interface_icons COMMAND test_icons)
         grmg_add_plugin_test(test_modal)
@@ -238,5 +240,7 @@ if(GRMG_BUILD_PLUGIN)
         add_test(NAME interface_presets COMMAND test_presets)
         grmg_add_plugin_test(test_tuning)
         add_test(NAME guitar_free_tuning COMMAND test_tuning)
+        grmg_add_plugin_test(test_host_resume)
+        add_test(NAME host_play_stop_play COMMAND test_host_resume)
     endif()
 endif()

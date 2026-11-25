@@ -20,6 +20,7 @@
 #include "../../core/song.hpp"
 #include "../../core/feel_generator.hpp"
 #include "../widgets/StepLane.h"
+#include "../widgets/TimeGrid.h"
 
 using namespace grmg;
 

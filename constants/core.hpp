@@ -179,6 +179,7 @@ namespace grmg
     // the full palm's pressure (a light palm: the note's Palm mute is the full one); edited in FEEL_NOTCHES notches
     constexpr double FEEL_LANE_DEX = 0.105, FEEL_LANE_TIMING_S = 0.03, PALM_LANE_SHARE = 0.35;
     constexpr int FEEL_NOTCHES = 16;
+    constexpr double FEEL_STEP_BEATS = 0.25; // a Feel lane's step: a sixteenth
     // the Feel presets: the weight of each place of the bar, as the force step it gives is (weight - mean) / span
     constexpr double FEEL_WEIGHT_SPAN = 0.7;
     enum FeelPreset

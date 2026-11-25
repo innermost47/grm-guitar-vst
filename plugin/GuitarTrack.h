@@ -186,6 +186,9 @@ private:
 	juce::AudioBuffer<float> dry, pickupBuf;
 	juce::SmoothedValue<float> bodyMix;
 	int heldKey = -1, heldChannel = 0, heldPattern = -1, shownPattern = -1;
+	int enginePattern = -1; // the pattern the engine plays, in perfSet
+	// the engine plays pattern k of the current set (the only way it is given a performance)
+	void playPattern(int k, bool carry);
 	double patternBeat = 0.0;
 	int pos = 0;
 	struct UiPluck

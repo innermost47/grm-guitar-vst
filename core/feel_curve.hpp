@@ -21,15 +21,18 @@ namespace grmg
     class FeelCurve
     {
     public:
-        // lanes: one step per sixteenth over `steps` sixteenths (empty: the preset's); the curve repeats past them
+        // lanes: one step per sixteenth (empty: the preset's) over the pattern's `steps` sixteenths: the curve repeats
+        // every `steps` (what is written past the pattern's end waits there, as notes do, until the pattern reaches it),
+        // or every lane's length when the lanes are shorter
         FeelCurve(const models::FeelLanes &lanes, int preset, const Meter &meter, int steps)
-            : lanes_(lanes.empty() ? preset_lanes(preset, meter, steps) : lanes)
+            : lanes_(lanes.empty() ? preset_lanes(preset, meter, steps) : lanes),
+              period_(std::max(1, std::min(steps, (int)lanes_.force.size())))
         {
         }
 
-        double force(double beat) const { return at(lanes_.force, beat); }
-        double timing(double beat) const { return at(lanes_.timing, beat); }
-        double palm(double beat) const { return at(lanes_.palm, beat); }
+        double force(double beat) const { return at(lanes_.force, beat, period_); }
+        double timing(double beat) const { return at(lanes_.timing, beat, period_); }
+        double palm(double beat) const { return at(lanes_.palm, beat, period_); }
         const models::FeelLanes &lanes() const { return lanes_; }
 
         // the weight a preset gives each place of the bar
@@ -75,11 +78,11 @@ namespace grmg
 
     private:
         // the curve through the steps of a lane at `beat` (a step every quarter of a beat): monotone cubic Hermite
-        // (Fritsch-Carlson slopes), wrapping around the lane
-        static double at(const std::vector<double> &lane, double beat)
+        // (Fritsch-Carlson slopes), wrapping every `period` steps
+        static double at(const std::vector<double> &lane, double beat, int period)
         {
-            const int n = (int)lane.size();
-            if (n == 0)
+            const int n = std::min(period, (int)lane.size());
+            if (n <= 0)
                 return 0.0;
             const double x = beat * 4.0;
             const int k = (int)std::floor(x);
@@ -99,6 +102,7 @@ namespace grmg
         }
 
         models::FeelLanes lanes_;
+        int period_;
     };
 
 } // namespace grmg

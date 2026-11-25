@@ -201,12 +201,64 @@ static void generators()
     check(downbeats, "groove: the downbeat stays the strongest place of its bar");
 }
 
+// another preset keeps what the user wrote in the Timing and Palm lanes (Anthony, 25/11/2026: choosing a new Feel
+// erased them) and draws the Force lane from the preset
+static void preset_change()
+{
+    Song song = quarters();
+    FeelGenerator::ensure_lanes(song);
+    song.feel.timing[3] = 0.5;
+    song.feel.palm[5] = 0.75;
+    song.feel.force[2] = 1.0;
+    FeelGenerator::apply_preset(song, FEEL_BACKBEAT);
+    check(song.feel_preset == FEEL_BACKBEAT, "another preset: chosen");
+    const bool kept = song.feel.timing.size() > 5 && song.feel.palm.size() > 5;
+    check(kept && song.feel.timing[3] == 0.5 && song.feel.palm[5] == 0.75, "another preset: the Timing and Palm lanes kept");
+    const auto backbeat = FeelCurve::preset_lanes(FEEL_BACKBEAT, song.meter(), song.steps());
+    bool drawn = song.feel.force.size() == backbeat.force.size();
+    for (size_t s = 0; drawn && s < song.feel.force.size(); ++s)
+        drawn &= song.feel.force[s] == FeelGenerator::notch(backbeat.force[s]);
+    check(drawn, "another preset: the Force lane drawn from it, on notches");
+    // a pattern with no lanes written keeps following the preset itself
+    Song fresh = quarters();
+    FeelGenerator::apply_preset(fresh, FEEL_GALLOP);
+    check(fresh.feel.empty() && fresh.feel_preset == FEEL_GALLOP, "another preset: unwritten lanes follow it");
+}
+
+// the lanes are written past the pattern's end as notes are (Anthony, 25/11/2026: nothing pasted past the loop):
+// kept there, not played until the pattern reaches them
+static void past_the_end()
+{
+    Song song = quarters(); // 2 bars of 4/4: 32 steps
+    FeelGenerator::ensure_lanes(song);
+    const int end = song.steps();
+    FeelGenerator::reach(song, end + 8);
+    song.feel.force[(size_t)end + 4] = 0.875;
+    song.feel.palm[(size_t)end + 4] = 0.5;
+    check((int)song.feel.force.size() == end + 8 && (int)song.feel.palm.size() == end + 8,
+          "past the end: the lanes reach the step written");
+    FeelGenerator::ensure_lanes(song);
+    check((int)song.feel.force.size() == end + 8 && song.feel.force[(size_t)end + 4] == 0.875,
+          "past the end: what is written there is kept");
+    const auto curve = song.feel_curve();
+    check(std::abs(curve.force(0.25 * (end + 4)) - song.feel.force[4]) < 1e-12,
+          "past the end: the pattern still repeats every bar it has");
+    song.bars = 3;
+    FeelGenerator::ensure_lanes(song);
+    check(std::abs(song.feel_curve().force(0.25 * (end + 4)) - 0.875) < 1e-12,
+          "the pattern grown: it plays what was written there");
+    FeelGenerator::apply_preset(song, FEEL_FLAT);
+    check(song.feel.palm[(size_t)end + 4] == 0.5, "a preset past the end: the Palm lane kept");
+}
+
 int main()
 {
     curve();
     lanes_play();
     saved();
     generators();
+    preset_change();
+    past_the_end();
     std::printf("%d checks, %d failed\n", checks, failures);
     return failures == 0 ? 0 : 1;
 }
