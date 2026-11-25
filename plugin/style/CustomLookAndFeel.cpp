@@ -40,6 +40,7 @@ CustomLookAndFeel::CustomLookAndFeel()
     setColour(juce::TextEditor::highlightColourId, lightGrey.withAlpha(0.3f));
     setColour(juce::TextEditor::highlightedTextColourId, textPrimary);
     setColour(juce::CaretComponent::caretColourId, lightGrey);
+    setColour(juce::HyperlinkButton::textColourId, juce::Colour(palette.gold));
 }
 
 juce::Typeface::Ptr CustomLookAndFeel::getTypefaceForFont(const juce::Font &font)

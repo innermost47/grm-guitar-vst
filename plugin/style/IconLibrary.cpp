@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Anthony Charretier
 #include "IconLibrary.h"
-#include "BinaryData.h"
+#include "Assets.h"
 
 using ui::IconId;
 
@@ -19,28 +19,17 @@ IconLibrary::IconLibrary()
 
 IconLibrary::Icon IconLibrary::load(const char *file)
 {
-    for (int k = 0; k < BinaryData::namedResourceListSize; ++k)
-    {
-        const char *resource = BinaryData::namedResourceList[k];
-        if (juce::String(BinaryData::getNamedResourceOriginalFilename(resource)) != file)
-            continue;
-
-        int size = 0;
-        const char *data = BinaryData::getNamedResource(resource, size);
-        const auto svg = juce::parseXML(juce::String::fromUTF8(data, size));
-        if (svg == nullptr)
-            return {};
-
-        // the outline is taken in the canvas' own units: the SVG is made exactly as large as its viewBox
-        Icon icon;
-        icon.canvas = readCanvas(*svg);
-        svg->setAttribute("width", icon.canvas.getWidth());
-        svg->setAttribute("height", icon.canvas.getHeight());
-        if (const auto drawable = juce::Drawable::createFromSVG(*svg))
-            icon.outline = drawable->getOutlineAsPath();
-        return icon;
-    }
-    return {};
+    const auto svg = Assets::svg(file);
+    if (svg == nullptr)
+        return {};
+    // the outline is taken in the canvas' own units: the SVG is made exactly as large as its viewBox
+    Icon icon;
+    icon.canvas = readCanvas(*svg);
+    svg->setAttribute("width", icon.canvas.getWidth());
+    svg->setAttribute("height", icon.canvas.getHeight());
+    if (const auto drawable = juce::Drawable::createFromSVG(*svg))
+        icon.outline = drawable->getOutlineAsPath();
+    return icon;
 }
 
 juce::Rectangle<float> IconLibrary::readCanvas(const juce::XmlElement &svg)

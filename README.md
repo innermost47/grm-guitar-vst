@@ -149,7 +149,7 @@ Up to 8 guitars in one plugin, each with its own settings, patterns, player and 
 
 ## Tests
 
-`ctest` runs the first five:
+`ctest` runs the first six:
 - `test_core`: 210 checks that the C++ GRM gives the same numbers as the Python one (values to 1e-9).
 - `test_physics`: 153 checks of the networks (body, bridge, room, palm, finger, action, player, strum, string
   losses, loaded top) and of one string's sound against the proof of concept.
@@ -158,6 +158,8 @@ Up to 8 guitars in one plugin, each with its own settings, patterns, player and 
   string, the string's two planes, the hard attack: frets, pick push and scrape, pitch glide).
 - `test_amp`: 38 checks of the amplifier (operating points, tone stacks against their H(s), cabinet, clean and high
   gain, compression, aliasing, hiss and gate, presence, the overdrive's tight lows).
+- `test_modal`: 21 checks of the dialogs and the update check (versions compared as numbers, GitHub's answer, the
+  equations and the grm-core link on the left of a dialog, closing it).
 - `test_icons`: every icon is embedded and drawn, every icon button of the interface has its tooltip and its
   design-system size.
 - `plugin_host_test`: the plugin called as a host would (MIDI, patterns, sensors, several guitars, own outputs,

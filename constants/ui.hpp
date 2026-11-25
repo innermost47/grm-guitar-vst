@@ -39,6 +39,22 @@ namespace ui
         {IconId::caretRight, "caret-right.svg"},
     }};
 
+    // ---- the plugin on the net: its releases, the GRM it shows off
+    inline constexpr const char *RELEASES_API = "https://api.github.com/repos/innermost47/grm-guitar-vst/releases/latest";
+    inline constexpr const char *RELEASES_PAGE = "https://github.com/innermost47/grm-guitar-vst/releases/latest";
+    inline constexpr const char *GRM_CORE_PAGE = "https://github.com/innermost47/grm-core";
+    inline constexpr const char *HTTP_USER_AGENT = "GRM-Guitar";
+    inline constexpr int UPDATE_TIMEOUT_MS = 5000;
+    // the plugin's own settings, shared by every project (a file in the user's application data)
+    inline constexpr const char *SETTINGS_NAME = "GRM Guitar";
+    inline constexpr const char *SKIPPED_VERSION_KEY = "skipped_version";
+
+    // ---- the dialogs: the equations a GRM network brought up, discreet on their left
+    inline constexpr const char *EQUATIONS_FILE = "grm-equations.svg";
+    inline constexpr float EQUATIONS_ALPHA = 0.3f;
+    inline constexpr float MODAL_LINK_ALPHA = 0.55f;
+    inline constexpr float MODAL_DIM_ALPHA = 0.6f; // the darkening of the window behind a dialog
+
     inline const juce::Colour ACCENT{juce::Colour(theme::defaultPalette.gold)};
     inline const juce::Colour BG{juce::Colour(theme::defaultPalette.obsidian)};
     inline const juce::Colour BRIGHT{juce::Colour(theme::defaultPalette.warmWhite)};

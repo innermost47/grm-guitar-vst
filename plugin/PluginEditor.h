@@ -14,6 +14,8 @@
 #include "NeckView.h"
 #include "ScopeView.h"
 #include "IconButton.h"
+#include "Modal.h"
+#include "UpdateChecker.h"
 
 class GRMGuitarEditor : public juce::AudioProcessorEditor
 {
@@ -81,6 +83,11 @@ private:
 	int shownPatterns = -1, shownEditing = -1;
 	void refreshPatterns();
 	int subtitleWidth = 420;
+
+	// the latest release, asked once per host process; shown in a dialog when it is newer
+	juce::SharedResourcePointer<UpdateChecker> updates;
+	std::unique_ptr<Modal> modal;
+	void showUpdate(const grmg::models::Release &release);
 
 	void updateEditor();
 	void togglePlay();

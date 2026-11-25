@@ -70,6 +70,7 @@ if(GRMG_BUILD_PLUGIN)
             assets/fonts/noto-bold.ttf
             assets/fonts/noto-italic.ttf
             assets/fonts/noto-regular.ttf
+            assets/images/grm-equations.svg
             assets/icons/arpeggio.svg
             assets/icons/arrow-clockwise.svg
             assets/icons/arrow-counter-clockwise.svg
@@ -104,7 +105,11 @@ if(GRMG_BUILD_PLUGIN)
         plugin/solver/SolverThread.cpp
         plugin/style/CustomLookAndFeel.cpp
         plugin/style/IconLibrary.cpp
+        plugin/style/Assets.cpp
         plugin/widgets/IconButton.cpp
+        plugin/widgets/EquationsPanel.cpp
+        plugin/widgets/Modal.cpp
+        plugin/services/UpdateChecker.cpp
         plugin/views/MixerView.cpp
         plugin/views/NeckView.cpp
         plugin/views/NetworksView.cpp
@@ -117,7 +122,8 @@ if(GRMG_BUILD_PLUGIN)
         ${CMAKE_CURRENT_SOURCE_DIR}/plugin/solver
         ${CMAKE_CURRENT_SOURCE_DIR}/plugin/views
         ${CMAKE_CURRENT_SOURCE_DIR}/plugin/style
-        ${CMAKE_CURRENT_SOURCE_DIR}/plugin/widgets)
+        ${CMAKE_CURRENT_SOURCE_DIR}/plugin/widgets
+        ${CMAKE_CURRENT_SOURCE_DIR}/plugin/services)
 
     target_compile_definitions(GRMGuitar PUBLIC
         JUCE_WEB_BROWSER=0
@@ -180,5 +186,7 @@ if(GRMG_BUILD_PLUGIN)
         grmg_add_plugin_test(editor_snapshot)
         grmg_add_plugin_test(test_icons)
         add_test(NAME interface_icons COMMAND test_icons)
+        grmg_add_plugin_test(test_modal)
+        add_test(NAME interface_dialogs COMMAND test_modal)
     endif()
 endif()

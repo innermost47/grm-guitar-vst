@@ -413,8 +413,30 @@ void GRMGuitarEditor::togglePlay()
 	processor.setInternalPlaying(!processor.isInternalPlaying());
 }
 
+void GRMGuitarEditor::showUpdate(const grmg::models::Release &release)
+{
+	const juce::String version(release.version);
+	modal = std::make_unique<Modal>("A new GRM Guitar is out");
+	modal->setMessage("GRM Guitar " + version + " is available (this one is " + juce::String(UpdateChecker::currentVersion()) +
+					  "). Its release page tells what is new and has the downloads for every system.");
+	modal->addLink("Get GRM Guitar " + version, juce::URL(release.url));
+	auto &again = modal->addCheckbox("Don't ask me again for this version");
+	modal->addButton("Close");
+	modal->onDismiss = [this, &again, version]
+	{
+		if (again.getToggleState())
+			updates->skip(version.toStdString());
+	};
+	modal->show(*this);
+}
+
 void GRMGuitarEditor::updateEditor()
 {
+	if (modal != nullptr && modal->isDismissed())
+		modal.reset(); // closed during the last frame
+	if (modal == nullptr)
+		if (const auto release = updates->take())
+			showUpdate(*release);
 	status.setText(processor.getStatus(), juce::dontSendNotification);
 	if (processor.getGuitarVersion() != shownGuitarVersion)
 		rebuildGuitars();
@@ -462,6 +484,8 @@ void GRMGuitarEditor::paint(juce::Graphics &g)
 
 void GRMGuitarEditor::resized()
 {
+	if (modal != nullptr)
+		modal->setBounds(getLocalBounds());
 	auto area = getLocalBounds();
 	auto header = area.removeFromTop(38).reduced(8, 6);
 

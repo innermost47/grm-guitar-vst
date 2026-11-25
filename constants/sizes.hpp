@@ -25,6 +25,7 @@ namespace ui::theme
         int corner = 1;
         float halfCorner = 0.5f;
         float listPanelCorner = 1.0f;
+        float modalCorner = 6.0f;
     };
 
     struct Typography
@@ -49,6 +50,13 @@ namespace ui::theme
     {
         int baseModalWidth = 600;
         int baseModalHeight = 400;
+        int modalSideWidth = 150;    // the column of the equations on the left of every dialog
+        int modalMinHeight = 300;    // a dialog grows with its text from there (up to baseModalHeight)
+        int modalPadding = 18;
+        int modalTitleHeight = 30;
+        int modalRowHeight = 24;     // a checkbox, a link
+        int modalButtonWidth = 110;
+        int modalButtonHeight = 28;
         int minSmallBtnWidth = 24;
         int minSmallBtnHeight = 24;
         int iconButton = 24;
@@ -107,6 +115,7 @@ namespace ui::theme
             theme.borders.corner = static_cast<int>(1 * uiScale);
             theme.borders.halfCorner = 0.5f * uiScale;
             theme.borders.listPanelCorner = 1.0f * uiScale;
+            theme.borders.modalCorner = 6.0f * uiScale;
 
             theme.typography.xxs = 8.0f * uiScale;
             theme.typography.xs = 10.0f * uiScale;
@@ -125,6 +134,13 @@ namespace ui::theme
 
             theme.dimensions.baseModalWidth = static_cast<int>(600 * uiScale);
             theme.dimensions.baseModalHeight = static_cast<int>(400 * uiScale);
+            theme.dimensions.modalSideWidth = static_cast<int>(150 * uiScale);
+            theme.dimensions.modalMinHeight = static_cast<int>(300 * uiScale);
+            theme.dimensions.modalPadding = static_cast<int>(18 * uiScale);
+            theme.dimensions.modalTitleHeight = static_cast<int>(30 * uiScale);
+            theme.dimensions.modalRowHeight = static_cast<int>(24 * uiScale);
+            theme.dimensions.modalButtonWidth = static_cast<int>(110 * uiScale);
+            theme.dimensions.modalButtonHeight = static_cast<int>(28 * uiScale);
             theme.dimensions.minSmallBtnWidth = static_cast<int>(24 * uiScale);
             theme.dimensions.minSmallBtnHeight = static_cast<int>(24 * uiScale);
             theme.dimensions.iconButton = static_cast<int>(24 * uiScale);
