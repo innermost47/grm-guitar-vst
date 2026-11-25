@@ -8,6 +8,8 @@
 #include <complex>
 #include <vector>
 
+#include "../constants/core.hpp"
+
 namespace grmg
 {
 
