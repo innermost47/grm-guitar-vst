@@ -187,7 +187,7 @@ namespace grmg
 					if (std::abs(a) < 1e-4 * peak && kept == cplx(0.0, 0.0))
 						continue; // inaudible (a node at the pluck point, a plane not plucked, nothing ringing on it)
 					double f = plane == 0 ? f0 : (f0 - detune) * split;
-					double sg = losses.sigma(f0, n, pl.B) + coupling[(size_t)plane] * into_body + body.neck_loss(pl.c, pl.Leff, pl.Zs);
+					double sg = losses.sigma(f0, n, pl.B) + coupling[(size_t)plane] * into_body + body.neck_loss(pl, f0, (int)plane);
 					double sp = 0.0;
 					if (p.palm)
 					{
@@ -710,7 +710,7 @@ namespace grmg
 				if (f >= 0.45 * sr)
 					break;
 				double sg = losses.sigma(f, n, pl.B) + body.loss(f, pl.c, pl.Leff, pl.Zs) + body.coupling(f, pl.c, pl.Leff, pl.Zs) +
-							body.neck_loss(pl.c, pl.Leff, pl.Zs);
+							body.neck_loss(pl, f, 0);
 				if (palm_net)
 					sg += palm_net->sigma_at((size_t)n - 1);
 				const size_t k = (size_t)count_++;

@@ -145,7 +145,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout GRMGuitarProcessor::createLa
 		// player
 		flag("human", "Human feel", true);
 		real("human_amount", "Looseness (1: default)", 0.0f, 3.0f, 1.0f, 1.0f);
-		real("swing_cm", "Arm swing (cm)", 4.0f, 20.0f, 10.0f);
+		real("swing_cm", "Arm swing (cm)", 4.0f, 20.0f, 7.0f);
+		real("feel_depth", "Accents of the bar (1: default)", 0.0f, 2.0f, 1.0f);
+		real("imperfection", "Imperfection", 0.0f, 1.0f, 0.2f);
 		flag("finger_noises", "Finger noises", true);
 		real("finger_force", "Finger force (N)", 0.1f, 2.0f, 0.6f, 0.6f);
 		for (const auto &t : HAND_TUNABLES)

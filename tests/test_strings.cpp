@@ -78,13 +78,25 @@ static void steel_losses()
     std::printf("  plain G3, rigid ends: Q %.0f at 196 Hz, %.0f at 1 kHz (Pate: 2100, 3400)\n", q196, q1000);
     check(q196 > 1800 && q196 < 2400, "a plain steel G3 between rigid ends: Pate's Q at 196 Hz");
     check(q1000 > 3000 && q1000 < 3800, "a plain steel G3 between rigid ends: Pate's Q near 1 kHz");
-    // on the solid body (the bridge and the neck take their share): Pate measured 1200 to 2300 over the frets
-    const auto &pl = m.place[3][0];
-    const double sg = l.sigma(pl.f1, 1, pl.B) + m.body.loss(pl.f1, pl.c, pl.Leff, pl.Zs) + m.body.neck_loss(pl.c, pl.Leff, pl.Zs);
-    const double on_body = 2 * PI * pl.f1 / (2.0 * sg);
-    std::printf("  plain G3 on the solid body: Q %.0f (Pate: 1200 to 2300)\n", on_body);
-    // the middle of their range (the neck's dead spots, lot 4, will spread it)
-    check(on_body > 1750 / 1.15 && on_body < 1750 * 1.15, "a plain steel G3 on the solid body: the middle of Pate's Q range");
+    // on the solid body (the bridge and the neck take their share): Pate measured 1200 to 2300 over the frets, and
+    // the neck's dead spots (their Fig. 11): Q 390 at the 12th fret across the top, 450 at the 9th along it
+    auto les_paul = s;
+    les_paul.scale_mm = 629.0;
+    Model lp;
+    lp.solve(les_paul, 48000.0, nullptr, false);
+    auto on_body = [&](int fret, int plane)
+    {
+        const auto &pl = lp.place[3][(size_t)fret];
+        const double sg = lp.losses[3].sigma(pl.f1, 1, pl.B) + (plane == 0 ? lp.body.loss(pl.f1, pl.c, pl.Leff, pl.Zs) : 0.0) +
+                          lp.body.neck_loss(pl, pl.f1, plane);
+        return 2 * PI * pl.f1 / (2.0 * sg);
+    };
+    const double open = on_body(0, 0), fifth = on_body(5, 0), twelfth = on_body(12, 0), ninth = on_body(9, 1), ninth_across = on_body(9, 0);
+    std::printf("  G3 on the solid body: Q %.0f open, %.0f at the 5th fret; dead spots %.0f (12th, across), %.0f (9th, along); 9th across %.0f\n",
+                open, fifth, twelfth, ninth, ninth_across);
+    check(open > 1200 && open < 2300 && fifth > 1200 && fifth < 2300 && ninth_across > 1200, "a plain steel G3 on the solid body: Pate's Q away from the dead spots");
+    check(std::abs(twelfth / 390.0 - 1.0) < 0.2, "the dead spot at the 12th fret, across the top: Pate's Q");
+    check(std::abs(ninth / 450.0 - 1.0) < 0.2, "the dead spot at the 9th fret, along the top: Pate's Q");
 
     // played wound strings lose their highs (dirt between the windings); plain ones do not change
     auto old = s;

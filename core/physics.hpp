@@ -131,6 +131,8 @@ namespace grmg
         b.f_hi = r["f_hi"];
         b.fb = r["fb"];
         b.neck = NECK_CONDUCTANCE;
+        for (size_t k = 0; k < b.neck_modes.size(); ++k)
+            b.neck_modes[k] = NECK_MODES[k];
         return b;
     }
 
@@ -718,10 +720,13 @@ namespace grmg
 
     // ============================================================ the player
 
-    // strokes: (grid time in s, step index in the bar). One network for the whole sequence: what the arm does at
-    // one stroke depends on the strokes around it.
-    inline std::vector<models::Stroke> player_network(const std::vector<std::pair<double, int>> &strokes, double step, double pluck,
-                                                      models::PlayerNoise &noise, double swing = SWING)
+    // strokes: (grid time in s, sixteenth from the song's start); feel: what the player aims at for each (PlayerFeel:
+    // its accent, its lead or lag, its force, hand and depth). One network for the whole sequence: what the arm does
+    // at one stroke depends on the strokes around it (a pendulum does not jump), so the aims are weighed against the
+    // arm's continuity: the player's intention mostly wins, the arm smooths what it cannot follow.
+    inline std::vector<models::Stroke> player_network(const std::vector<std::pair<double, int>> &strokes,
+                                                      const std::vector<models::StrokeFeel> &feel, double step, double pluck,
+                                                      double swing = SWING)
     {
         std::vector<models::Stroke> out;
         if (strokes.empty())
@@ -730,8 +735,8 @@ namespace grmg
         std::map<std::string, grm::Measurement> m;
         for (size_t k = 0; k < strokes.size(); ++k)
         {
-            const auto [grid, idx] = strokes[k];
-            const double acc = ACCENT_DEX[idx % 8];
+            const double grid = strokes[k].first;
+            const auto &f = feel[k];
             const std::string s = std::to_string(k);
             net.add_node("t" + s, grid, true);
             net.add_node("A" + s, swing);
@@ -739,24 +744,25 @@ namespace grmg
             net.add_node("d" + s, PICK_DEPTH, true);
             net.add_node("x" + s, PALM_X);
             net.add_node("N" + s, PALM_FORCE);
-            m["t" + s] = {grid + noise.normal(TIMING_SIGMA), TIMING_SIGMA};
-            m["A" + s] = {swing * std::pow(10.0, acc + noise.normal(AMPLITUDE_SIGMA)), AMPLITUDE_SIGMA};
-            m["p" + s] = {pluck * (1.0 + noise.normal(PLUCK_SIGMA)), PLUCK_SIGMA / grm::LN10};
-            m["d" + s] = {PICK_DEPTH + noise.normal(DEPTH_SIGMA), DEPTH_SIGMA};
-            m["x" + s] = {std::max(PALM_X + noise.normal(PALM_X_SIGMA), 0.004), PALM_X_SIGMA / PALM_X / grm::LN10};
-            m["N" + s] = {PALM_FORCE * std::pow(10.0, acc + noise.normal(PALM_N_SIGMA)), PALM_N_SIGMA};
+            m["t" + s] = {grid + f.dt, MOTOR_TIME_S};
+            m["A" + s] = {swing * std::pow(10.0, f.force_dex), AMPLITUDE_SIGMA};
+            m["p" + s] = {pluck * std::max(1.0 + f.pluck, 0.2), PLUCK_SIGMA / grm::LN10};
+            m["d" + s] = {std::max(PICK_DEPTH + f.depth, 0.2 * PICK_DEPTH), DEPTH_SIGMA};
+            // the palm rides with the hand along the string, and presses as hard as the stroke
+            m["x" + s] = {std::max(PALM_X * (1.0 + f.pluck), 0.004), PALM_X_SIGMA / PALM_X / grm::LN10};
+            m["N" + s] = {PALM_FORCE * std::pow(10.0, f.force_dex), PALM_N_SIGMA};
             if (k)
             {
-                const auto [grid0, idx0] = strokes[k - 1];
+                const double grid0 = strokes[k - 1].first;
                 const double gap = std::max((grid - grid0) / step, 1.0);
-                const double acc0 = ACCENT_DEX[idx0 % 8];
+                const double acc = f.accent - feel[k - 1].accent;
                 const std::string p = std::to_string(k - 1);
                 net.add_sum("arm period " + s, {{"t" + s, 1.0}, {"t" + p, -1.0}}, grid - grid0, ARM_SIGMA * std::sqrt(gap));
-                net.add_log("arm swing " + s, {{"A" + s, 1}, {"A" + p, -1}}, acc - acc0, AMPLITUDE_SIGMA * std::sqrt(gap));
+                net.add_log("arm swing " + s, {{"A" + s, 1}, {"A" + p, -1}}, acc, AMPLITUDE_SIGMA * std::sqrt(gap));
                 net.add_log("hand along " + s, {{"p" + s, 1}, {"p" + p, -1}}, 0.0, PLUCK_SIGMA / grm::LN10 * std::sqrt(gap));
                 net.add_sum("pick depth " + s, {{"d" + s, 1.0}, {"d" + p, -1.0}}, 0.0, DEPTH_SIGMA * std::sqrt(gap));
                 net.add_log("palm place " + s, {{"x" + s, 1}, {"x" + p, -1}}, 0.0, PALM_X_SIGMA / PALM_X / grm::LN10 * std::sqrt(gap));
-                net.add_log("palm pressure " + s, {{"N" + s, 1}, {"N" + p, -1}}, acc - acc0, PALM_N_SIGMA * std::sqrt(gap));
+                net.add_log("palm pressure " + s, {{"N" + s, 1}, {"N" + p, -1}}, acc, PALM_N_SIGMA * std::sqrt(gap));
             }
         }
         const auto r = net.solve(m, 50, 1e-3, 1e-12, false);
@@ -770,9 +776,12 @@ namespace grmg
     }
 
     // which strings of `order` (in the order the pick crosses them) the pick reaches, when, with what share of the force
-    inline std::vector<models::Contact> strum_contacts(const std::vector<int> &order, const models::Stroke &stroke, bool up)
+    // aim: the string the arc is centred on (< 0: a strum's, the middle of the neck a little towards the side it
+    // starts from)
+    inline std::vector<models::Contact> strum_contacts(const std::vector<int> &order, const models::Stroke &stroke, bool up,
+                                                       double aim = -1.0)
     {
-        const double centre = (up ? 4.5 : 2.5) * STRING_SPACING;
+        const double centre = (aim >= 0 ? aim : (up ? 4.5 : 2.5)) * STRING_SPACING;
         std::vector<models::Contact> out;
         bool have_first = false;
         double first = 0;

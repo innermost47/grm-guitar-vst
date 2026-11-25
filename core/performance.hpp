@@ -29,6 +29,7 @@
 
 #include "../constants/core.hpp"
 #include "model.hpp"
+#include "player_feel.hpp"
 #include "ringing.hpp"
 #include "song.hpp"
 #include "voice.hpp"
@@ -106,6 +107,9 @@ namespace grmg
 			const double spb = 60.0 / o.tempo; // seconds per beat
 			const double step = spb / 4.0;	   // a sixteenth: the half swing of the arm
 			std::mt19937 rng(o.seed);
+			// the strokes' accidents (Imperfection), drawn apart: the rest of the performance stays as it was
+			std::mt19937 accidents(o.seed ^ 0x9E3779B9u);
+			const Accidents imperfect{s.human ? &accidents : nullptr, s.imperfection};
 			std::normal_distribution<double> normal(0.0, 1.0);
 			auto jitter = [&](double sd)
 			{ return s.human ? s.human_amount * sd * normal(rng) : 0.0; };
@@ -139,7 +143,7 @@ namespace grmg
 			std::vector<models::Moment> order;
 			for (auto &[k, mo] : moments)
 				order.push_back(mo);
-			std::vector<models::Stroke> strokes = run_player(order, step, spb, s, rng);
+			std::vector<models::Stroke> strokes = run_player(order, step, spb, song.beats_per_bar, s, rng);
 			muscle(strokes, step);
 
 			if (!strokes.empty() && order.front().beat <= 1e-4)
@@ -196,12 +200,25 @@ namespace grmg
 				std::vector<bool> struck(NUM_STRINGS, false);
 				// a stroke the player starts before the song's start (no loop to take it from): it starts at 0, its
 				// strings keep their spacing in time instead of all landing on 0
-				const double early = (k == 0 && mo.beat <= 1e-4)
-										 ? -stroke.t
-										 : ((!o.loop && stroke.t < 0) ? -stroke.t : 0.0);
+				const bool clamp = (k == 0 && mo.beat <= 1e-4) || !o.loop;
+				double early = (k == 0 && mo.beat <= 1e-4) ? -stroke.t : ((!o.loop && stroke.t < 0) ? -stroke.t : 0.0);
+				// a strum starts before its beat: nothing before the song's start (no loop to take it from)
+				auto keep_after_start = [&](const std::vector<models::Contact> &contacts)
+				{
+					double lead = 0.0;
+					for (const auto &c : contacts)
+						lead = std::min(lead, c.delay);
+					if (clamp && stroke.t + early + lead < 0.0)
+						early = -(stroke.t + lead);
+				};
 
-				// single notes struck together: with a pick, one sweep across them (in the arm's direction: down on
-				// the sixteenths of the beat, up between); with the fingers, a pinch
+				// a dead touch: the finger resting on the string damps it at once, the pick leaves a click
+				auto deaden = [&](double t, int i)
+				{ touches.push_back({t + DEAD_TOUCH, i, RELEASE_DEAD}); };
+
+				// single notes struck together: with a pick, the same gesture as a strum of the Strums lane (the arc of
+				// the wrist aimed at them, one sweep across them in the arm's direction: down on the sixteenths of the
+				// beat, up between); with the fingers, a pinch
 				if (!mo.strikes.empty())
 				{
 					const bool up = s.pick && (std::lround(mo.beat * 4.0) % 2 != 0);
@@ -210,39 +227,47 @@ namespace grmg
 						by_string.push_back(&st);
 					std::sort(by_string.begin(), by_string.end(), [&](auto a, auto b)
 							  { return up ? a->string > b->string : a->string < b->string; });
-					std::vector<int> strings;
-					std::vector<double> base;
+					std::vector<int> strings, frets;
+					std::vector<double> velocity;
+					double aim = 0.0;
 					for (auto *st : by_string)
 					{
 						strings.push_back(st->string);
-						base.push_back(st->velocity / 0.8);
-					}
-					std::vector<int> frets;
-					for (auto *st : by_string)
 						frets.push_back(st->fret);
-					const auto contacts = s.pick ? sweep(m, strings, base, frets, stroke, 0.0)
-												 : pinch(strings, base, (s.human && k > 0) ? &rng : nullptr, s.human_amount);
-					for (size_t q = 0; q < contacts.size(); ++q)
+						velocity.push_back(st->velocity);
+						aim += st->string / (double)by_string.size();
+					}
+					const auto contacts = s.pick ? across(m, strings, frets, velocity, stroke, up, aim, imperfect)
+												 : pinch(strings, shares(velocity), (s.human && k > 0) ? &rng : nullptr, s.human_amount);
+					keep_after_start(contacts);
+					for (const auto &c : contacts)
 					{
-						const auto *st = by_string[q];
-						played.push_back({stroke.t + early + contacts[q].delay, st->string, st->fret, stroke.force * contacts[q].share, stroke.p,
-										  st->ring * spb, palm_for(st->string, st->fret), stroke, palm_share(st->string) > 0,
-										  contacts.size() > 1 ? (int)q : -1, false, up});
+						const auto it = std::find_if(by_string.begin(), by_string.end(), [&](auto *st)
+													 { return st->string == c.string; });
+						const double t = stroke.t + early + c.delay;
+						if (it == by_string.end())
+						{ // a string brushed beside the ones asked: the fretting hand mutes it
+							played.push_back({t, c.string, 0, stroke.force * c.share, stroke.p, DEAD_TOUCH, nullptr, stroke, false, -1, false, up});
+							deaden(t, c.string);
+							continue;
+						}
+						const auto *st = *it;
+						played.push_back({t, st->string, st->fret, stroke.force * c.share, stroke.p, st->ring * spb, palm_for(st->string, st->fret),
+										  stroke, palm_share(st->string) > 0, contacts.size() > 1 ? (int)(it - by_string.begin()) : -1, false, up});
 						struck[(size_t)st->string] = true;
-						// a dead note: the finger resting on the string damps it at once, the pick leaves a click
-						if (st->dead)
-							touches.push_back({stroke.t + early + contacts[q].delay + DEAD_TOUCH, st->string, RELEASE_DEAD});
+						if (st->dead || c.muted)
+							deaden(t, st->string);
 						// a flat hand stops the note at its end, and the strings beside it
 						if (st->end == models::RollNote::hand)
 							for (int j = st->string - 1; j <= st->string + 1; ++j)
 								if (j >= 0 && j < NUM_STRINGS)
-									touches.push_back({stroke.t + early + contacts[q].delay + st->length * spb, j, RELEASE_HAND});
+									touches.push_back({t + st->length * spb, j, RELEASE_HAND});
 					}
 				}
 				if (mo.strum >= 0)
 				{
 					const auto &st = song.strums[(size_t)mo.strum];
-					std::vector<int> crossing;
+					std::vector<int> crossing, frets;
 					for (int i = 0; i < NUM_STRINGS; ++i)
 						if (st.frets[(size_t)i] >= 0 && st.frets[(size_t)i] < NUM_FRETS)
 							crossing.push_back(i);
@@ -250,30 +275,28 @@ namespace grmg
 						std::reverse(crossing.begin(), crossing.end()); // index 0 is string 6: down = from the bass
 					if (crossing.empty())
 						continue;
-					// which strings the arc of the wrist reaches, and how deep (strum_contacts); then the sweep: each
-					// string takes some of the arm's energy, so the pick slows and the later strings get less
-					const auto reach = crossing.size() == 1 ? std::vector<models::Contact>{{crossing[0], 0.0, 1.0}}
-															: strum_contacts(crossing, stroke, st.up);
-					if (reach.empty())
-						continue;
-					std::vector<int> strings;
-					std::vector<double> base;
-					std::vector<int> frets;
-					for (const auto &c : reach)
-					{
-						strings.push_back(c.string);
-						base.push_back(c.share * st.velocity / 0.8);
-						frets.push_back(st.frets[(size_t)c.string]);
-					}
-					const auto contacts = sweep(m, strings, base, frets, stroke, reach.front().delay);
+					for (int i : crossing)
+						frets.push_back(st.frets[(size_t)i]);
+					const auto contacts = across(m, crossing, frets, std::vector<double>(crossing.size(), st.velocity), stroke, st.up, -1.0, imperfect);
+					keep_after_start(contacts);
 					for (size_t q = 0; q < contacts.size(); ++q)
 					{
-						const int i = strings[q];
+						const auto &c = contacts[q];
+						const double t = stroke.t + early + c.delay;
+						const auto at = std::find(crossing.begin(), crossing.end(), c.string);
+						if (at == crossing.end())
+						{ // a string brushed beside the chord: the fretting hand mutes it
+							played.push_back({t, c.string, 0, stroke.force * c.share, stroke.p, DEAD_TOUCH, nullptr, stroke, false, -1, false, st.up});
+							deaden(t, c.string);
+							continue;
+						}
+						const int i = c.string, fret = frets[(size_t)(at - crossing.begin())];
 						const double ring = rings.strum_end[(size_t)mo.strum][(size_t)i] - st.start;
-						played.push_back({stroke.t + early + contacts[q].delay, i, frets[q], stroke.force * contacts[q].share, stroke.p,
-										  std::max(ring, st.length) * spb, palm_for(i, frets[q]), stroke, palm_share(i) > 0, (int)q,
-										  rings.strum_lifted[(size_t)mo.strum][(size_t)i], st.up});
+						played.push_back({t, i, fret, stroke.force * c.share, stroke.p, std::max(ring, st.length) * spb, palm_for(i, fret), stroke,
+										  palm_share(i) > 0, (int)q, rings.strum_lifted[(size_t)mo.strum][(size_t)i], st.up});
 						struck[(size_t)i] = true;
+						if (c.muted)
+							deaden(t, i);
 					}
 				}
 				if (palm_here)
@@ -494,6 +517,76 @@ namespace grmg
 			return out;
 		}
 
+		// a velocity as the share of the stroke it asks (0.8: the stroke itself)
+		static std::vector<double> shares(const std::vector<double> &velocity)
+		{
+			std::vector<double> out;
+			for (double v : velocity)
+				out.push_back(v / 0.8);
+			return out;
+		}
+
+		// what can go wrong in a stroke (Imperfection): the rng to draw from (none: nothing goes wrong), how often
+		struct Accidents
+		{
+			std::mt19937 *rng = nullptr;
+			double amount = 0.0;
+			bool happens(double chance) const
+			{
+				return rng && amount > 0 && std::uniform_real_distribution<double>(0.0, 1.0)(*rng) < chance * amount;
+			}
+			size_t pick(size_t count) const // one of `count` (only drawn when an accident happens)
+			{
+				return std::uniform_int_distribution<size_t>(0, count - 1)(*rng);
+			}
+		};
+
+		// the pick across `crossing` (the strings in the order it meets them, each with its fret and velocity): the arc
+		// of the wrist aimed at `aim` (a string index; < 0: the whole neck, the arc of a strum) says which it reaches
+		// and how deep, then the sweep carries the hand's energy across them (strum_contacts, sweep). An imperfect
+		// stroke misses its last string, brushes the next one (muted by the fretting hand), or chokes a string.
+		static std::vector<models::Contact> across(const Model &m, const std::vector<int> &crossing, const std::vector<int> &frets,
+												   const std::vector<double> &velocity, const models::Stroke &stroke, bool up, double aim,
+												   const Accidents &accidents)
+		{
+			const auto reach = crossing.size() == 1 ? std::vector<models::Contact>{{crossing[0], 0.0, 1.0}}
+													: strum_contacts(crossing, stroke, up, aim);
+			if (reach.empty())
+				return {};
+			std::vector<int> strings, reached_frets;
+			std::vector<double> base;
+			for (const auto &c : reach)
+			{
+				const size_t at = (size_t)(std::find(crossing.begin(), crossing.end(), c.string) - crossing.begin());
+				strings.push_back(c.string);
+				reached_frets.push_back(frets[at]);
+				base.push_back(c.share * velocity[at] / 0.8);
+			}
+			auto contacts = sweep(m, strings, base, reached_frets, stroke, reach.front().delay);
+			if (contacts.size() < 2)
+				return contacts;
+			if (contacts.size() >= 3 && accidents.happens(MISS_CHANCE))
+				contacts.pop_back();
+			if (accidents.happens(BRUSH_CHANCE))
+			{
+				const auto &last = contacts.back();
+				const int next = last.string + (up ? -1 : 1);
+				if (next >= 0 && next < NUM_STRINGS && std::find(crossing.begin(), crossing.end(), next) == crossing.end())
+					contacts.push_back({next, last.delay + STRING_SPACING / std::max(stroke.v, 0.05), last.share * BRUSH_SHARE});
+			}
+			// a fretting finger that slips or presses too little: one string of the chord chokes (never the whole stroke)
+			if (accidents.happens(CHOKE_CHANCE))
+				contacts[accidents.pick(contacts.size())].muted = true;
+			// the beat: the player lands it on the strings around B and G, not on the first string met (Freire et al.
+			// 2018): a downstroke starts before the beat, an upstroke reaches it at once
+			const auto anchor = std::min_element(contacts.begin(), contacts.end(), [](const auto &a, const auto &b)
+												 { return std::abs(a.string - BEAT_STRING) < std::abs(b.string - BEAT_STRING); });
+			const double on_beat = anchor->delay;
+			for (auto &c : contacts)
+				c.delay -= on_beat;
+			return contacts;
+		}
+
 		// fingers plucking together (a pinch): each finger its own force and timing; the thumb (the bass) a little
 		// ahead of the others
 		template <class Rng>
@@ -637,35 +730,31 @@ namespace grmg
 			perf.events.push_back(e);
 		}
 
-		// the player network over the moments, in windows (one network per window, each starting where the
-		// last one left the arm): what the arm does at one stroke depends on the strokes around it
-		template <class Rng>
-		static std::vector<models::Stroke> run_player(const std::vector<std::pair<double, int>> &grid, double step, const models::Settings &s,
-													  Rng &rng)
+		// the player network over the moments, in windows (one network per window; the live player, PlayerFeel, goes
+		// on from one window to the next): what the arm does at one stroke depends on the strokes around it
+		template <class Moments, class Rng>
+		static std::vector<models::Stroke> run_player(const Moments &order, double step, double spb, int beats_per_bar,
+													  const models::Settings &s, Rng &rng)
 		{
-			models::PlayerNoise noise;
-			noise.exact = !s.human;
-			noise.amount = s.human_amount;
-			noise.rng.seed(rng());
+			PlayerFeel player(s, beats_per_bar, (unsigned)rng());
+			std::vector<std::pair<double, int>> grid;
+			std::vector<models::StrokeFeel> feel;
+			for (const auto &mo : order)
+			{
+				grid.push_back({mo.beat * spb, (int)std::lround(mo.beat * 4.0)});
+				feel.push_back(player.next(grid.back().first, grid.back().second));
+			}
 			std::vector<models::Stroke> out;
 			const size_t window = 32;
 			for (size_t a = 0; a < grid.size(); a += window)
 			{
 				const size_t b = std::min(grid.size(), a + window);
-				std::vector<std::pair<double, int>> part(grid.begin() + (long)a, grid.begin() + (long)b);
-				auto r = player_network(part, step, s.pluck, noise, s.swing_cm / 100.0);
+				const std::vector<std::pair<double, int>> part(grid.begin() + (long)a, grid.begin() + (long)b);
+				const std::vector<models::StrokeFeel> aims(feel.begin() + (long)a, feel.begin() + (long)b);
+				auto r = player_network(part, aims, step, s.pluck, s.swing_cm / 100.0);
 				out.insert(out.end(), r.begin(), r.end());
 			}
 			return out;
-		}
-
-		template <class Moments, class Rng>
-		static std::vector<models::Stroke> run_player(const Moments &order, double step, double spb, const models::Settings &s, Rng &rng)
-		{
-			std::vector<std::pair<double, int>> grid;
-			for (const auto &mo : order)
-				grid.push_back({mo.beat * spb, (int)std::lround(mo.beat * 4.0)});
-			return run_player(grid, step, s, rng);
 		}
 	};
 

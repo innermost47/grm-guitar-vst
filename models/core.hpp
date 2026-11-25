@@ -5,6 +5,7 @@
 #include <string>
 #include <random>
 #include <complex>
+#include <tuple>
 
 #include "amp.hpp"
 
@@ -313,6 +314,14 @@ namespace grmg::models
         double t, A, v, force, p, d, palm_x, palm_N;
     };
 
+    // What the live player aims at for one stroke, against the exact gesture: its time (s), its force (dex: the bar's
+    // accent and the rest), its pluck point (relative), the pick's depth (m)
+    struct StrokeFeel
+    {
+        double dt = 0.0, force_dex = 0.0, pluck = 0.0, depth = 0.0;
+        double accent = 0.0; // the bar's accent alone (dex), part of force_dex
+    };
+
     struct Played
     {
         double t;
@@ -353,10 +362,38 @@ namespace grmg::models
             return (c / Leff) * Zs * std::max(admittance(freq).real(), 0.0);
         }
 
-        // the other end of the string: the fret (or the nut) and the neck behind it take their share in both planes,
-        // through their conductance `neck` (s/kg): a reflection there keeps 1 - 2 Zs G of the wave, once a period
+        // the other end of the string: the fret (or the nut) and the neck behind it take their share through their
+        // conductance (s/kg), a reflection there keeping 1 - 2 Zs G of the wave once a period. An average `neck` in
+        // both planes, and the neck's own modes: each in one plane (0 across the top, 1 along it), strongest at its
+        // antinode (a share of the scale from the nut), as a resonance in frequency. A note played where a mode
+        // stands, at its frequency, loses much more: a dead spot.
+        struct NeckMode
+        {
+            int plane = 0;
+            double f = 0.0, q = 1.0, g = 0.0, antinode = 0.5;
+        };
         double neck = 0.0;
-        double neck_loss(double c, double Leff, double Zs) const { return (c / Leff) * Zs * neck; }
+        std::array<NeckMode, 2> neck_modes{};
+
+        // the neck's conductance at `fret_m` (m from the nut, on a scale `L`), in `plane`, at `freq`
+        double neck_conductance(double fret_m, double L, double freq, int plane) const
+        {
+            double g = neck;
+            for (const auto &m : neck_modes)
+            {
+                const double span = 2.0 * m.antinode * L;
+                if (m.plane != plane || m.g <= 0.0 || fret_m <= 0.0 || fret_m >= span)
+                    continue;
+                const double shape = std::sin(PI * fret_m / span), u = freq / m.f - m.f / freq;
+                g += m.g * shape * shape / (1.0 + m.q * m.q * u * u);
+            }
+            return g;
+        }
+
+        double neck_loss(const Place &pl, double freq, int plane) const
+        {
+            return (pl.c / pl.Leff) * pl.Zs * neck_conductance(pl.L - pl.Leff, pl.L, freq, plane);
+        }
 
         double coupling(double freq, double c, double Leff, double Zs) const
         {
@@ -381,25 +418,12 @@ namespace grmg::models
         double xf, h;
     };
 
-    struct PlayerNoise
-    {
-        bool exact = false;
-        double amount = 1.0;
-        std::mt19937 rng{1};
-
-        double normal(double sd)
-        {
-            if (exact || amount <= 0)
-                return 0.0;
-            std::normal_distribution<double> d(0.0, sd);
-            return amount * d(rng);
-        }
-    };
 
     struct Contact
     {
         int string;
         double delay, share;
+        bool muted = false; // the fretting hand damps it as it is struck
     };
 
     struct BodySpec
@@ -625,7 +649,9 @@ namespace grmg::models
 
         bool human = true;
         double human_amount = 1.0;
-        double swing_cm = 10.0;
+        double feel_depth = 1.0;   // how much the bar's accents weigh (0: every stroke alike)
+        double imperfection = 0.2; // strings brushed, missed, choked (0: none; nothing without human feel)
+        double swing_cm = 7.0; // the arm's swing: 7 cm gives Freire et al.'s strums (8-11 ms a string at 64 bpm)
         bool finger_noises = true;
         double finger_force = 0.6;
         double hand_mute = 150.0; // 1/s: how fast the hand leaving a chord shape (or travelling) stops the strings
@@ -634,6 +660,11 @@ namespace grmg::models
         double feedback_distance = 1.0;
         int feedback_target = 0;
         AmpSettings amp;
+
+        // the player's settings (the roll compiled again when they change, nothing to solve): one list for comparing
+        // and copying them
+        auto player() { return std::tie(human, human_amount, swing_cm, feel_depth, imperfection, finger_noises, finger_force); }
+        auto player() const { return std::tie(human, human_amount, swing_cm, feel_depth, imperfection, finger_noises, finger_force); }
 
         bool is_magnetic_pickup() const { return sensor == 1 || sensor == 3; }
         bool amp_active() const { return amp.on && is_magnetic_pickup(); }

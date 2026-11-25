@@ -403,7 +403,7 @@ void GRMGuitarEditor::rebuildGuitars()
 				   panel.showOnlyWhen(processor.paramId(id), processor.paramId("sensor"), {1, 3});
 		   });
 	addTab("Room", {"room_on", "room_size", "room_material", "room_distance"});
-	addTab("Player", withTunables({"human", "human_amount", "swing_cm", "finger_noises", "finger_force"}, HAND_TUNABLES));
+	addTab("Player", withTunables({"human", "human_amount", "swing_cm", "feel_depth", "imperfection", "finger_noises", "finger_force"}, HAND_TUNABLES));
 	tabs.addTab("Mixer", PANEL, new MixerView(processor), true);
 	addTab("Playback", {"follow_host", "loop", "tempo", "midi_strings", "midi_route", "audition"}, false);
 	tabs.addTab("Networks", PANEL, new NetworksView(processor), true);

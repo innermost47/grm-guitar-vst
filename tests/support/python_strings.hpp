@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Anthony Charretier
 //
-// The six strings of the Python app (grm_guitar.py, STRINGS): equal tension, 648 mm. The golden values
-// (tests/golden.hpp) were computed on them, so the parity checks use them, whatever set the plugin holds.
+// What the Python app plays: its six strings (grm_guitar.py, STRINGS: equal tension, 648 mm) and its player's
+// accents. The golden values (tests/golden.hpp) were computed on them, so the parity checks use them, whatever
+// the plugin plays.
 #pragma once
 
 namespace python_app
@@ -21,4 +22,7 @@ namespace python_app
 
     // the Python app's wound core: a share of the diameter of an all-steel string of the same mass
     inline constexpr double CORE = 0.45;
+
+    // the Python app's accents (dex of force) on the eight sixteenths of two beats
+    inline constexpr double ACCENT_DEX[8] = {0.06, -0.04, 0.0, -0.04, 0.03, -0.04, 0.0, -0.04};
 } // namespace python_app

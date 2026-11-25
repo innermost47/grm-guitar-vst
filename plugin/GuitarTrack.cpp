@@ -119,6 +119,8 @@ models::Settings GuitarTrack::readSettings() const
 	s.human = b("human");
 	s.human_amount = std::round(v("human_amount") * 20.0) / 20.0;
 	s.swing_cm = v("swing_cm");
+	s.feel_depth = v("feel_depth");
+	s.imperfection = v("imperfection");
 	s.finger_noises = b("finger_noises");
 	s.finger_force = v("finger_force");
 	for (const auto &t : HAND_TUNABLES)
@@ -265,7 +267,7 @@ void GuitarTrack::solveStep(double sr, unsigned seed, double tempo, bool loop, s
 	{
 		const bool tunables = std::all_of(std::begin(HAND_TUNABLES), std::end(HAND_TUNABLES), [&](const auto &t)
 										  { return std::abs(a.*t.field - b.*t.field) < 1e-9; });
-		return tunables && a.human == b.human && std::abs(a.human_amount - b.human_amount) < 1e-9 && std::abs(a.swing_cm - b.swing_cm) < 1e-9 && a.finger_noises == b.finger_noises && std::abs(a.finger_force - b.finger_force) < 1e-9;
+		return tunables && a.player() == b.player();
 	};
 	collect();
 	const auto s = readSettings();
@@ -335,11 +337,7 @@ void GuitarTrack::solveStep(double sr, unsigned seed, double tempo, bool loop, s
 		try
 		{
 			models::Settings ps = model->s; // the player settings of now, with the model's networks
-			ps.human = s.human;
-			ps.human_amount = s.human_amount;
-			ps.swing_cm = s.swing_cm;
-			ps.finger_noises = s.finger_noises;
-			ps.finger_force = s.finger_force;
+			ps.player() = s.player();
 			for (const auto &t : HAND_TUNABLES)
 				ps.*t.field = s.*t.field;
 			auto m = std::make_shared<grmg::Model>(*model);

@@ -104,9 +104,14 @@ int main() {
     }
     // the player, without imprecision
     {
-        PlayerNoise exact;
-        exact.exact = true;
-        const auto st = player_network({{0.0, 0}, {0.25, 1}, {0.5, 2}, {1.0, 4}, {1.25, 5}}, 0.25, 0.2, exact);
+        const std::vector<std::pair<double, int>> grid = {{0.0, 0}, {0.25, 1}, {0.5, 2}, {1.0, 4}, {1.25, 5}};
+        std::vector<StrokeFeel> accents;
+        for (const auto& g : grid) {
+            StrokeFeel f;
+            f.accent = f.force_dex = python_app::ACCENT_DEX[g.second % 8];
+            accents.push_back(f);
+        }
+        const auto st = player_network(grid, accents, 0.25, 0.2);
         for (size_t k = 0; k < st.size(); ++k) {
             const std::string s = std::to_string(k);
             expect("player", "t" + s, st[k].t, 1e-7);
@@ -175,7 +180,8 @@ int main() {
             StringLosses legacy;
             legacy.legacy = 3.0;          // the loss curve of the Python app, for this parity check
             Body python_body = b;
-            python_body.neck = 0.0; // the Python app's strings lose nothing at the nut
+            python_body.neck = 0.0; // the Python app's strings lose nothing at the nut, nor in the neck
+            python_body.neck_modes = {};
             voice.start(p, python_body, legacy, 0.6, 44100.0);
             std::vector<double> y(44100, 0.0);
             voice.render(y.data(), 44100);

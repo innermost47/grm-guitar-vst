@@ -163,10 +163,34 @@ namespace grmg
     constexpr double LONG_COUPLING = 0.3, LONG_TAU = 0.04, V_REF = 0.3, PAD_EDGE = 0.001, FRET_CROWN = 0.002, FRET_BUMP = 0.3;
     constexpr double SENSOR_SCALE[3] = {1.0, PICKUP_LEVEL, PIEZO_LEVEL};
 
+    // ---- the live player (PlayerFeel): a groove is first what repeats, then what wanders slowly, then the gesture's
+    // own error (Rasanen et al. 2015, Porcaro's hi-hat: intervals 8.7 ms apart at 96 bpm, -0.48 from one interval to
+    // the next, accents repeated at 88-93 % from bar to bar, timing at about 50 %; Hennig et al. 2011: listeners
+    // prefer slow correlated wandering to white noise). Sizes at Looseness 1 (a good player); Anthony's DI: level
+    // +-2.4 dB and brightness +-27 % from one stroke to the next.
+    // the weight of each level of the bar (downbeat, half bar or group, beat, eighth, sixteenth) and the accent's
+    // span over it (dex of force at Feel depth 1)
+    constexpr double METER_WEIGHTS[5] = {1.0, 0.75, 0.55, 0.3, 0.1};
+    constexpr double FEEL_ACCENT_DEX = 0.15;
+    // the gesture (white: each onset on its own, which makes successive intervals anticorrelated by -0.5)
+    constexpr double MOTOR_TIME_S = 0.005, MOTOR_FORCE_DEX = 0.07, MOTOR_PLUCK = 0.08, MOTOR_DEPTH_M = 0.0006;
+    // the player's own way of playing each place of the bar, kept from bar to bar, renewed slowly over phrases
+    constexpr double SIGNATURE_TIME_S = 0.003, SIGNATURE_FORCE_DEX = 0.05, SIGNATURE_PLUCK = 0.04, SIGNATURE_DEPTH_M = 0.0004;
+    constexpr double SIGNATURE_KEEP_TIME = 0.5, SIGNATURE_KEEP_FORCE = 0.9; // correlation from one phrase to the next
+    constexpr int PHRASE_BARS = 2;
+    // the slow wandering: tempo, energy, the hand along the string (three time scales, equal shares: close to 1/f)
+    constexpr double DRIFT_TAU_S[3] = {2.0, 8.0, 32.0};
+    constexpr double DRIFT_TIME_S = 0.006, DRIFT_FORCE_DEX = 0.10, DRIFT_PLUCK = 0.12, DRIFT_DEPTH_M = 0.0005;
+    // Imperfection 1: how often a stroke brushes the next string (muted by the fretting hand), misses its last
+    // string, or chokes one of its strings (a fretting finger that slips)
+    // The strum (Freire et al., SMC 2018, hexaphonic pickups on a nylon guitar, a pick): 6-note strums spread 37-46 ms
+    // at 64 bpm (8-11 ms from string to string), 26-62 ms at 86 bpm (5-12.5 ms); the beat lands on strings 2 and 3
+    // (B and G, string index 3.5 here), not on the first string the pick meets.
+    constexpr double BEAT_STRING = 3.5;
+    constexpr double BRUSH_CHANCE = 0.35, MISS_CHANCE = 0.25, CHOKE_CHANCE = 0.06, BRUSH_SHARE = 0.35;
     constexpr double TIMING_SIGMA = 0.015, ARM_SIGMA = 0.015, AMPLITUDE_SIGMA = 0.07, PLUCK_SIGMA = 0.06,
                      DEPTH_SIGMA = 0.0008, PALM_X_SIGMA = 0.003, PALM_N_SIGMA = 0.12, SWING = 0.10, PICK_DEPTH = 0.003,
                      WRIST_RADIUS = 0.25, STRING_SPACING = 0.0105, FULL_DEPTH = 0.0015, UP_FORCE = 0.8;
-    constexpr double ACCENT_DEX[8] = {0.06, -0.04, 0.0, -0.04, 0.03, -0.04, 0.0, -0.04};
 
     constexpr models::ChordShape CHORD_SHAPES[] = {
         {"Open", {0, 0, 0, 0, 0, 0}},
@@ -241,6 +265,15 @@ namespace grmg
     // the neck taking more than the bridge): this is what takes the string from the one to the other's middle (Q 1750
     // at 196 Hz). Until the neck's own modes (its dead spots) replace it, its average.
     constexpr double NECK_CONDUCTANCE = 5.7e-4;
+    // The neck's own modes, where its dead spots come from (Pate et al. 2014, Les Paul Junior replica: their Fig. 7-8
+    // place a mode across the top near 385 Hz, strongest about the 12th fret, and one along it near 330 Hz about the
+    // 9th; their Fig. 11 measures the G3's Q there: 390 at the 12th fret across the top, 450 at the 9th along it).
+    // Each mode's shape along the neck: sin(pi x / (2 antinode)) from the nut; its peak conductance is the one that
+    // gives those measured Q in the engine (their printed conductances disagree with their own Q by a factor 2).
+    constexpr models::Body::NeckMode NECK_MODES[2] = {
+        {0, 388.0, 40.0, 0.019, 0.5},
+        {1, 330.0, 40.0, 0.0092, 0.405},
+    };
     enum StringMaterialId
     {
         STEEL_PLAIN,
