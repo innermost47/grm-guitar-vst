@@ -486,17 +486,8 @@ void CustomLookAndFeel::drawLinearSlider(juce::Graphics &g, int x, int y, int wi
         g.setColour(juce::Colour(palette.charcoalLight).withAlpha(0.5f));
         g.drawRoundedRectangle(trackRect, trackWidth * 0.5f, 0.6f);
 
-        float capsuleW, capsuleH;
-        if (isVertical)
-        {
-            capsuleW = 20.0f;
-            capsuleH = 12.0f;
-        }
-        else
-        {
-            capsuleW = 22.0f;
-            capsuleH = juce::jmax(20.0f, juce::jmin(30.0f, (float)height * 0.75f));
-        }
+        // the same capsule both ways, across the track
+        const float capsuleW = isVertical ? 20.0f : 12.0f, capsuleH = isVertical ? 12.0f : 20.0f;
         const float capsuleR = appTheme.borders.corner * 2;
 
         juce::Rectangle<float> capsule;
@@ -543,15 +534,12 @@ void CustomLookAndFeel::drawLinearSlider(juce::Graphics &g, int x, int y, int wi
         {
             const float lineThick = 2.0f;
             float lx = capsule.getCentreX() - lineThick * 0.5f;
-            float ly = capsule.getY() + 4.0f;
-            float lh = capsule.getHeight() - 8.0f;
+            float ly = capsule.getY() + 2.0f;
+            float lh = capsule.getHeight() - 4.0f;
             if (lh > 1.0f)
             {
-                g.setColour(accentColour.withAlpha(isActive ? 1.0f : 0.9f));
+                g.setColour(accentColour.withAlpha(isActive ? 1.0f : 0.85f));
                 g.fillRoundedRectangle(lx, ly, lineThick, lh, lineThick * 0.5f);
-
-                g.setColour(accentColour.withAlpha(isActive ? 0.4f : 0.25f));
-                g.fillRoundedRectangle(lx - 1.0f, ly, lineThick + 2.0f, lh, (lineThick + 2.0f) * 0.5f);
             }
         }
     }

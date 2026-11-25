@@ -12,6 +12,8 @@ class MixerView : public juce::Component
 public:
     explicit MixerView(GRMGuitarProcessor &p);
     int preferredWidth() const; // every strip at its width
+    // the strips again when the guitars changed (added, removed, selected), their meters: once a frame
+    void refresh();
     void resized() override;
     void paint(juce::Graphics &) override;
 
@@ -32,6 +34,5 @@ private:
     std::vector<Strip> strips;
     int shownCount = -1, shownSelected = -1;
     void rebuild();
-    void updateMixer();
     std::unique_ptr<juce::VBlankAttachment> vblank;
 };

@@ -50,19 +50,19 @@ namespace ui::theme
     {
         int baseModalWidth = 600;
         int baseModalHeight = 400;
-        int modalSideWidth = 150;    // the column of the equations on the left of every dialog
-        int modalMinHeight = 300;    // a dialog grows with its text from there (up to baseModalHeight)
+        int modalSideWidth = 150; // the column of the equations on the left of every dialog
+        int modalMinHeight = 300; // a dialog grows with its text from there (up to baseModalHeight)
         int modalPadding = 18;
         int modalTitleHeight = 30;
-        int modalRowHeight = 24;     // a checkbox, a link
+        int modalRowHeight = 24; // a checkbox, a link
         int modalButtonWidth = 110;
         int modalButtonHeight = 28;
-        int presetBarWidth = 320;    // the presets' menu and its two buttons
-        int tensionViewHeight = 66;  // the strings' notes and tensions (Strings tab), on two lines when narrow
+        int presetBarWidth = 320;   // the presets' menu and its two buttons
+        int tensionViewHeight = 66; // the strings' notes and tensions (Strings tab), on two lines when narrow
         // the editor: its size, the settings' sidebar (a share of the width), its column of tabs, the presets' row,
         // a mixer strip and its meter, a Feel lane under the roll
-        int editorWidth = 1700;
-        int editorHeight = 960;
+        int editorWidth = 1600;
+        int editorHeight = 820;
         int editorMinWidth = 1480; // the roll's two bars fit beside the sidebar
         int editorMinHeight = 760;
         int sidebarPercent = 25;
@@ -72,6 +72,14 @@ namespace ui::theme
         int mixerStripWidth = 120;
         int vuMeterWidth = 16;
         int feelLaneHeight = 34;
+        // the top line (presets, transport, title), the networks' figures under the settings, the mixer's share of the
+        // height above the roll, the neck's share of the width beside the mixer and its height
+        int topLineHeight = 44;
+        int titleWidth = 300;
+        int networksHeight = 200;
+        int mixerPercent = 34;
+        int neckPercent = 42;
+        int neckHeight = 160;
         int minSmallBtnWidth = 24;
         int minSmallBtnHeight = 24;
         int iconButton = 24;
@@ -158,8 +166,8 @@ namespace ui::theme
             theme.dimensions.modalButtonHeight = static_cast<int>(28 * uiScale);
             theme.dimensions.presetBarWidth = static_cast<int>(320 * uiScale);
             theme.dimensions.tensionViewHeight = static_cast<int>(66 * uiScale);
-            theme.dimensions.editorWidth = static_cast<int>(1700 * uiScale);
-            theme.dimensions.editorHeight = static_cast<int>(960 * uiScale);
+            theme.dimensions.editorWidth = static_cast<int>(1600 * uiScale);
+            theme.dimensions.editorHeight = static_cast<int>(820 * uiScale);
             theme.dimensions.editorMinWidth = static_cast<int>(1480 * uiScale);
             theme.dimensions.editorMinHeight = static_cast<int>(760 * uiScale);
             theme.dimensions.sideTabWidth = static_cast<int>(108 * uiScale);
@@ -168,6 +176,10 @@ namespace ui::theme
             theme.dimensions.mixerStripWidth = static_cast<int>(120 * uiScale);
             theme.dimensions.vuMeterWidth = static_cast<int>(16 * uiScale);
             theme.dimensions.feelLaneHeight = static_cast<int>(34 * uiScale);
+            theme.dimensions.topLineHeight = static_cast<int>(44 * uiScale);
+            theme.dimensions.titleWidth = static_cast<int>(300 * uiScale);
+            theme.dimensions.networksHeight = static_cast<int>(200 * uiScale);
+            theme.dimensions.neckHeight = static_cast<int>(160 * uiScale);
             theme.dimensions.minSmallBtnWidth = static_cast<int>(24 * uiScale);
             theme.dimensions.minSmallBtnHeight = static_cast<int>(24 * uiScale);
             theme.dimensions.iconButton = static_cast<int>(24 * uiScale);

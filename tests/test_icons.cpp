@@ -93,17 +93,29 @@ static void interfaceIconButtonsAreDescribedAndSquare()
     auto &processor = dynamic_cast<GRMGuitarProcessor &>(*plugin);
     processor.addGuitar();
     {
-        // transport 3, roll tools 6, patterns 5, guitars 2, roll toggles 2, the Feel's 3, the mixer's mute and solo
-        // of the two guitars (with the presets' save and delete), at the editor's smallest size
+        // take and export 2, the transport 4 (play, loop, follow, full screen), roll tools 6, patterns 5, guitars 2, the
+        // ghosts 1, the Feel's 3, the mixer's mute and solo of the two guitars (with the presets' save and delete), at
+        // the editor's smallest size
         std::unique_ptr<juce::AudioProcessorEditor> editor(plugin->createEditorIfNeeded());
         const auto theme = ui::theme::AppTheme::fromScale(1.0f);
         editor->setSize(theme.dimensions.editorMinWidth, theme.dimensions.editorMinHeight);
-        checkIconButtons(*editor, 27, "editor");
+        checkIconButtons(*editor, 29, "editor");
 
         // mute and solo on each guitar's strip
         MixerView mixer(processor);
         mixer.setSize(400, 300);
         checkIconButtons(mixer, 2 * (std::size_t)processor.getGuitarCount(), "mixer");
+
+        // the mixer follows the guitars (Anthony, 25/11/2026: a guitar added, the mixer kept its size): as wide as its
+        // strips, in the container that scrolls through them
+        const int strip = theme.dimensions.mixerStripWidth;
+        processor.addGuitar();
+        processor.addGuitar();
+        mixer.refresh();
+        check(mixer.getWidth() == 4 * strip, "mixer: four guitars, four strips wide");
+        processor.removeGuitar(0);
+        mixer.refresh();
+        check(mixer.getWidth() == 3 * strip, "mixer: a guitar removed, a strip narrower");
     }
     plugin->releaseResources();
 }

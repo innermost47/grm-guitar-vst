@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 Anthony Charretier
 cmake_minimum_required(VERSION 3.22)
-project(GRMGuitar VERSION 0.3.9 LANGUAGES C CXX)
+project(GRMGuitar VERSION 0.4.0 LANGUAGES C CXX)
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the build type" FORCE)
@@ -130,6 +130,8 @@ if(GRMG_BUILD_PLUGIN)
             assets/icons/steps-clone.svg
             assets/icons/steps-vary.svg
             assets/icons/steps-dice.svg
+            assets/icons/loop.svg
+            assets/icons/corners-out.svg
             assets/icons/trash.svg
     )
 
@@ -153,6 +155,8 @@ if(GRMG_BUILD_PLUGIN)
         plugin/widgets/SideTabs.cpp
         plugin/widgets/StepLane.cpp
         plugin/views/MixerView.cpp
+        plugin/views/MasterStrip.cpp
+        plugin/views/TransportBar.cpp
         plugin/views/NeckView.cpp
         plugin/views/NetworksView.cpp
         plugin/views/ParamPanel.cpp

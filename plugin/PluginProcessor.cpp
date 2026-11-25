@@ -31,6 +31,18 @@ GRMGuitarProcessor::~GRMGuitarProcessor()
 		exportThread.join();
 }
 
+namespace
+{
+// a level meter's peak, raised by the audio thread to the highest since the interface last took it
+void raisePeak(std::atomic<float> &peak, float value)
+{
+	float was = peak.load();
+	while (value > was && !peak.compare_exchange_weak(was, value))
+	{
+	}
+}
+} // namespace
+
 juce::AudioProcessorValueTreeState::ParameterLayout GRMGuitarProcessor::createLayout()
 {
 	using namespace juce;
@@ -798,15 +810,8 @@ void GRMGuitarProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
 			}
 		}
 		// the meters: the highest since the mixer last read them
-		auto raise = [](std::atomic<float> &peak, float value)
-		{
-			float was = peak.load();
-			while (value > was && !peak.compare_exchange_weak(was, value))
-			{
-			}
-		};
-		raise(stripPeaks[(size_t)g][0], peakL);
-		raise(stripPeaks[(size_t)g][1], peakR);
+		raisePeak(stripPeaks[(size_t)g][0], peakL);
+		raisePeak(stripPeaks[(size_t)g][1], peakR);
 	}
 	// the shared rooms, each into its output
 	for (auto &r : rooms)
@@ -852,6 +857,14 @@ void GRMGuitarProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
 				bus.setSample(ch, k, bus.getSample(ch, k) * lg);
 		}
 	}
+	// the master's meter: the main output as it leaves
+	for (int ch = 0; ch < 2; ++ch)
+		raisePeak(masterPeaks[(size_t)ch], mainBus.getNumChannels() > 0 ? mainBus.getMagnitude(std::min(ch, mainBus.getNumChannels() - 1), 0, n) : 0.0f);
+}
+
+std::pair<float, float> GRMGuitarProcessor::takeMasterPeaks()
+{
+	return {masterPeaks[0].exchange(0.0f), masterPeaks[1].exchange(0.0f)};
 }
 
 std::pair<float, float> GRMGuitarProcessor::takeStripPeaks(int g)

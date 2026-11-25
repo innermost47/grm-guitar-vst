@@ -7,6 +7,7 @@
 // 0 the downbeat, 1 the start of a group (or the half bar), 2 a beat, 3 an eighth between beats, 4 a sixteenth.
 #pragma once
 
+#include <algorithm>
 #include <numeric>
 #include <vector>
 
@@ -41,6 +42,33 @@ namespace grmg
             if (beats % 2 != 0)
                 g.back() = 3;
             return g;
+        }
+
+        // every way to group `beats` into twos and threes, the usual one first (5: 3 + 2, 2 + 3; 7: 2 + 2 + 3, ...)
+        static std::vector<std::vector<int>> groupings(int beats)
+        {
+            std::vector<std::vector<int>> all;
+            std::vector<int> current;
+            auto walk = [&](auto &&self, int left) -> void
+            {
+                if (left == 0)
+                {
+                    all.push_back(current);
+                    return;
+                }
+                for (int g : {2, 3})
+                    if (g <= left)
+                    {
+                        current.push_back(g);
+                        self(self, left - g);
+                        current.pop_back();
+                    }
+            };
+            walk(walk, beats);
+            const auto first = usual(beats);
+            all.erase(std::remove(all.begin(), all.end(), first), all.end());
+            all.insert(all.begin(), first);
+            return all;
         }
 
         // the level of a sixteenth (counted from any bar's start)

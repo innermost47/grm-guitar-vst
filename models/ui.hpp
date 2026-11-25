@@ -41,6 +41,8 @@ namespace ui
         stepsClone,
         stepsVary,
         stepsDice,
+        loop,
+        cornersOut,
         count
     };
 

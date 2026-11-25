@@ -10,13 +10,15 @@ using namespace grmg;
 using namespace ui;
 
 GRMGuitarEditor::GRMGuitarEditor(GRMGuitarProcessor &p)
-	: AudioProcessorEditor(&p), processor(p), neck(p), mixer(p), roll(p)
+	: AudioProcessorEditor(&p), processor(p), neck(p), mixer(p), roll(p), transport(p, roll), master(p), networks(p)
 {
 	juce::LookAndFeel::setDefaultLookAndFeel(&CustomLookAndFeel::getInstance());
 
 	addAndMakeVisible(neck);
-	addAndMakeVisible(mixer);
-	addAndMakeVisible(tabs);
+	mixerScroll.setViewedComponent(&mixer, false);
+	mixerScroll.setScrollBarsShown(false, true);
+	for (auto *c : std::initializer_list<juce::Component *>{&mixerScroll, &master, &transport, &networks, &tabs})
+		addAndMakeVisible(c);
 	addAndMakeVisible(addGuitarButton);
 	addGuitarButton.onClick = [this]
 	{ processor.addGuitar(); };
@@ -36,9 +38,6 @@ GRMGuitarEditor::GRMGuitarEditor(GRMGuitarProcessor &p)
 	addAndMakeVisible(presets);
 	rebuildGuitars();
 
-	addAndMakeVisible(playButton);
-	playButton.onClick = [this]
-	{ togglePlay(); };
 	addAndMakeVisible(takeButton);
 	takeButton.onClick = [this]
 	{ processor.newTake(); };
@@ -54,18 +53,10 @@ GRMGuitarEditor::GRMGuitarEditor(GRMGuitarProcessor &p)
 									 processor.exportSong(f.withFileExtension("wav"));
 							 });
 	};
-	for (auto *l : {&status, &position})
-	{
-		l->setColour(juce::Label::textColourId, TEXT);
-		l->setFont(font(12.0f));
-		addAndMakeVisible(*l);
-	}
-	position.setFont(font(15.0f, true));
-	position.setColour(juce::Label::textColourId, BRIGHT);
-	volume.setSliderStyle(juce::Slider::LinearHorizontal);
-	volume.setTextBoxStyle(juce::Slider::NoTextBox, true, 0, 0);
-	volumeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.params, "volume", volume);
-	addAndMakeVisible(volume);
+	status.setColour(juce::Label::textColourId, TEXT);
+	status.setFont(font(12.0f));
+	status.setJustificationType(juce::Justification::centredRight);
+	addAndMakeVisible(status);
 
 	roll.chordRoot = processor.getPersistentChordRoot();
 	roll.chordQuality = processor.getPersistentChordQuality();
@@ -302,9 +293,8 @@ GRMGuitarEditor::GRMGuitarEditor(GRMGuitarProcessor &p)
 	midiModeBox.setTooltip("Play notes: a key plays a note on the guitar. Play patterns: a key plays a whole pattern "
 						   "(C1 pattern 1, C#1 pattern 2...), looped while the key is held");
 	midiModeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(processor.params, "midi_mode", midiModeBox);
-	followAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.params, "follow_playhead", followButton);
 	for (auto *c : std::initializer_list<juce::Component *>{&patternLabel, &patternBox, &newPattern, &duplicatePattern,
-															&deletePatternButton, &copyPatternButton, &pastePatternButton, &midiLabel, &midiModeBox, &keyHint, &followButton})
+															&deletePatternButton, &copyPatternButton, &pastePatternButton, &midiLabel, &midiModeBox, &keyHint})
 		addAndMakeVisible(c);
 	for (auto *l : {&patternLabel, &midiLabel, &keyHint, &keyLabel})
 	{
@@ -354,19 +344,7 @@ void GRMGuitarEditor::rebuildGuitars()
 {
 	using namespace ui;
 	shownGuitarVersion = processor.getGuitarVersion();
-	const int count = processor.getGuitarCount(), sel = processor.getSelectedGuitar();
-	guitarButtons.clear();
-	for (int g = 0; g < count; ++g)
-	{
-		auto b = std::make_unique<juce::TextButton>(processor.getGuitarName(g));
-		b->setClickingTogglesState(false);
-		b->setToggleState(g == sel, juce::dontSendNotification);
-		b->setColour(juce::TextButton::buttonOnColourId, WAVE.darker(0.4f));
-		b->onClick = [this, g]
-		{ processor.selectGuitar(g); };
-		addAndMakeVisible(*b);
-		guitarButtons.push_back(std::move(b));
-	}
+	const int count = processor.getGuitarCount();
 	feelDepthAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.params, processor.paramId("feel_depth"), feelDepth);
 	addGuitarButton.setEnabled(count < GRMGuitarProcessor::MAX_GUITARS);
 	removeGuitarButton.setEnabled(count > 1);
@@ -457,7 +435,6 @@ void GRMGuitarEditor::rebuildGuitars()
 	addTab("Room", {"room_on", "room_size", "room_material", "room_distance"});
 	addTab("Player", withTunables({"human", "human_amount", "swing_cm", "feel_depth", "imperfection", "palm_coupling", "finger_noises", "finger_force"}, HAND_TUNABLES));
 	addTab("Playback", {"follow_host", "loop", "tempo", "midi_strings", "midi_route", "audition"}, false);
-	tabs.addTab("Networks", std::make_unique<NetworksView>(processor));
 	tabs.setCurrentTabIndex(juce::jmin(shownTab, tabs.getNumTabs() - 1));
 	resized();
 }
@@ -531,59 +508,38 @@ void GRMGuitarEditor::updateEditor()
 		rebuildGuitars();
 	refreshPatterns();
 	pastePatternButton.setEnabled(processor.hasCopiedPattern() || juce::SystemClipboard::getTextFromClipboard().startsWith("grm-guitar-roll"));
-	const bool host = processor.isHostPlaying();
-	playButton.setToggleState(processor.isInternalPlaying(), juce::dontSendNotification);
-	playButton.setEnabled(!host);
 	exportButton.setEnabled(!processor.isExporting());
-	const double b = processor.getShownBeat();
-	const auto &s = roll.getSong();
-	const int playing = processor.getPlayingPattern();
-	if (b >= 0 && playing >= 0)
-	{
-		const int bar = (int)(b / s.beats_per_bar);
-		const double beat = b - bar * s.beats_per_bar;
-		const juce::String where = playing == processor.getEditingPattern() ? juce::String(bar + 1) + "." + juce::String((int)beat + 1)
-																			: juce::String("P") + juce::String(playing + 1);
+}
 
-		juce::String song;
-		const double g = processor.getSongBeat();
-		if (g >= 0)
-			song = "   song " + juce::String((int)(g / s.beats_per_bar) + 1) + "." + juce::String((int)std::fmod(g, s.beats_per_bar) + 1);
-		position.setText(where + song + (host ? "  (host)" : ""), juce::dontSendNotification);
-	}
-	else
-	{
-		position.setText("-", juce::dontSendNotification);
-	}
+// the sidebar's column, from the top of the window to its bottom
+juce::Rectangle<int> GRMGuitarEditor::sidebar() const
+{
+	return getLocalBounds().removeFromLeft(getWidth() * appTheme.dimensions.sidebarPercent / 100);
 }
 
 void GRMGuitarEditor::paint(juce::Graphics &g)
 {
 	using namespace ui;
 	g.fillAll(BG);
+	const auto side = sidebar();
+	g.setColour(PANEL);
+	g.fillRect(side);
+	g.setColour(GRID);
+	g.drawVerticalLine(side.getRight() - 1, 0.0f, (float)getHeight());
+	// the title, on the right of the top line
+	const auto title = getLocalBounds().removeFromTop(appTheme.dimensions.topLineHeight).removeFromRight(appTheme.dimensions.titleWidth).reduced(appTheme.spacing.lg, 0);
 	g.setColour(BRIGHT);
 	g.setFont(font(19.0f, true));
-	g.drawText("GRM GUITAR", 12, 6, 160, 26, juce::Justification::centredLeft);
+	g.drawText("GRM GUITAR", title.withTrimmedBottom(appTheme.dimensions.topLineHeight / 2 - 4), juce::Justification::bottomRight);
 	g.setColour(TEXT);
 	g.setFont(font(11.0f));
-	g.drawText("from string to amp and room: all solved by GRM", 110, 6, subtitleWidth, 26,
-			   juce::Justification::centredLeft);
-	g.drawText("Volume", getWidth() - 256, 8, 52, 22, juce::Justification::centredRight);
+	g.drawText("from string to amp and room: all solved by GRM", title.withTrimmedTop(appTheme.dimensions.topLineHeight / 2 + 2), juce::Justification::topRight);
 }
 
 void GRMGuitarEditor::resized()
 {
 	if (modal != nullptr)
 		modal->setBounds(getLocalBounds());
-	auto area = getLocalBounds();
-	auto header = area.removeFromTop(38).reduced(8, 6);
-
-	volume.setBounds(header.removeFromRight(190));
-	header.removeFromRight(60);
-
-	const bool isStandalone = processor.wrapperType == juce::AudioProcessor::wrapperType_Standalone;
-	playButton.setVisible(isStandalone);
-
 	const int iconSize = appTheme.dimensions.iconButton;
 	const int iconGap = appTheme.spacing.md;
 	auto placeIcon = [iconSize](juce::Component &button, juce::Rectangle<int> slot)
@@ -592,52 +548,44 @@ void GRMGuitarEditor::resized()
 	auto iconItem = [iconSize](juce::Component &button, juce::FlexItem::Margin margin)
 	{ return juce::FlexItem(button).withWidth((float)iconSize).withHeight((float)iconSize).withMargin(margin).withFlex(0.0f, 0.0f); };
 
-	if (isStandalone)
+	// the sidebar: on top the take, the export and the presets; the settings by tabs; the networks' figures under them
+	auto side = sidebar().withTrimmedRight(1).reduced(appTheme.spacing.lg, appTheme.spacing.base);
 	{
-		placeIcon(playButton, header.removeFromRight(iconSize));
-		header.removeFromRight(iconGap);
+		auto line = side.removeFromTop(appTheme.dimensions.topLineHeight - 2 * appTheme.spacing.base);
+		placeIcon(takeButton, line.removeFromLeft(iconSize));
+		line.removeFromLeft(iconGap);
+		placeIcon(exportButton, line.removeFromLeft(iconSize));
+		line.removeFromLeft(appTheme.spacing.xl);
+		presets.setBounds(line.withSizeKeepingCentre(line.getWidth(), iconSize));
 	}
-	else
-	{
-		playButton.setBounds({});
-	}
-
-	placeIcon(takeButton, header.removeFromRight(iconSize));
-	header.removeFromRight(iconGap);
-	placeIcon(exportButton, header.removeFromRight(iconSize));
-	header.removeFromRight(appTheme.spacing.xl);
-	position.setBounds(header.removeFromRight(200));
-	header.removeFromRight(10);
-	status.setBounds(header.removeFromRight(juce::jmin(260, juce::jmax(0, header.getWidth() - 150))));
-	subtitleWidth = juce::jmax(0, header.getWidth() - 150);
-
-	// the sidebar: the guitars, then the settings of the one selected, by tabs, all the height
-	auto side = area.removeFromLeft(area.getWidth() * appTheme.dimensions.sidebarPercent / 100).reduced(8, 4);
-	{
-		auto bar = side.removeFromTop(28);
-		for (auto &b : guitarButtons)
-		{
-			b->setBounds(bar.removeFromLeft(84));
-			bar.removeFromLeft(4);
-		}
-		bar.removeFromLeft(iconGap);
-		placeIcon(addGuitarButton, bar.removeFromLeft(iconSize));
-		bar.removeFromLeft(appTheme.spacing.base);
-		placeIcon(removeGuitarButton, bar.removeFromLeft(iconSize));
-		side.removeFromTop(appTheme.spacing.base);
-	}
+	side.removeFromTop(appTheme.spacing.base);
+	networks.setBounds(side.removeFromBottom(appTheme.dimensions.networksHeight));
+	side.removeFromBottom(appTheme.spacing.base);
 	tabs.setBounds(side);
 
-	// on the right, above: the presets over the mixer and the neck
-	auto top = area.removeFromTop(area.getHeight() * 44 / 100).reduced(8, 4);
-	presets.setBounds(top.removeFromTop(appTheme.dimensions.presetRowHeight).withSizeKeepingCentre(
-		juce::jmin(appTheme.dimensions.presetBarWidth * 2, top.getWidth()), iconSize));
-	top.removeFromTop(appTheme.spacing.base);
-	mixer.setBounds(top.removeFromLeft(juce::jmin(mixer.preferredWidth(), top.getWidth() / 2)));
-	top.removeFromLeft(appTheme.spacing.lg);
-	neck.setBounds(top);
+	auto area = getLocalBounds().withTrimmedLeft(sidebar().getWidth());
+	// the top line: the transport in the middle, the guitars' + and - beside it, the status, the title on the right
+	{
+		auto line = area.removeFromTop(appTheme.dimensions.topLineHeight).reduced(appTheme.spacing.lg, appTheme.spacing.base);
+		line.removeFromRight(appTheme.dimensions.titleWidth);
+		const int width = juce::jmin(transport.preferredWidth(), line.getWidth() - 3 * iconSize);
+		transport.setBounds(line.removeFromLeft(width));
+		line.removeFromLeft(appTheme.spacing.xl);
+		placeIcon(addGuitarButton, line.removeFromLeft(iconSize));
+		line.removeFromLeft(appTheme.spacing.base);
+		placeIcon(removeGuitarButton, line.removeFromLeft(iconSize));
+		line.removeFromLeft(appTheme.spacing.xl);
+		status.setBounds(line);
+	}
+	// above the roll: the guitars' strips (they scroll), the master, the neck (the room under it kept free)
+	auto top = area.removeFromTop(area.getHeight() * appTheme.dimensions.mixerPercent / 100).reduced(appTheme.spacing.lg, appTheme.spacing.base);
+	auto neckArea = top.removeFromRight(top.getWidth() * appTheme.dimensions.neckPercent / 100);
+	neck.setBounds(neckArea.removeFromTop(juce::jmin(neckArea.getHeight(), appTheme.dimensions.neckHeight)));
+	top.removeFromRight(appTheme.spacing.lg);
+	master.setBounds(top.removeFromRight(appTheme.dimensions.mixerStripWidth));
+	mixerScroll.setBounds(top);
+	mixer.setSize(mixer.preferredWidth(), top.getHeight() - (mixer.preferredWidth() > top.getWidth() ? mixerScroll.getScrollBarThickness() : 0));
 
-	// below: the roll's two bars (the pattern, then the tools of writing), the roll, its help
 	constexpr float labelWidth = 56.0f;
 	constexpr float itemHeight = 24.0f;
 	const juce::FlexItem::Margin itemGap(0.0f, 6.0f, 0.0f, 0.0f);
@@ -652,6 +600,7 @@ void GRMGuitarEditor::resized()
 		box.items = std::move(items);
 		box.performLayout(bounds.toFloat());
 	};
+	// below: the roll's two bars (the pattern, then the tools of writing), the roll, its help
 	rowOf(area.removeFromTop(32).reduced(8, 2),
 		  {juce::FlexItem(patternLabel).withWidth(labelWidth).withHeight(itemHeight).withMargin(itemGap),
 		   juce::FlexItem(patternBox).withWidth(144.0f).withHeight(itemHeight).withMargin(itemGap),
@@ -666,7 +615,7 @@ void GRMGuitarEditor::resized()
 		   juce::FlexItem(midiLabel).withWidth(labelWidth).withHeight(itemHeight).withMargin(itemGap),
 		   juce::FlexItem(midiModeBox).withWidth(114.0f).withHeight(itemHeight).withMargin(groupGap),
 		   juce::FlexItem(keyHint).withFlex(1.0f).withMinWidth(0.0f).withHeight(itemHeight).withMargin(itemGap),
-		   iconItem(ghostsButton, itemGap), iconItem(followButton, noMargin)});
+		   iconItem(ghostsButton, noMargin)});
 	rowOf(area.removeFromTop(32).reduced(8, 2),
 		  {juce::FlexItem(snapLabel).withWidth(labelWidth).withHeight(itemHeight).withMargin(itemGap),
 		   juce::FlexItem(snapBox).withWidth(82.0f).withHeight(itemHeight).withMargin(groupGap),

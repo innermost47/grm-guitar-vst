@@ -7,14 +7,15 @@ using namespace ui;
 
 NetworksView::NetworksView(GRMGuitarProcessor &p) : processor(p)
 {
-    text.setMultiLine(true);
+    text.setMultiLine(true, false); // one figure a line: it scrolls sideways in the narrow column
     text.setReadOnly(true);
     text.setScrollbarsShown(true);
-    text.setFont(juce::Font(juce::FontOptions(juce::Font::getDefaultMonospacedFontName(), 12.0f, juce::Font::plain)));
+    text.setFont(juce::Font(juce::FontOptions(juce::Font::getDefaultMonospacedFontName(), 10.0f, juce::Font::plain)));
     text.setColour(juce::TextEditor::backgroundColourId, ui::PANEL);
     text.setColour(juce::TextEditor::textColourId, ui::BRIGHT);
     text.setColour(juce::TextEditor::outlineColourId, ui::PANEL);
     addAndMakeVisible(text);
+    updateNetworks(); // shown from the first frame
     vblank = std::make_unique<juce::VBlankAttachment>(this, [this]
                                                       { updateNetworks(); });
 }

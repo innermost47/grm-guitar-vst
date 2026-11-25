@@ -113,6 +113,8 @@ public:
 	float getShownLevel(int i) const { return current().engine.shown_level[(size_t)i].load(); }
 	// guitar g's level after its mixer strip (left, right; 1 = full scale), the highest since the last call
 	std::pair<float, float> takeStripPeaks(int g);
+	// the main output's level after the volume and the limiter, the highest since the last call
+	std::pair<float, float> takeMasterPeaks();
 	juce::String getStatus() const;
 	int getOpenMidi(int i) const;
 	models::Settings readSettings() const { return current().readSettings(); }
@@ -199,6 +201,7 @@ private:
 
 	// audio thread -> interface: each guitar's peaks after its strip (raised by the audio thread, taken by the mixer)
 	std::array<std::array<std::atomic<float>, 2>, MAX_GUITARS> stripPeaks{};
+	std::array<std::atomic<float>, 2> masterPeaks{};
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GRMGuitarProcessor)
 };

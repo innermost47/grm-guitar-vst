@@ -2,6 +2,8 @@
 // Copyright (C) 2026 Anthony Charretier
 #include "MixerView.h"
 
+#include "CustomLookAndFeel.h"
+
 using namespace grmg;
 using namespace ui;
 
@@ -9,10 +11,10 @@ MixerView::MixerView(GRMGuitarProcessor &p) : processor(p)
 {
     rebuild();
     vblank = std::make_unique<juce::VBlankAttachment>(this, [this]
-                                                      { updateMixer(); });
+                                                      { refresh(); });
 }
 
-void MixerView::updateMixer()
+void MixerView::refresh()
 {
     if (processor.getGuitarCount() != shownCount || processor.getSelectedGuitar() != shownSelected)
         rebuild();
@@ -44,6 +46,7 @@ void MixerView::rebuild()
         s.pan = std::make_unique<juce::Slider>(juce::Slider::RotaryHorizontalVerticalDrag, juce::Slider::TextBoxBelow);
         for (auto *sl : {s.gain.get(), s.level.get(), s.pan.get()})
             sl->setTextBoxStyle(juce::Slider::TextBoxBelow, false, 54, 16);
+        s.level->getProperties().set(CustomLookAndFeel::getDrawTicksPropertyId(), ui::FADER_TICKS);
         s.gain->setTooltip("Gain (dB)");
         s.pan->setTooltip("Pan");
         s.level->setTooltip("Level");
@@ -64,6 +67,8 @@ void MixerView::rebuild()
             addAndMakeVisible(c);
         strips.push_back(std::move(s));
     }
+    // as wide as its strips: the container it sits in scrolls through them
+    setSize(preferredWidth(), getHeight());
     resized();
     repaint();
 }

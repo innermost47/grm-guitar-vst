@@ -10,7 +10,7 @@
 
 namespace ui
 {
-    // Phosphor icons (fill style, MIT license) and the glyphs drawn for GRM Guitar (strum, arpeggio, the Feel steps')
+    // Phosphor icons (fill style, MIT license) and the glyphs drawn for GRM Guitar (strum, arpeggio, the Feel steps', the loop and the full screen)
     inline constexpr std::array<IconFile, ICON_COUNT> ICON_FILES = {{
         {IconId::play, "play.svg"},
         {IconId::stop, "stop.svg"},
@@ -41,6 +41,8 @@ namespace ui
         {IconId::stepsClone, "steps-clone.svg"},
         {IconId::stepsVary, "steps-vary.svg"},
         {IconId::stepsDice, "steps-dice.svg"},
+        {IconId::loop, "loop.svg"},
+        {IconId::cornersOut, "corners-out.svg"},
     }};
 
     // ---- the plugin on the net: its releases, the GRM it shows off
@@ -79,6 +81,9 @@ namespace ui
     inline const juce::Colour FEEL_FORCE{juce::Colour(theme::defaultPalette.gold)};
     inline const juce::Colour FEEL_TIMING{juce::Colour(theme::defaultPalette.cyan)};
     inline const juce::Colour FEEL_PALM{juce::Colour(theme::defaultPalette.mauve)};
+    // the master strip's name plate, and the ticks along a mixer fader
+    inline const juce::Colour MASTER_PLATE{juce::Colour(theme::defaultPalette.terracotta)};
+    constexpr int FADER_TICKS = 11;
     // the level meters (VuMeter): their segments' colours, the peak held, the case they sit in
     inline const juce::Colour VU_GREEN{juce::Colour(theme::defaultPalette.sageGreen)};
     inline const juce::Colour VU_ORANGE{juce::Colour(theme::defaultPalette.amber)};
