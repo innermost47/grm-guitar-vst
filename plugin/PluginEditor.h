@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Anthony Charretier
 //
-// The interface: the neck (click a string to play it), the oscilloscope, the settings of every network,
-// and the guitar roll with its tools.
+// The interface: the settings of every network in a sidebar on the left; on the right, the presets over the mixer and
+// the neck (click a string to play it), and under them the guitar roll with its tools and its Feel lanes.
 #pragma once
 
 #include <memory>
@@ -12,7 +12,8 @@
 #include "PluginProcessor.h"
 #include "RollView.h"
 #include "NeckView.h"
-#include "ScopeView.h"
+#include "MixerView.h"
+#include "SideTabs.h"
 #include "IconButton.h"
 #include "Modal.h"
 #include "PresetBar.h"
@@ -29,7 +30,7 @@ public:
 private:
 	GRMGuitarProcessor &processor;
 	NeckView neck;
-	ScopeView scope;
+	MixerView mixer;
 	RollView roll;
 
 	CustomLookAndFeel customLookAndFeel;
@@ -37,7 +38,7 @@ private:
 
 	juce::SharedResourcePointer<juce::TooltipWindow> tooltipWindow;
 
-	juce::TabbedComponent tabs{juce::TabbedButtonBar::TabsAtTop};
+	SideTabs tabs;
 
 	std::unique_ptr<juce::VBlankAttachment> vblank;
 
@@ -62,6 +63,16 @@ private:
 	IconButton redoButton{Icon::arrowClockwise, "Redo (Ctrl+Y)"};
 	IconButton demoButton{Icon::musicNotes, "Demo song: replace the roll with the demo song (undo brings it back)"};
 	juce::Label chordLabel, barLabel, snapLabel, songLabel, help;
+
+	// the pattern's Feel: its preset (it draws the lanes again), its depth, and what writes its lanes for the player
+	juce::ComboBox feelBox;
+	juce::Label feelLabel;
+	juce::Slider feelDepth;
+	std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> feelDepthAttachment;
+	IconButton cloneSteps{Icon::stepsClone, "Clone: the Feel of the selected steps (or of the current bar) over the bars after it"};
+	IconButton varySteps{Icon::stepsVary, "Variation: the selected steps (or the current bar) played another way, the strong beats kept"};
+	IconButton grooveSteps{Icon::stepsDice, "New groove: a Feel drawn at random from the meter (the selected steps, or the whole pattern)"};
+	void feelRange(int &from, int &to) const; // the steps the Feel buttons act on
 
 	juce::ComboBox patternBox, midiModeBox;
 	IconButton newPattern{Icon::filePlus, "New pattern: an empty pattern after this one"};

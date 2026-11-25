@@ -148,6 +148,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout GRMGuitarProcessor::createLa
 		real("swing_cm", "Arm swing (cm)", 4.0f, 20.0f, 7.0f);
 		real("feel_depth", "Accents of the bar (1: default)", 0.0f, 2.0f, 1.0f);
 		real("imperfection", "Imperfection", 0.0f, 1.0f, 0.2f);
+		real("palm_coupling", "Palm against the accents", -1.0f, 1.0f, 0.0f);
 		flag("finger_noises", "Finger noises", true);
 		real("finger_force", "Finger force (N)", 0.1f, 2.0f, 0.6f, 0.6f);
 		for (const auto &t : HAND_TUNABLES)
@@ -766,11 +767,14 @@ void GRMGuitarProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
 		int &fadeLeft = roomFadeLeft[(size_t)g];
 		const float *l = t.out.getReadPointer(0), *r = t.out.getReadPointer(1);
 		const float *sendL = t.send.getReadPointer(0), *sendR = t.send.getReadPointer(1);
+		float peakL = 0.0f, peakR = 0.0f;
 		for (int k = 0; k < n; ++k)
 		{
 			const float gain = stripGain[(size_t)g].getNextValue(), pan = stripPan[(size_t)g].getNextValue();
 			// a balance: the centre keeps both sides at full level (the one-guitar versions' level)
 			const float gl = gain * std::min(1.0f, 1.0f - pan), gr = gain * std::min(1.0f, 1.0f + pan);
+			peakL = std::max(peakL, std::abs(gl * l[k]));
+			peakR = std::max(peakR, std::abs(gr * r[k]));
 			if (bus.getNumChannels() == 1)
 			{
 				bus.addSample(0, k, 0.5f * (gl * l[k] + gr * r[k]));
@@ -793,6 +797,16 @@ void GRMGuitarProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
 				leftR[k] += leave * gr * sendR[k];
 			}
 		}
+		// the meters: the highest since the mixer last read them
+		auto raise = [](std::atomic<float> &peak, float value)
+		{
+			float was = peak.load();
+			while (value > was && !peak.compare_exchange_weak(was, value))
+			{
+			}
+		};
+		raise(stripPeaks[(size_t)g][0], peakL);
+		raise(stripPeaks[(size_t)g][1], peakR);
 	}
 	// the shared rooms, each into its output
 	for (auto &r : rooms)
@@ -838,23 +852,13 @@ void GRMGuitarProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
 				bus.setSample(ch, k, bus.getSample(ch, k) * lg);
 		}
 	}
-	// the oscilloscope (main output)
-	const auto scope = scopeFifo.write(std::min(n, scopeFifo.getFreeSpace()));
-	const float *o = mainBus.getReadPointer(0);
-	for (int k = 0; k < scope.blockSize1; ++k)
-		scopeData[(size_t)(scope.startIndex1 + k)] = o[k];
-	for (int k = 0; k < scope.blockSize2; ++k)
-		scopeData[(size_t)(scope.startIndex2 + k)] = o[scope.blockSize1 + k];
 }
 
-int GRMGuitarProcessor::readScope(float *dest, int count)
+std::pair<float, float> GRMGuitarProcessor::takeStripPeaks(int g)
 {
-	const auto scope = scopeFifo.read(std::min(count, scopeFifo.getNumReady()));
-	for (int k = 0; k < scope.blockSize1; ++k)
-		dest[k] = scopeData[(size_t)(scope.startIndex1 + k)];
-	for (int k = 0; k < scope.blockSize2; ++k)
-		dest[scope.blockSize1 + k] = scopeData[(size_t)(scope.startIndex2 + k)];
-	return scope.blockSize1 + scope.blockSize2;
+	if (g < 0 || g >= MAX_GUITARS)
+		return {0.0f, 0.0f};
+	return {stripPeaks[(size_t)g][0].exchange(0.0f), stripPeaks[(size_t)g][1].exchange(0.0f)};
 }
 
 juce::AudioProcessorEditor *GRMGuitarProcessor::createEditor() { return new GRMGuitarEditor(*this); }

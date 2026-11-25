@@ -111,7 +111,8 @@ public:
 	// what the interface shows (the selected guitar)
 	int getShownFret(int i) const { return current().engine.shown_fret[(size_t)i].load(); }
 	float getShownLevel(int i) const { return current().engine.shown_level[(size_t)i].load(); }
-	int readScope(float *dest, int count); // the latest samples of the main output
+	// guitar g's level after its mixer strip (left, right; 1 = full scale), the highest since the last call
+	std::pair<float, float> takeStripPeaks(int g);
 	juce::String getStatus() const;
 	int getOpenMidi(int i) const;
 	models::Settings readSettings() const { return current().readSettings(); }
@@ -196,9 +197,8 @@ private:
 	bool hostWasPlaying = false;
 	std::atomic<double> songBeat{-1.0};
 
-	// audio thread -> interface: the oscilloscope
-	juce::AbstractFifo scopeFifo{8192};
-	std::array<float, 8192> scopeData{};
+	// audio thread -> interface: each guitar's peaks after its strip (raised by the audio thread, taken by the mixer)
+	std::array<std::array<std::atomic<float>, 2>, MAX_GUITARS> stripPeaks{};
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GRMGuitarProcessor)
 };

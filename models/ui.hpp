@@ -38,6 +38,9 @@ namespace ui
         caretLeft,
         caretRight,
         floppyDisk,
+        stepsClone,
+        stepsVary,
+        stepsDice,
         count
     };
 

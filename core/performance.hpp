@@ -143,7 +143,8 @@ namespace grmg
 			std::vector<models::Moment> order;
 			for (auto &[k, mo] : moments)
 				order.push_back(mo);
-			std::vector<models::Stroke> strokes = run_player(order, step, spb, song.beats_per_bar, s, rng);
+			std::vector<models::Stroke> strokes = run_player(order, step, spb, song, s, rng);
+			const FeelCurve feel = song.feel_curve();
 			muscle(strokes, step);
 
 			if (!strokes.empty() && order.front().beat <= 1e-4)
@@ -189,11 +190,18 @@ namespace grmg
 						return 0.0;
 					return (i >= lo && i <= hi) ? 1.0 : PALM_EDGE;
 				};
+				// the Feel's light palm where no note asks a palm mute: its lane, less where the stroke hits harder
+				// (Palm coupling), in notches (a few palm networks, not one per stroke), at the palm's home
+				const double light = std::round(FEEL_NOTCHES * light_palm(feel, s, mo.beat)) / FEEL_NOTCHES;
 				auto palm_for = [&](int i, int fret) -> const models::Palm *
 				{
 					const double share = palm_share(i);
 					if (share <= 0)
-						return nullptr;
+					{
+						if (light <= 0.0 || m.s.palm_intensity < PALM_OFF)
+							return nullptr;
+						return keep(*perf, palms.get(m, i, fret, PALM_X, PALM_FORCE * PALM_LANE_SHARE * light));
+					}
 					const double press = share * std::pow(std::max(stroke.force, 0.2), PALM_FORCE_FOLLOW);
 					return keep(*perf, palms.get(m, i, fret, stroke.palm_x, stroke.palm_N * press));
 				};
@@ -214,7 +222,7 @@ namespace grmg
 
 				// a dead touch: the finger resting on the string damps it at once, the pick leaves a click
 				auto deaden = [&](double t, int i)
-				{ touches.push_back({t + DEAD_TOUCH, i, RELEASE_DEAD}); };
+				{ touches.push_back({t + DEAD_TOUCH, i, RELEASE_DEAD, nullptr, DEAD_TOUCH}); };
 
 				// single notes struck together: with a pick, the same gesture as a strum of the Strums lane (the arc of
 				// the wrist aimed at them, one sweep across them in the arm's direction: down on the sixteenths of the
@@ -307,7 +315,7 @@ namespace grmg
 					for (int i = 0; i < NUM_STRINGS && palm_down; ++i)
 						if (!struck[(size_t)i] && palm_share(i) > 0)
 							if (const models::Palm *pp = palm_for(i, 0))
-								touches.push_back({stroke.t - 0.03, i, std::min(PALM_LAND_DAMP, pp->sigma_at(0) * PALM_LAND_SPREAD)});
+								touches.push_back({stroke.t - 0.03, i, std::min(PALM_LAND_DAMP, pp->sigma_at(0) * PALM_LAND_SPREAD), pp});
 				}
 			}
 			std::stable_sort(played.begin(), played.end(), [](const models::Played &a, const models::Played &b)
@@ -426,9 +434,9 @@ namespace grmg
 								if (sp.wound && s.finger_noises)
 									add_squeak(*perf, m, i, held, p.fret, to_beat(t_lift), std::max(0.04, t_land - t_lift), (unsigned)perf->squeaks.size());
 							}
-							// the moving hand touches the ringing string, fretted or open
+							// the moving hand touches the ringing string, fretted or open (under the palm, the palm's modes)
 							if (ringing_until > t_lift)
-								add_damp(*perf, i, to_beat(t_lift + SHIFT_TOUCH_DELAY), true, s.hand_mute);
+								add_damp(*perf, i, to_beat(t_lift + SHIFT_TOUCH_DELAY), true, s.hand_mute, palm_at(std::max(held, 0)));
 							if (p.fret > 0)
 								land_on(t_land, p.fret);
 						}
@@ -454,8 +462,17 @@ namespace grmg
 					for (int i = 0; i < NUM_STRINGS; ++i)
 						touches.push_back({t * spb, i, RELEASE_HAND});
 			for (const auto &t : touches)
-				add_damp(*perf, t.string, to_beat(t.t), false, t.extra);
-			for (auto [a, b] : palm_spans)
+				add_damp(*perf, t.string, to_beat(t.t), false, t.extra, t.contact, t.land_s);
+			// the palm stays down from one palm-muted stroke to the next: one span while they overlap, it leaves the
+			// strings only at the end of the last
+			std::sort(palm_spans.begin(), palm_spans.end());
+			std::vector<std::pair<double, double>> down;
+			for (const auto &span : palm_spans)
+				if (!down.empty() && span.first <= down.back().second)
+					down.back().second = std::max(down.back().second, span.second);
+				else
+					down.push_back(span);
+			for (auto [a, b] : down)
 			{
 				models::Event on, off;
 				on.type = models::EventType::palm_on;
@@ -515,6 +532,15 @@ namespace grmg
 				out.push_back({strings[j], delay, base[j] * std::sqrt(w)});
 			}
 			return out;
+		}
+
+		// the Feel's light palm at `beat` (0 lifted .. 1): its lane, plus Palm coupling's share of how soft the bar is
+		// there (> 0: the softer, the more palm, none on the hardest; < 0: the harder, the more palm)
+		static double light_palm(const FeelCurve &feel, const models::Settings &s, double beat)
+		{
+			const double force = std::clamp(s.feel_depth * feel.force(beat), -1.0, 1.0);
+			const double softness = s.palm_coupling >= 0.0 ? 0.5 * (1.0 - force) : 0.5 * (1.0 + force);
+			return std::clamp(feel.palm(beat) + std::abs(s.palm_coupling) * softness, 0.0, 1.0);
 		}
 
 		// a velocity as the share of the stroke it asks (0.8: the stroke itself)
@@ -690,7 +716,8 @@ namespace grmg
 		}
 
 		// damp: the end of a note. `left`: the finger leaves the fret (the lift pluck takes over)
-		static void add_damp(Performance &perf, int i, double beat, bool left, double extra)
+		static void add_damp(Performance &perf, int i, double beat, bool left, double extra, const models::Palm *contact = nullptr,
+							 double land_s = 0.0)
 		{
 			models::Event e;
 			e.type = models::EventType::damp;
@@ -698,6 +725,8 @@ namespace grmg
 			e.string = i;
 			e.squeak = left ? 1 : 0;
 			e.extra = extra;
+			e.contact = contact;
+			e.land_s = land_s;
 			perf.events.push_back(e);
 		}
 
@@ -733,16 +762,16 @@ namespace grmg
 		// the player network over the moments, in windows (one network per window; the live player, PlayerFeel, goes
 		// on from one window to the next): what the arm does at one stroke depends on the strokes around it
 		template <class Moments, class Rng>
-		static std::vector<models::Stroke> run_player(const Moments &order, double step, double spb, int beats_per_bar,
+		static std::vector<models::Stroke> run_player(const Moments &order, double step, double spb, const Song &song,
 													  const models::Settings &s, Rng &rng)
 		{
-			PlayerFeel player(s, beats_per_bar, (unsigned)rng());
+			PlayerFeel player(s, song.meter(), song.feel_curve(), (unsigned)rng());
 			std::vector<std::pair<double, int>> grid;
 			std::vector<models::StrokeFeel> feel;
 			for (const auto &mo : order)
 			{
 				grid.push_back({mo.beat * spb, (int)std::lround(mo.beat * 4.0)});
-				feel.push_back(player.next(grid.back().first, grid.back().second));
+				feel.push_back(player.next(grid.back().first, mo.beat));
 			}
 			std::vector<models::Stroke> out;
 			const size_t window = 32;

@@ -41,9 +41,11 @@ void TensionView::paint(juce::Graphics &g)
         return;
     const auto &type = appTheme.typography;
     auto area = getLocalBounds().reduced(appTheme.spacing.padding, 0);
-    auto top = area.removeFromTop(area.getHeight() / 2);
-    // one cell per string, high string first (as the roll shows them)
-    const int cell = top.getWidth() / NUM_STRINGS;
+    // one cell per string, high string first (as the roll shows them): six in a row, or three in two rows when narrow
+    const int columns = area.getWidth() / NUM_STRINGS >= MIN_CELL ? NUM_STRINGS : NUM_STRINGS / 2;
+    const int lines = NUM_STRINGS / columns;
+    auto top = area.removeFromTop(area.getHeight() * lines / (lines + 1));
+    const int cell = top.getWidth() / columns, line = top.getHeight() / lines;
     int slack = -1;
     for (int row = 0; row < NUM_STRINGS; ++row)
     {
@@ -51,7 +53,8 @@ void TensionView::paint(juce::Graphics &g)
         const bool loose = tensions[(size_t)i] < STRING_SLACK_N;
         if (loose && (slack < 0 || tensions[(size_t)i] < tensions[(size_t)slack]))
             slack = i;
-        const auto r = top.withX(top.getX() + row * cell).withWidth(cell).withTrimmedRight(appTheme.spacing.padding);
+        const auto r = juce::Rectangle<int>(top.getX() + (row % columns) * cell, top.getY() + (row / columns) * line, cell, line)
+                           .withTrimmedRight(appTheme.spacing.padding);
         g.setFont(font(type.info, true));
         g.setColour(loose ? WARNING : BRIGHT);
         g.drawText(juce::String(NUM_STRINGS - i) + "  " + juce::String(note_name(notes[(size_t)i])),

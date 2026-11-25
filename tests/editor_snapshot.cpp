@@ -75,7 +75,7 @@ int main(int argc, char** argv) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
     std::unique_ptr<juce::AudioProcessorEditor> editor(plugin->createEditorIfNeeded());
-    editor->setSize(1280, 820);
+    editor->setSize(1700, 960);
     // let the editor's timers fill the views (the message loop, a few times)
     for (int k = 0; k < 20; ++k) {
         juce::Thread::sleep(20);

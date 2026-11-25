@@ -93,10 +93,12 @@ static void interfaceIconButtonsAreDescribedAndSquare()
     auto &processor = dynamic_cast<GRMGuitarProcessor &>(*plugin);
     processor.addGuitar();
     {
-        // transport 3, roll tools 6, patterns 5, guitars 2, roll toggles 2
+        // transport 3, roll tools 6, patterns 5, guitars 2, roll toggles 2, the Feel's 3, the mixer's mute and solo
+        // of the two guitars (with the presets' save and delete), at the editor's smallest size
         std::unique_ptr<juce::AudioProcessorEditor> editor(plugin->createEditorIfNeeded());
-        editor->setSize(1420, 820);
-        checkIconButtons(*editor, 20, "editor"); // with the presets' save and delete
+        const auto theme = ui::theme::AppTheme::fromScale(1.0f);
+        editor->setSize(theme.dimensions.editorMinWidth, theme.dimensions.editorMinHeight);
+        checkIconButtons(*editor, 27, "editor");
 
         // mute and solo on each guitar's strip
         MixerView mixer(processor);

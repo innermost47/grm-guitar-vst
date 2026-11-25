@@ -15,6 +15,31 @@ RollView::RollView(GRMGuitarProcessor &p) : processor(p)
 	addAndMakeVisible(scroll);
 	scroll.addListener(this);
 	scroll.setAutoHide(false);
+	// the Feel lanes: each edits its lane of the pattern (written out from the preset at the first change), one undo
+	// per gesture
+	const char *names[3] = {"Force", "Timing", "Palm"};
+	const juce::Colour colours[3] = {ui::FEEL_FORCE, ui::FEEL_TIMING, ui::FEEL_PALM};
+	for (int k = 0; k < 3; ++k)
+	{
+		StepLane::Host host;
+		host.values = [this, k]() -> const std::vector<double> & { return feelLane(shownFeel, k); };
+		host.beatToX = [this](double b) { return beatToX(b); };
+		host.xToBeat = [this](float x) { return xToBeat(x); };
+		host.edit = [this, k](const std::function<void(std::vector<double> &)> &change, bool gesture)
+		{
+			if (gesture)
+				pushUndo();
+			FeelGenerator::ensure_lanes(song);
+			change(feelLane(song.feel, k));
+			commit(false, false);
+		};
+		host.undo = [this]
+		{ undo(); };
+		host.redo = [this]
+		{ redo(); };
+		feelLanes[(size_t)k] = std::make_unique<StepLane>(names[k], colours[k], k < 2, GUTTER, host);
+		addAndMakeVisible(*feelLanes[(size_t)k]);
+	}
 	reload();
 	vblank = std::make_unique<juce::VBlankAttachment>(this, [this]
 													  { updateView(); });
@@ -29,6 +54,7 @@ void RollView::reload()
 		brushFret[i] = 0;
 	sel = {};
 	findProblems();
+	refreshFeel();
 	updateScroll();
 	repaint();
 }
@@ -36,20 +62,20 @@ void RollView::reload()
 // ------------------------------------------------------------------ geometry
 juce::Rectangle<int> RollView::lanesArea() const
 {
-	return getLocalBounds().withTrimmedLeft(GUTTER).withTrimmedTop(RULER).withTrimmedBottom(STRUM_LANE + SCROLL);
+	return getLocalBounds().withTrimmedLeft(GUTTER).withTrimmedTop(RULER).withTrimmedBottom(STRUM_LANE + feelHeight() + SCROLL);
 }
 float RollView::laneHeight() const { return (float)lanesArea().getHeight() / 6.0f; }
 float RollView::laneTop(int row) const
 {
 	if (row == 6)
-		return (float)(getHeight() - SCROLL - STRUM_LANE);
+		return (float)(getHeight() - SCROLL - feelHeight() - STRUM_LANE);
 	return (float)RULER + row * laneHeight();
 }
 int RollView::rowAt(float y) const
 {
 	if (y < RULER)
 		return -1;
-	if (y >= getHeight() - SCROLL - STRUM_LANE)
+	if (y >= getHeight() - SCROLL - feelHeight() - STRUM_LANE)
 		return 6;
 	return juce::jlimit(0, 5, (int)((y - RULER) / laneHeight()));
 }
@@ -496,9 +522,32 @@ void RollView::paint(juce::Graphics &g)
 	}
 }
 
+int RollView::feelHeight() const { return 3 * ui::theme::AppTheme::fromScale(1.0f).dimensions.feelLaneHeight; }
+
+void RollView::refreshFeel()
+{
+	Song shown = song;
+	FeelGenerator::ensure_lanes(shown);
+	shownFeel = shown.feel;
+	for (auto &l : feelLanes)
+		if (l)
+			l->repaint();
+}
+
+bool RollView::feelSelection(int &from, int &to) const
+{
+	for (const auto &l : feelLanes)
+		if (l && l->selection(from, to))
+			return true;
+	return false;
+}
+
 void RollView::resized()
 {
 	scroll.setBounds(GUTTER, getHeight() - SCROLL, getWidth() - GUTTER, SCROLL);
+	const int laneH = feelHeight() / 3;
+	for (int k = 0; k < 3; ++k)
+		feelLanes[(size_t)k]->setBounds(0, getHeight() - SCROLL - feelHeight() + k * laneH, getWidth(), laneH);
 	updateScroll();
 }
 
@@ -826,6 +875,7 @@ void RollView::commit(bool checkPlayable, bool fit)
 		findProblems();
 	}
 	processor.setSong(song);
+	refreshFeel();
 	updateScroll();
 	repaint();
 	if (onChanged)

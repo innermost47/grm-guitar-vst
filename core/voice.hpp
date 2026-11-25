@@ -188,6 +188,7 @@ namespace grmg
 						continue; // inaudible (a node at the pluck point, a plane not plucked, nothing ringing on it)
 					double f = plane == 0 ? f0 : (f0 - detune) * split;
 					double sg = losses.sigma(f0, n, pl.B) + coupling[(size_t)plane] * into_body + body.neck_loss(pl, f0, (int)plane);
+					const double f_free = f, sg_free = sg;
 					double sp = 0.0;
 					if (p.palm)
 					{
@@ -209,6 +210,11 @@ namespace grmg
 						z_[m] = scale * a * cplx(1.0, -sg / wd) + kept;
 						step_[m] = std::exp(cplx(-sg, wd) / sr_);
 						rate_[m] = cplx(-sg, wd);
+						free_w_[m] = 2 * PI * f_free;
+						free_sg_[m] = sg_free;
+						hand_ratio_[m] = p.palm ? p.palm->ratio_at((size_t)k) : 1.0;
+						hand_sigma_[m] = sp;
+						extra_[m] = 0.0;
 						// each coil follows the string over it: mode n's true displacement there, and its velocity
 						for (int c = 0; c < coils_; ++c)
 						{
@@ -259,23 +265,33 @@ namespace grmg
 			onset_step_ = std::exp(-1.0 / std::max(p.tau * sr_, 1.0));
 			regain_ = regain;
 			regain_end_ = (long)(5 * PALM_RECOVER * sr_);
+			hand_ = hand_to_ = p.palm ? 1.0 : 0.0;
+			moving_ = false;
 			start_tension(pl, voicing);
 			active = count_ + over_ > 0;
 		}
 
-		// the string is damped (the finger relaxes, the hand touches it): skin on a string takes more from the fast
-		// modes than from the fundamental, so each mode loses extra * (1 + sqrt(f / f1)) / 2 more per second (at
-		// most 4 extra): the note darkens as it dies instead of only getting quieter
-		void damp(double extra = 40.0)
+		// a hand lands on the string (a finger relaxing, a flat hand, the palm): skin on a string takes more from the
+		// fast modes than from the fundamental, so each mode loses extra * (1 + sqrt(f / f1)) / 2 more per second (at
+		// most 4 extra): the note darkens as it dies instead of only getting quieter. With `contact` (the palm network
+		// of the hand there), the modes also move to those of the string under it: lower, some barely ringing (the
+		// palm's thud). It lands in `land_s`, not at once: the modes glide there.
+		void damp(double extra = 40.0, const models::Palm *contact = nullptr, double land_s = HAND_LAND_S)
 		{
 			const double f1 = std::max(what.place.f1, 1.0);
+			begin_move(land_s);
 			for (int k = 0; k < count_; ++k)
 			{
-				const double f = rate_[(size_t)k].imag() / (2 * PI);
-				const double e = extra * std::min(4.0, 0.5 * (1.0 + std::sqrt(std::max(f, 0.0) / f1)));
-				rate_[(size_t)k] = cplx(rate_[(size_t)k].real() - e, rate_[(size_t)k].imag());
-				step_[(size_t)k] = std::exp(cplx(rate_[(size_t)k].real(), rate_[(size_t)k].imag() * (1.0 + glide_)) / sr_);
+				const double f = free_w_[(size_t)k] / (2 * PI);
+				extra_to_[(size_t)k] += extra * std::min(4.0, 0.5 * (1.0 + std::sqrt(std::max(f, 0.0) / f1)));
+				if (contact && hand_ < 0.5)
+				{ // a hand where there was none: its modes
+					hand_ratio_[(size_t)k] = contact->ratio_at((size_t)n_[(size_t)k] - 1);
+					hand_sigma_[(size_t)k] = contact->sigma_at((size_t)n_[(size_t)k] - 1);
+				}
 			}
+			if (contact)
+				hand_to_ = 1.0;
 			for (int k = 0; k < over_; ++k)
 			{
 				od_[(size_t)k][0] *= std::exp(-extra / sr_);
@@ -283,6 +299,17 @@ namespace grmg
 			}
 			note = -1;
 		}
+
+		// the palm leaves the string: its modes glide back to the free string's in `lift_s` (what the hand took stays)
+		void lift(double lift_s = PALM_LIFT_S)
+		{
+			if (hand_ <= 0.0 && hand_to_ <= 0.0)
+				return;
+			begin_move(lift_s);
+			hand_to_ = 0.0;
+		}
+
+		bool touched() const { return hand_to_ > 0.0; }
 
 		// a new note on the same string: the old one stops in `seconds` (struck again, the string forgets it)
 		void fade_out(double seconds = 0.015)
@@ -326,12 +353,18 @@ namespace grmg
 			const bool tension = tension_k_ > 0 && (glide_gain_ * added > GLIDE_FLOOR * what.place.T || pull_gain_ * added > PULL_FLOOR);
 			while (t < samples)
 			{
-				// the palm coming back changes the loop: a block ends where it is back
+				// the palm coming back changes the loop: a block ends where it is back; a hand landing or leaving
+				// moves the modes every MOVE_STEP samples
 				const bool palm = regain_ && t_ < regain_end_;
-				const int end = palm ? (int)std::min<long>(samples, t + (regain_end_ - t_)) : samples;
+				int end = palm ? (int)std::min<long>(samples, t + (regain_end_ - t_)) : samples;
+				if (moving_)
+					end = std::min(end, t + MOVE_STEP);
+				const int from = t;
 				t = (this->*ring_for(palm, contact, tension))(b, t, end);
 				if (t < 0)
 					return;
+				if (moving_)
+					advance_move(t - from);
 			}
 			if (b.peak < 1e-7 && t_ > (long)(0.05 * sr_))
 				active = false;
@@ -357,6 +390,51 @@ namespace grmg
 		// the slot's force, and its velocity there
 		std::array<MagneticPickup, 3> pickups_{};
 		double magnetic_ = 1.0; // the share of the string a magnetic pickup senses (its iron)
+		// each slot as the free string rings it (rad/s, 1/s), the hand on it (its modes' ratio and loss, how much of
+		// it is down: hand_), the losses hands added (extra_); a hand landing or leaving moves them from _from to _to
+		static constexpr int MOVE_STEP = 32;
+		std::array<double, SLOTS> free_w_{}, free_sg_{}, hand_ratio_{}, hand_sigma_{}, extra_{}, extra_from_{}, extra_to_{};
+		double hand_ = 0.0, hand_from_ = 0.0, hand_to_ = 0.0;
+		long move_t_ = 0, move_len_ = 1;
+		bool moving_ = false;
+
+		// a move starts from where the modes are now, towards the targets of any move still under way
+		void begin_move(double seconds)
+		{
+			if (!moving_)
+			{
+				extra_to_ = extra_;
+				hand_to_ = hand_;
+			}
+			extra_from_ = extra_;
+			hand_from_ = hand_;
+			move_t_ = 0;
+			move_len_ = std::max<long>(1, (long)(seconds * sr_));
+			moving_ = true;
+		}
+
+		// the hand goes on landing (or leaving): smoothly, the modes follow
+		void advance_move(int samples)
+		{
+			move_t_ += samples;
+			const double u = std::min(1.0, (double)move_t_ / (double)move_len_), s = u * u * (3.0 - 2.0 * u);
+			hand_ = hand_from_ + s * (hand_to_ - hand_from_);
+			for (int k = 0; k < count_; ++k)
+			{
+				const size_t m = (size_t)k;
+				extra_[m] = extra_from_[m] + s * (extra_to_[m] - extra_from_[m]);
+				const double w = free_w_[m] * (1.0 + hand_ * (hand_ratio_[m] - 1.0));
+				const double sg = free_sg_[m] + hand_ * hand_sigma_[m] + extra_[m];
+				const double wd = sg < w ? std::sqrt(w * w - sg * sg) : 1e-3; // past critical: it only creeps to rest
+				rate_[m] = cplx(-sg, wd);
+				step_[m] = std::exp(cplx(-sg, wd * (1.0 + glide_)) / sr_);
+				for (int c = 0; c < coils_; ++c)
+					coil_vel_[(size_t)c][m] = rate_[m] * coil_disp_[(size_t)c][m];
+				fret_rate_[m] = rate_[m] * at_fret_[m];
+			}
+			if (u >= 1.0)
+				moving_ = false;
+		}
 		int coils_ = 0;
 		std::array<int, MAX_COILS> coil_pickup_{}, coil_index_{};
 		std::array<std::array<double, SLOTS>, MAX_COILS> coil_disp_{};

@@ -52,13 +52,14 @@ static double sd(const std::vector<double> &a)
     return std::sqrt(v / (double)a.size());
 }
 
-// sixteenths played one after the other by a player, `bars` bars of `beats` beats at 120 bpm
-static std::vector<StrokeFeel> play(const Settings &s, int beats, int bars, unsigned seed)
+// sixteenths played one after the other by a player, `bars` bars of `beats` beats at 120 bpm, the Feel `preset`
+static std::vector<StrokeFeel> play(const Settings &s, int beats, int bars, unsigned seed, int preset = FEEL_NATURAL)
 {
-    PlayerFeel player(s, beats, seed);
+    const Meter meter(beats);
+    PlayerFeel player(s, meter, FeelCurve({}, preset, meter, beats * 4), seed);
     std::vector<StrokeFeel> out;
     for (int k = 0; k < bars * beats * 4; ++k)
-        out.push_back(player.next(k * 0.125, k));
+        out.push_back(player.next(k * 0.125, 0.25 * k));
     return out;
 }
 

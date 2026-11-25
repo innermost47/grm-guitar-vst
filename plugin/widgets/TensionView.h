@@ -21,6 +21,7 @@ public:
     void paint(juce::Graphics &g) override;
 
 private:
+    static constexpr int MIN_CELL = 92; // a string's note and tension side by side, readable
     void refresh();
 
     GRMGuitarProcessor &processor;

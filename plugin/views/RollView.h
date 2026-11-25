@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Anthony Charretier
 //
-// The guitar roll: six lanes, one per string (string 1 on top, as in a tablature), and a lane of strums.
+// The guitar roll: six lanes, one per string (string 1 on top, as in a tablature), a lane of strums, and under them
+// the pattern's three Feel lanes (force, timing, palm: StepLane).
 // A note is a fret on a string; it rings until its end or until its string plays again.
 #pragma once
 
@@ -17,6 +18,8 @@
 #include "../../core/playability.hpp"
 #include "../../core/ringing.hpp"
 #include "../../core/song.hpp"
+#include "../../core/feel_generator.hpp"
+#include "../widgets/StepLane.h"
 
 using namespace grmg;
 
@@ -43,6 +46,8 @@ public:
 	std::function<void()> onPlayToggle, onChanged;
 
 	void reload(); // the processor's song (after a state load)
+	// the stretch selected in a Feel lane (steps [from, to)); false: none
+	bool feelSelection(int &from, int &to) const;
 	const grmg::Song &getSong() const { return song; }
 	// one undoable change; fit: the song grows to hold what was written (not when its length is chosen)
 	void edit(const std::function<void(grmg::Song &)> &change, bool fit = true);
@@ -176,6 +181,13 @@ private:
 	void updateView();
 
 	std::unique_ptr<juce::VBlankAttachment> vblank;
+
+	// the Feel lanes: the pattern's lanes as shown (written, or its preset's), one StepLane each
+	std::array<std::unique_ptr<StepLane>, 3> feelLanes;
+	models::FeelLanes shownFeel;
+	void refreshFeel();
+	int feelHeight() const;
+	std::vector<double> &feelLane(models::FeelLanes &l, int k) const { return k == 0 ? l.force : (k == 1 ? l.timing : l.palm); }
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(RollView)
 };

@@ -121,6 +121,7 @@ models::Settings GuitarTrack::readSettings() const
 	s.swing_cm = v("swing_cm");
 	s.feel_depth = v("feel_depth");
 	s.imperfection = v("imperfection");
+	s.palm_coupling = v("palm_coupling");
 	s.finger_noises = b("finger_noises");
 	s.finger_force = v("finger_force");
 	for (const auto &t : HAND_TUNABLES)

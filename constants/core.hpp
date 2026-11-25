@@ -151,6 +151,9 @@ namespace grmg
 
     constexpr double PALM_X = 0.03, PALM_WIDTH = 0.025, PALM_FORCE = 1.0, R_SKIN = 1.0;
     constexpr double PALM_DROP = 0.5, PALM_RECOVER = 0.03, PALM_F_MAX = 2000.0;
+    // a hand landing on a ringing string (a finger relaxing, a flat hand, the palm) presses its skin in over this, a
+    // palm leaving it over the time it takes to come back after the pick (PALM_RECOVER): the modes glide, no switch
+    constexpr double HAND_LAND_S = 0.015, PALM_LIFT_S = PALM_RECOVER;
 
     constexpr double WIND_FILL = 0.8, MU_FRICTION = 0.3, LIFT_DX = 0.02;
     constexpr double H_NUT = 0.0005, H_12 = 0.0022, TAU_LIFT = 0.003, TAU_LAND = 0.001, LAND_SHARE = 0.4;
@@ -171,7 +174,24 @@ namespace grmg
     // the weight of each level of the bar (downbeat, half bar or group, beat, eighth, sixteenth) and the accent's
     // span over it (dex of force at Feel depth 1)
     constexpr double METER_WEIGHTS[5] = {1.0, 0.75, 0.55, 0.3, 0.1};
-    constexpr double FEEL_ACCENT_DEX = 0.15;
+    // The Feel lanes (FeelCurve): a force step of 1 is this much force (dex) at Feel depth 1 (0.105: the Natural preset
+    // gives the bar's accents as before the lanes), a timing step of 1 this late (s), a palm step of 1 this share of
+    // the full palm's pressure (a light palm: the note's Palm mute is the full one); edited in FEEL_NOTCHES notches
+    constexpr double FEEL_LANE_DEX = 0.105, FEEL_LANE_TIMING_S = 0.03, PALM_LANE_SHARE = 0.35;
+    constexpr int FEEL_NOTCHES = 16;
+    // the Feel presets: the weight of each place of the bar, as the force step it gives is (weight - mean) / span
+    constexpr double FEEL_WEIGHT_SPAN = 0.7;
+    enum FeelPreset
+    {
+        FEEL_NATURAL,
+        FEEL_BACKBEAT,
+        FEEL_OFFBEAT,
+        FEEL_GALLOP,
+        FEEL_WALTZ,
+        FEEL_FLAT,
+        NUM_FEEL_PRESETS
+    };
+    inline constexpr const char *FEEL_PRESET_NAMES[NUM_FEEL_PRESETS] = {"Natural", "Backbeat", "Offbeat", "Gallop", "Waltz", "Flat"};
     // the gesture (white: each onset on its own, which makes successive intervals anticorrelated by -0.5)
     constexpr double MOTOR_TIME_S = 0.005, MOTOR_FORCE_DEX = 0.07, MOTOR_PLUCK = 0.08, MOTOR_DEPTH_M = 0.0006;
     // the player's own way of playing each place of the bar, kept from bar to bar, renewed slowly over phrases

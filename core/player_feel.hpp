@@ -4,14 +4,14 @@
 // player_feel.hpp
 //
 // What a live player aims at, stroke after stroke, against the exact grid: a groove is first what repeats, then
-// what wanders slowly, then the gesture's own error (constants: METER_WEIGHTS ... DRIFT_*):
-//   - the bar's accents: each sixteenth weighs as its level in the bar (downbeat, half bar or group, beat, eighth,
-//     sixteenth), the force follows (Feel depth);
+// what wanders slowly, then the gesture's own error (constants: FEEL_LANE_*, SIGNATURE_*, DRIFT_*, MOTOR_*):
+//   - the pattern's Feel (FeelCurve): the force of each place of the bar and its lead or lag, written in its lanes
+//     (or its preset's, drawn from the meter), scaled by Feel depth;
 //   - the player's signature: each place of the bar has its own small lead or lag, force, hand position and depth,
 //     drawn once (the seed: this player), played again every bar, renewed a little from one phrase to the next;
 //   - the drift: tempo, energy, the hand along the string, the pick's depth wander slowly (three time scales);
 //   - the gesture: each stroke's own small error (white: successive intervals come out anticorrelated).
-// Looseness scales everything but the accents; without human feel, only the accents remain.
+// Looseness scales the player's own (signature, drift, gesture); without human feel, only the Feel remains.
 #pragma once
 
 #include <array>
@@ -20,16 +20,18 @@
 #include <vector>
 
 #include "../constants/core.hpp"
+#include "feel_curve.hpp"
+#include "meter.hpp"
 
 namespace grmg
 {
     class PlayerFeel
     {
     public:
-        // sixteenths_per_bar: 4 per beat; seed: the player
-        PlayerFeel(const models::Settings &s, int beats_per_bar, unsigned seed)
-            : live_(s.human ? s.human_amount : 0.0), depth_(s.feel_depth), beats_(std::max(beats_per_bar, 1)),
-              rng_(seed), signature_((size_t)beats_ * 4)
+        // seed: the player
+        PlayerFeel(const models::Settings &s, const Meter &meter, const FeelCurve &curve, unsigned seed)
+            : live_(s.human ? s.human_amount : 0.0), depth_(s.feel_depth), per_bar_(meter.sixteenths()), curve_(curve),
+              rng_(seed), signature_((size_t)per_bar_)
         {
             for (auto &place : signature_)
                 place = draw(SIGNATURE_TIME_S, SIGNATURE_FORCE_DEX, SIGNATURE_PLUCK, SIGNATURE_DEPTH_M);
@@ -37,33 +39,15 @@ namespace grmg
                 drift_[(size_t)k] = draw(DRIFT_TIME_S, DRIFT_FORCE_DEX, DRIFT_PLUCK, DRIFT_DEPTH_M, std::sqrt(1.0 / 3.0));
         }
 
-        // the level of sixteenth `sixteenth` of the bar: 0 the downbeat ... 4 a sixteenth between eighths
-        static int level(int sixteenth, int beats_per_bar)
-        {
-            const int beats = std::max(beats_per_bar, 1);
-            const int s = ((sixteenth % (beats * 4)) + beats * 4) % (beats * 4);
-            if (s == 0)
-                return 0;
-            if (s % 4 == 0)
-                return group_start(s / 4, beats) ? 1 : 2;
-            return s % 2 == 0 ? 3 : 4;
-        }
+        // the Feel's accent (dex of force) and lead or lag (s) at `beat`
+        double accent(double beat) const { return depth_ * FEEL_LANE_DEX * curve_.force(beat); }
+        double lean(double beat) const { return depth_ * FEEL_LANE_TIMING_S * curve_.timing(beat); }
 
-        // the accent (dex of force) of a sixteenth: its weight against the bar's average weight
-        double accent(int sixteenth) const
+        // the stroke at `beat` (from the song's start) at grid time `t` (s), strokes in order
+        models::StrokeFeel next(double t, double beat)
         {
-            double mean = 0.0;
-            for (int s = 0; s < beats_ * 4; ++s)
-                mean += METER_WEIGHTS[level(s, beats_)];
-            mean /= beats_ * 4;
-            return depth_ * FEEL_ACCENT_DEX * (METER_WEIGHTS[level(sixteenth, beats_)] - mean);
-        }
-
-        // the stroke on sixteenth `sixteenth` (counted from the song's start) at grid time `t` (s), strokes in order
-        models::StrokeFeel next(double t, int sixteenth)
-        {
-            const int per_bar = beats_ * 4;
-            const int phrase = floor_div(sixteenth, per_bar * PHRASE_BARS);
+            const int sixteenth = (int)std::lround(beat * 4.0);
+            const int phrase = floor_div(sixteenth, per_bar_ * PHRASE_BARS);
             while (phrase_ < phrase)
             {
                 renew_signature();
@@ -74,11 +58,11 @@ namespace grmg
             last_t_ = t;
             for (int k = 0; k < 3; ++k)
                 wander(drift_[(size_t)k], dt, DRIFT_TAU_S[k]);
-            const auto &sig = signature_[(size_t)(((sixteenth % per_bar) + per_bar) % per_bar)];
+            const auto &sig = signature_[(size_t)(((sixteenth % per_bar_) + per_bar_) % per_bar_)];
             const auto motor = draw(MOTOR_TIME_S, MOTOR_FORCE_DEX, MOTOR_PLUCK, MOTOR_DEPTH_M);
             models::StrokeFeel out;
-            out.dt = live_ * (sig.dt + motor.dt);
-            out.accent = accent(sixteenth);
+            out.accent = accent(beat);
+            out.dt = lean(beat) + live_ * (sig.dt + motor.dt);
             out.force_dex = out.accent + live_ * (sig.force_dex + motor.force_dex);
             out.pluck = live_ * (sig.pluck + motor.pluck);
             out.depth = live_ * (sig.depth + motor.depth);
@@ -93,18 +77,6 @@ namespace grmg
         }
 
     private:
-        // where the bar's groups start, beat by beat: 5 = 3 + 2, 7 = 2 + 2 + 3, 6, 9 and 12 by threes, else by twos
-        static bool group_start(int beat, int beats)
-        {
-            if (beats == 5)
-                return beat == 3;
-            if (beats == 7)
-                return beat == 2 || beat == 4;
-            if (beats % 3 == 0 && beats > 3)
-                return beat % 3 == 0;
-            return beats % 2 == 0 && beat % 2 == 0;
-        }
-
         static int floor_div(int a, int b) { return a >= 0 ? a / b : -((-a + b - 1) / b); }
 
         models::StrokeFeel draw(double time, double force, double pluck, double depth, double share = 1.0)
@@ -143,7 +115,8 @@ namespace grmg
         }
 
         double live_, depth_;
-        int beats_;
+        int per_bar_;
+        FeelCurve curve_;
         std::mt19937 rng_;
         std::normal_distribution<double> normal_{0.0, 1.0};
         std::vector<models::StrokeFeel> signature_;

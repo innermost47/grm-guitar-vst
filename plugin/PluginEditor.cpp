@@ -10,14 +10,12 @@ using namespace grmg;
 using namespace ui;
 
 GRMGuitarEditor::GRMGuitarEditor(GRMGuitarProcessor &p)
-	: AudioProcessorEditor(&p), processor(p), neck(p), scope(p), roll(p)
+	: AudioProcessorEditor(&p), processor(p), neck(p), mixer(p), roll(p)
 {
 	juce::LookAndFeel::setDefaultLookAndFeel(&CustomLookAndFeel::getInstance());
 
 	addAndMakeVisible(neck);
-	addAndMakeVisible(scope);
-	tabs.setTabBarDepth(28);
-	tabs.setOutline(0);
+	addAndMakeVisible(mixer);
 	addAndMakeVisible(tabs);
 	addAndMakeVisible(addGuitarButton);
 	addGuitarButton.onClick = [this]
@@ -239,6 +237,49 @@ GRMGuitarEditor::GRMGuitarEditor(GRMGuitarProcessor &p)
 				 juce::dontSendNotification);
 	help.setFont(font(11.0f));
 
+	feelLabel.setText("Feel", juce::dontSendNotification);
+	for (int k = 0; k < NUM_FEEL_PRESETS; ++k)
+		feelBox.addItem(FEEL_PRESET_NAMES[k], k + 1);
+	feelBox.setTooltip("The Feel of this pattern: its lanes (force, timing, palm under the roll) drawn again from this "
+					   "preset and its meter (undo brings them back)");
+	feelBox.onChange = [this]
+	{
+		const int preset = feelBox.getSelectedId() - 1;
+		if (preset >= 0 && preset != roll.getSong().feel_preset)
+			roll.edit([preset](Song &s)
+					  { s.feel_preset = preset; s.feel = {}; }, false);
+	};
+	feelDepth.setSliderStyle(juce::Slider::LinearHorizontal);
+	feelDepth.setTextBoxStyle(juce::Slider::NoTextBox, true, 0, 0);
+	feelDepth.setTooltip("How much the Feel weighs (the accents and the timing of its lanes)");
+	cloneSteps.onClick = [this]
+	{
+		int from, to;
+		feelRange(from, to);
+		roll.edit([=](Song &s)
+				  { FeelGenerator::clone(s, from, to - from); }, false);
+	};
+	varySteps.onClick = [this]
+	{
+		int from, to;
+		feelRange(from, to);
+		const unsigned seed = (unsigned)juce::Random::getSystemRandom().nextInt();
+		roll.edit([=](Song &s)
+				  { FeelGenerator::vary(s, from, to - from, seed); }, false);
+	};
+	grooveSteps.onClick = [this]
+	{
+		int from = 0, to = roll.getSong().steps();
+		roll.feelSelection(from, to);
+		const unsigned seed = (unsigned)juce::Random::getSystemRandom().nextInt();
+		roll.edit([=](Song &s)
+				  { FeelGenerator::groove(s, from, to - from, seed); }, false);
+	};
+	for (auto *c : std::initializer_list<juce::Component *>{&feelLabel, &feelBox, &feelDepth, &cloneSteps, &varySteps, &grooveSteps})
+		addAndMakeVisible(c);
+	feelLabel.setColour(juce::Label::textColourId, TEXT);
+	feelLabel.setFont(font(12.0f));
+
 	patternLabel.setText("Pattern", juce::dontSendNotification);
 	midiLabel.setText("MIDI keys", juce::dontSendNotification);
 	patternBox.onChange = [this]
@@ -265,7 +306,7 @@ GRMGuitarEditor::GRMGuitarEditor(GRMGuitarProcessor &p)
 	for (auto *c : std::initializer_list<juce::Component *>{&patternLabel, &patternBox, &newPattern, &duplicatePattern,
 															&deletePatternButton, &copyPatternButton, &pastePatternButton, &midiLabel, &midiModeBox, &keyHint, &followButton})
 		addAndMakeVisible(c);
-	for (auto *l : {&patternLabel, &midiLabel, &keyHint})
+	for (auto *l : {&patternLabel, &midiLabel, &keyHint, &keyLabel})
 	{
 		l->setColour(juce::Label::textColourId, TEXT);
 		l->setFont(font(12.0f));
@@ -280,16 +321,26 @@ GRMGuitarEditor::GRMGuitarEditor(GRMGuitarProcessor &p)
 	refreshTools();
 
 	setResizable(true, true);
-	setResizeLimits(1000, 680, 2400, 1600);
-	setSize(1420, 820);
+	setResizeLimits(appTheme.dimensions.editorMinWidth, appTheme.dimensions.editorMinHeight, 2800, 1800);
+	setSize(appTheme.dimensions.editorWidth, appTheme.dimensions.editorHeight);
 	vblank = std::make_unique<juce::VBlankAttachment>(this, [this]
 													  { updateEditor(); });
 }
 
 GRMGuitarEditor::~GRMGuitarEditor() { setLookAndFeel(nullptr); }
 
+void GRMGuitarEditor::feelRange(int &from, int &to) const
+{
+	if (roll.feelSelection(from, to))
+		return;
+	const int perBar = roll.getSong().beats_per_bar * 4;
+	from = roll.currentBar * perBar;
+	to = from + perBar;
+}
+
 void GRMGuitarEditor::refreshTools()
 {
+	feelBox.setSelectedId(roll.getSong().feel_preset + 1, juce::dontSendNotification);
 	keyBox.setSelectedId(roll.getSong().key + 1, juce::dontSendNotification);
 	scaleBox.setSelectedId(roll.getSong().scale + 1, juce::dontSendNotification);
 	const int bars = roll.getSong().bars;
@@ -316,6 +367,7 @@ void GRMGuitarEditor::rebuildGuitars()
 		addAndMakeVisible(*b);
 		guitarButtons.push_back(std::move(b));
 	}
+	feelDepthAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.params, processor.paramId("feel_depth"), feelDepth);
 	addGuitarButton.setEnabled(count < GRMGuitarProcessor::MAX_GUITARS);
 	removeGuitarButton.setEnabled(count > 1);
 	presets.refresh();
@@ -335,10 +387,10 @@ void GRMGuitarEditor::rebuildGuitars()
 		std::vector<juce::String> full;
 		for (const auto &id : ids)
 			full.push_back(ownGuitar ? processor.paramId(id) : id);
-		auto *panel = new ParamPanel(processor.params, full);
+		auto panel = std::make_unique<ParamPanel>(processor.params, full);
 		if (setup)
 			setup(*panel);
-		tabs.addTab(name, PANEL, panel, true);
+		tabs.addTab(name, std::move(panel));
 	};
 	// the strings: the tuning, each open string's note in a Custom tuning (high string first, as the roll shows them)
 	std::vector<juce::String> strings = {"tuning"};
@@ -403,11 +455,10 @@ void GRMGuitarEditor::rebuildGuitars()
 				   panel.showOnlyWhen(processor.paramId(id), processor.paramId("sensor"), {1, 3});
 		   });
 	addTab("Room", {"room_on", "room_size", "room_material", "room_distance"});
-	addTab("Player", withTunables({"human", "human_amount", "swing_cm", "feel_depth", "imperfection", "finger_noises", "finger_force"}, HAND_TUNABLES));
-	tabs.addTab("Mixer", PANEL, new MixerView(processor), true);
+	addTab("Player", withTunables({"human", "human_amount", "swing_cm", "feel_depth", "imperfection", "palm_coupling", "finger_noises", "finger_force"}, HAND_TUNABLES));
 	addTab("Playback", {"follow_host", "loop", "tempo", "midi_strings", "midi_route", "audition"}, false);
-	tabs.addTab("Networks", PANEL, new NetworksView(processor), true);
-	tabs.setCurrentTabIndex(juce::jmin(shownTab, tabs.getNumTabs() - 1), false);
+	tabs.addTab("Networks", std::make_unique<NetworksView>(processor));
+	tabs.setCurrentTabIndex(juce::jmin(shownTab, tabs.getNumTabs() - 1));
 	resized();
 }
 
@@ -537,8 +588,9 @@ void GRMGuitarEditor::resized()
 	const int iconGap = appTheme.spacing.md;
 	auto placeIcon = [iconSize](juce::Component &button, juce::Rectangle<int> slot)
 	{ button.setBounds(slot.withSizeKeepingCentre(iconSize, iconSize)); };
+	// an icon keeps its size in a crowded bar (the menus give way)
 	auto iconItem = [iconSize](juce::Component &button, juce::FlexItem::Margin margin)
-	{ return juce::FlexItem(button).withWidth((float)iconSize).withHeight((float)iconSize).withMargin(margin); };
+	{ return juce::FlexItem(button).withWidth((float)iconSize).withHeight((float)iconSize).withMargin(margin).withFlex(0.0f, 0.0f); };
 
 	if (isStandalone)
 	{
@@ -559,10 +611,10 @@ void GRMGuitarEditor::resized()
 	status.setBounds(header.removeFromRight(juce::jmin(260, juce::jmax(0, header.getWidth() - 150))));
 	subtitleWidth = juce::jmax(0, header.getWidth() - 150);
 
+	// the sidebar: the guitars, then the settings of the one selected, by tabs, all the height
+	auto side = area.removeFromLeft(area.getWidth() * appTheme.dimensions.sidebarPercent / 100).reduced(8, 4);
 	{
-		auto bar = area.removeFromTop(28).reduced(8, 2);
-		const int presetWidth = juce::jmin(appTheme.dimensions.presetBarWidth, bar.getWidth() / 3);
-		presets.setBounds(bar.removeFromRight(presetWidth).withSizeKeepingCentre(presetWidth, iconSize));
+		auto bar = side.removeFromTop(28);
 		for (auto &b : guitarButtons)
 		{
 			b->setBounds(bar.removeFromLeft(84));
@@ -572,87 +624,63 @@ void GRMGuitarEditor::resized()
 		placeIcon(addGuitarButton, bar.removeFromLeft(iconSize));
 		bar.removeFromLeft(appTheme.spacing.base);
 		placeIcon(removeGuitarButton, bar.removeFromLeft(iconSize));
+		side.removeFromTop(appTheme.spacing.base);
 	}
-	auto top = area.removeFromTop(juce::jmax(250, area.getHeight() * 36 / 100)).reduced(8, 4);
-	auto right = top.removeFromRight(top.getWidth() * 46 / 100);
-	neck.setBounds(right.removeFromTop(right.getHeight() * 64 / 100));
-	right.removeFromTop(6);
-	scope.setBounds(right);
-	top.removeFromRight(8);
-	tabs.setBounds(top);
+	tabs.setBounds(side);
 
+	// on the right, above: the presets over the mixer and the neck
+	auto top = area.removeFromTop(area.getHeight() * 44 / 100).reduced(8, 4);
+	presets.setBounds(top.removeFromTop(appTheme.dimensions.presetRowHeight).withSizeKeepingCentre(
+		juce::jmin(appTheme.dimensions.presetBarWidth * 2, top.getWidth()), iconSize));
+	top.removeFromTop(appTheme.spacing.base);
+	mixer.setBounds(top.removeFromLeft(juce::jmin(mixer.preferredWidth(), top.getWidth() / 2)));
+	top.removeFromLeft(appTheme.spacing.lg);
+	neck.setBounds(top);
+
+	// below: the roll's two bars (the pattern, then the tools of writing), the roll, its help
+	constexpr float labelWidth = 56.0f;
+	constexpr float itemHeight = 24.0f;
+	const juce::FlexItem::Margin itemGap(0.0f, 6.0f, 0.0f, 0.0f);
+	const juce::FlexItem::Margin groupGap(0.0f, 12.0f, 0.0f, 0.0f);
+	const juce::FlexItem::Margin noMargin(0.0f);
+	auto rowOf = [](juce::Rectangle<int> bounds, juce::Array<juce::FlexItem> items)
 	{
-		auto toolsBounds = area.removeFromTop(34).reduced(8, 2);
-		juce::FlexBox toolsBox;
-		toolsBox.flexDirection = juce::FlexBox::Direction::row;
-		toolsBox.alignItems = juce::FlexBox::AlignItems::center;
-		toolsBox.justifyContent = juce::FlexBox::JustifyContent::flexStart;
-
-		constexpr float labelWidth = 56.0f;
-		constexpr float itemHeight = 24.0f;
-		const juce::FlexItem::Margin itemGap(0.0f, 6.0f, 0.0f, 0.0f);
-		const juce::FlexItem::Margin groupGap(0.0f, 12.0f, 0.0f, 0.0f);
-		const juce::FlexItem::Margin noMargin(0.0f);
-
-		toolsBox.items.add(juce::FlexItem(songLabel).withWidth(labelWidth).withHeight(itemHeight).withMargin(itemGap));
-		toolsBox.items.add(juce::FlexItem(barsBox).withWidth(86.0f).withHeight(itemHeight).withMargin(groupGap));
-
-		toolsBox.items.add(juce::FlexItem(snapLabel).withWidth(labelWidth).withHeight(itemHeight).withMargin(itemGap));
-		toolsBox.items.add(juce::FlexItem(snapBox).withWidth(82.0f).withHeight(itemHeight).withMargin(groupGap));
-
-		toolsBox.items.add(juce::FlexItem(chordLabel).withWidth(labelWidth).withHeight(itemHeight).withMargin(itemGap));
-		toolsBox.items.add(juce::FlexItem(rootBox).withWidth(72.0f).withHeight(itemHeight).withMargin(itemGap));
-		toolsBox.items.add(juce::FlexItem(qualityBox).withWidth(76.0f).withHeight(itemHeight).withMargin(itemGap));
-		toolsBox.items.add(juce::FlexItem(strumBox).withWidth(122.0f).withHeight(itemHeight).withMargin(itemGap));
-		toolsBox.items.add(iconItem(fillStrums, groupGap));
-
-		toolsBox.items.add(juce::FlexItem(arpBox).withWidth(138.0f).withHeight(itemHeight).withMargin(itemGap));
-		toolsBox.items.add(iconItem(fillArp, itemGap));
-		toolsBox.items.add(juce::FlexItem(fillCount).withWidth(54.0f).withHeight(itemHeight).withMargin(itemGap));
-		toolsBox.items.add(iconItem(clearBar, noMargin));
-
-		toolsBox.items.add(juce::FlexItem().withFlex(1.0f).withHeight(itemHeight));
-		toolsBox.items.add(iconItem(demoButton, itemGap));
-		toolsBox.items.add(iconItem(undoButton, itemGap));
-		toolsBox.items.add(iconItem(redoButton, noMargin));
-
-		toolsBox.performLayout(toolsBounds.toFloat());
-	}
-
-	{
-		auto rowBounds = area.removeFromTop(32).reduced(8, 2);
-		juce::FlexBox rowBox;
-		rowBox.flexDirection = juce::FlexBox::Direction::row;
-		rowBox.alignItems = juce::FlexBox::AlignItems::center;
-		rowBox.justifyContent = juce::FlexBox::JustifyContent::flexStart;
-
-		constexpr float labelWidth = 56.0f;
-		constexpr float itemHeight = 24.0f;
-		const juce::FlexItem::Margin itemGap(0.0f, 6.0f, 0.0f, 0.0f);
-		const juce::FlexItem::Margin groupGap(0.0f, 12.0f, 0.0f, 0.0f);
-		const juce::FlexItem::Margin noMargin(0.0f);
-
-		rowBox.items.add(juce::FlexItem(patternLabel).withWidth(labelWidth).withHeight(itemHeight).withMargin(itemGap));
-		rowBox.items.add(juce::FlexItem(patternBox).withWidth(144.0f).withHeight(itemHeight).withMargin(itemGap));
-		rowBox.items.add(iconItem(newPattern, itemGap));
-		rowBox.items.add(iconItem(duplicatePattern, itemGap));
-		rowBox.items.add(iconItem(deletePatternButton, itemGap));
-		rowBox.items.add(iconItem(copyPatternButton, itemGap));
-		rowBox.items.add(iconItem(pastePatternButton, groupGap));
-
-		rowBox.items.add(juce::FlexItem(keyLabel).withWidth(labelWidth).withHeight(itemHeight).withMargin(itemGap));
-		rowBox.items.add(juce::FlexItem(keyBox).withWidth(72.0f).withHeight(itemHeight).withMargin(itemGap));
-		rowBox.items.add(juce::FlexItem(scaleBox).withWidth(114.0f).withHeight(itemHeight).withMargin(groupGap));
-
-		rowBox.items.add(juce::FlexItem(midiLabel).withWidth(labelWidth).withHeight(itemHeight).withMargin(itemGap));
-		rowBox.items.add(juce::FlexItem(midiModeBox).withWidth(114.0f).withHeight(itemHeight).withMargin(groupGap));
-
-		rowBox.items.add(juce::FlexItem(keyHint).withFlex(1.0f).withMinWidth(80.0f).withHeight(itemHeight).withMargin(itemGap));
-		rowBox.items.add(iconItem(ghostsButton, itemGap));
-		rowBox.items.add(iconItem(followButton, noMargin));
-
-		rowBox.performLayout(rowBounds.toFloat());
-	}
+		juce::FlexBox box;
+		box.flexDirection = juce::FlexBox::Direction::row;
+		box.alignItems = juce::FlexBox::AlignItems::center;
+		box.justifyContent = juce::FlexBox::JustifyContent::flexStart;
+		box.items = std::move(items);
+		box.performLayout(bounds.toFloat());
+	};
+	rowOf(area.removeFromTop(32).reduced(8, 2),
+		  {juce::FlexItem(patternLabel).withWidth(labelWidth).withHeight(itemHeight).withMargin(itemGap),
+		   juce::FlexItem(patternBox).withWidth(144.0f).withHeight(itemHeight).withMargin(itemGap),
+		   iconItem(newPattern, itemGap), iconItem(duplicatePattern, itemGap), iconItem(deletePatternButton, itemGap),
+		   iconItem(copyPatternButton, itemGap), iconItem(pastePatternButton, groupGap),
+		   juce::FlexItem(songLabel).withWidth(labelWidth).withHeight(itemHeight).withMargin(itemGap),
+		   juce::FlexItem(barsBox).withWidth(86.0f).withHeight(itemHeight).withMargin(groupGap),
+		   juce::FlexItem(feelLabel).withWidth(40.0f).withHeight(itemHeight).withMargin(itemGap),
+		   juce::FlexItem(feelBox).withWidth(104.0f).withHeight(itemHeight).withMargin(itemGap),
+		   juce::FlexItem(feelDepth).withWidth(80.0f).withHeight(itemHeight).withMargin(itemGap),
+		   iconItem(cloneSteps, itemGap), iconItem(varySteps, itemGap), iconItem(grooveSteps, groupGap),
+		   juce::FlexItem(midiLabel).withWidth(labelWidth).withHeight(itemHeight).withMargin(itemGap),
+		   juce::FlexItem(midiModeBox).withWidth(114.0f).withHeight(itemHeight).withMargin(groupGap),
+		   juce::FlexItem(keyHint).withFlex(1.0f).withMinWidth(0.0f).withHeight(itemHeight).withMargin(itemGap),
+		   iconItem(ghostsButton, itemGap), iconItem(followButton, noMargin)});
+	rowOf(area.removeFromTop(32).reduced(8, 2),
+		  {juce::FlexItem(snapLabel).withWidth(labelWidth).withHeight(itemHeight).withMargin(itemGap),
+		   juce::FlexItem(snapBox).withWidth(82.0f).withHeight(itemHeight).withMargin(groupGap),
+		   juce::FlexItem(chordLabel).withWidth(labelWidth).withHeight(itemHeight).withMargin(itemGap),
+		   juce::FlexItem(rootBox).withWidth(72.0f).withHeight(itemHeight).withMargin(itemGap),
+		   juce::FlexItem(qualityBox).withWidth(76.0f).withHeight(itemHeight).withMargin(itemGap),
+		   juce::FlexItem(strumBox).withWidth(122.0f).withHeight(itemHeight).withMargin(itemGap), iconItem(fillStrums, groupGap),
+		   juce::FlexItem(arpBox).withWidth(138.0f).withHeight(itemHeight).withMargin(itemGap), iconItem(fillArp, itemGap),
+		   juce::FlexItem(fillCount).withWidth(54.0f).withHeight(itemHeight).withMargin(itemGap), iconItem(clearBar, groupGap),
+		   juce::FlexItem(keyLabel).withWidth(32.0f).withHeight(itemHeight).withMargin(itemGap),
+		   juce::FlexItem(keyBox).withWidth(64.0f).withHeight(itemHeight).withMargin(itemGap),
+		   juce::FlexItem(scaleBox).withWidth(114.0f).withHeight(itemHeight).withMargin(groupGap),
+		   juce::FlexItem().withFlex(1.0f).withHeight(itemHeight), iconItem(demoButton, itemGap), iconItem(undoButton, itemGap),
+		   iconItem(redoButton, noMargin)});
 
 	help.setBounds(area.removeFromBottom(20).reduced(10, 0));
 	roll.setBounds(area.reduced(8, 2));

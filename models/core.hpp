@@ -95,11 +95,15 @@ namespace grmg::models
         bool loop = false;
     };
 
+    struct Palm;
+
     struct Touch
     {
         double t;
         int string;
         double extra;
+        const Palm *contact = nullptr; // the hand that lands there, if its modes are known (the palm)
+        double land_s = 0.0;
     };
 
     struct Biquad
@@ -307,6 +311,9 @@ namespace grmg::models
         Pluck pluck;
         int squeak = -1;
         double extra = 40.0;
+        // a damp: the hand that lands (its palm network: the modes move under it; none: it only takes) and how fast
+        const Palm *contact = nullptr;
+        double land_s = 0.0; // 0: a hand's ordinary landing
     };
 
     struct Stroke
@@ -449,6 +456,15 @@ namespace grmg::models
         int end = ring;
         bool dead = false;
         bool selected = false;
+    };
+
+    // The Feel lanes of a pattern: one step per sixteenth from its start, written in notches, played as a smooth curve
+    // through them. force: -1 .. 1 (0 the player's own), timing: -1 (ahead) .. 1 (behind), palm: 0 (lifted) .. 1 (a
+    // light palm, never a full palm mute: the note's Palm mute is that). Empty: the pattern's Feel preset.
+    struct FeelLanes
+    {
+        std::vector<double> force, timing, palm;
+        bool empty() const { return force.empty(); }
     };
 
     struct RollStrum
@@ -651,6 +667,7 @@ namespace grmg::models
         double human_amount = 1.0;
         double feel_depth = 1.0;   // how much the bar's accents weigh (0: every stroke alike)
         double imperfection = 0.2; // strings brushed, missed, choked (0: none; nothing without human feel)
+        double palm_coupling = 0.0; // the Feel's light palm against the bar's force (> 0: harder, less palm)
         double swing_cm = 7.0; // the arm's swing: 7 cm gives Freire et al.'s strums (8-11 ms a string at 64 bpm)
         bool finger_noises = true;
         double finger_force = 0.6;
@@ -663,8 +680,8 @@ namespace grmg::models
 
         // the player's settings (the roll compiled again when they change, nothing to solve): one list for comparing
         // and copying them
-        auto player() { return std::tie(human, human_amount, swing_cm, feel_depth, imperfection, finger_noises, finger_force); }
-        auto player() const { return std::tie(human, human_amount, swing_cm, feel_depth, imperfection, finger_noises, finger_force); }
+        auto player() { return std::tie(human, human_amount, swing_cm, feel_depth, imperfection, palm_coupling, finger_noises, finger_force); }
+        auto player() const { return std::tie(human, human_amount, swing_cm, feel_depth, imperfection, palm_coupling, finger_noises, finger_force); }
 
         bool is_magnetic_pickup() const { return sensor == 1 || sensor == 3; }
         bool amp_active() const { return amp.on && is_magnetic_pickup(); }

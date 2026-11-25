@@ -16,6 +16,8 @@
 #include <vector>
 
 #include "../constants/core.hpp"
+#include "feel_curve.hpp"
+#include "meter.hpp"
 
 namespace grmg
 {
@@ -34,9 +36,17 @@ namespace grmg
         // the loop: between two flags of the ruler (beats); loop_end < 0: the end of the song
         double loop_start = 0.0, loop_end = -1.0;
         int key = 0, scale = 0; // the key and scale of the song (chords.hpp): harmonizing follows them
+        // how the bar is felt: its beats' groups (empty: the usual), its Feel preset and lanes (empty: the preset's)
+        std::vector<int> grouping;
+        int feel_preset = FEEL_NATURAL;
+        models::FeelLanes feel;
         static constexpr int MAX_BARS = 256;
 
         double length_beats() const { return (double)bars * beats_per_bar; }
+        Meter meter() const { return Meter(beats_per_bar, grouping); }
+        int steps() const { return bars * beats_per_bar * 4; }
+        // the Feel as the player plays it (the lanes, or the preset's)
+        FeelCurve feel_curve() const { return FeelCurve(feel, feel_preset, meter(), steps()); }
         double max_beats() const { return (double)MAX_BARS * beats_per_bar; }
 
         // where the loop is, inside the song (the whole song if the flags are not set or out of it)
@@ -73,6 +83,18 @@ namespace grmg
                 if (t >= a - 1e-9 && t < b - 1e-9)
                     out.stops.push_back(t - a);
             out.bars = std::max(1, (int)std::ceil((b - a) / beats_per_bar - 1e-9));
+            if (!feel.empty())
+            { // the lanes from a, over the section's bars (the curve repeats the lanes past their end)
+                const auto whole = feel_curve();
+                out.feel = {};
+                for (int s = 0; s < out.steps(); ++s)
+                {
+                    const double beat = a + 0.25 * s;
+                    out.feel.force.push_back(whole.force(beat));
+                    out.feel.timing.push_back(whole.timing(beat));
+                    out.feel.palm.push_back(whole.palm(beat));
+                }
+            }
             out.loop_start = 0.0;
             out.loop_end = -1.0;
             return out;
@@ -305,6 +327,28 @@ namespace grmg
                 o << "key " << key << " " << scale << "\n";
             for (double t : stops)
                 o << "stop " << t << "\n";
+            if (!grouping.empty())
+            {
+                o << "group";
+                for (int g : grouping)
+                    o << " " << g;
+                o << "\n";
+            }
+            if (feel_preset != FEEL_NATURAL)
+                o << "feel_preset " << feel_preset << "\n";
+            auto lane = [&](const char *name, const std::vector<double> &v)
+            {
+                o << name << " " << v.size();
+                for (double x : v)
+                    o << " " << x;
+                o << "\n";
+            };
+            if (!feel.empty())
+            {
+                lane("feel_force", feel.force);
+                lane("feel_timing", feel.timing);
+                lane("feel_palm", feel.palm);
+            }
             for (const auto &n : notes)
                 o << "note " << n.string << " " << n.fret << " " << n.start << " " << n.length << " " << n.velocity << " "
                   << (n.palm ? 1 : 0) << " " << n.end << " " << (n.dead ? 1 : 0) << "\n";
@@ -340,6 +384,28 @@ namespace grmg
                 else if (word == "key")
                 {
                     in >> s.key >> s.scale;
+                }
+                else if (word == "group")
+                {
+                    std::string rest;
+                    std::getline(in, rest);
+                    std::istringstream g(rest);
+                    for (int beats = 0; g >> beats;)
+                        s.grouping.push_back(beats);
+                }
+                else if (word == "feel_preset")
+                {
+                    in >> s.feel_preset;
+                    s.feel_preset = std::clamp(s.feel_preset, 0, NUM_FEEL_PRESETS - 1);
+                }
+                else if (word == "feel_force" || word == "feel_timing" || word == "feel_palm")
+                {
+                    auto &lane = word == "feel_force" ? s.feel.force : (word == "feel_timing" ? s.feel.timing : s.feel.palm);
+                    size_t count = 0;
+                    in >> count;
+                    lane.assign(std::min<size_t>(count, (size_t)MAX_BARS * 12 * 4), 0.0);
+                    for (auto &x : lane)
+                        in >> x;
                 }
                 else if (word == "stop")
                 {
@@ -394,24 +460,84 @@ namespace grmg
                 return false;
             s.bars = std::max(1, std::min(s.bars, MAX_BARS));
             s.beats_per_bar = std::max(1, std::min(s.beats_per_bar, 12));
+            // lanes written in part: none (the preset plays)
+            if (s.feel.force.size() != s.feel.timing.size() || s.feel.force.size() != s.feel.palm.size())
+                s.feel = {};
             *this = s;
             sort();
             return true;
         }
 
-        // a first song so the roll is not empty: the progression of the Python demo, strummed then picked
+        // a first song so the roll is not empty (an original riff, grunge in E minor, 118 bpm): verses of palm-muted
+        // E5 eighths opening up on their accents, a chorus of open chords hit hard on 2 and 4; its Feel lanes carry
+        // the chorus's backbeat and a light palm on its upstrokes
         static Song demo()
         {
             Song s;
             s.bars = 8;
-            s.fill_strums(0, 1, 1, 7, 2.0);   // G, folk
-            s.fill_strums(1, 1, 1, 6, 2.0);   // C
-            s.fill_strums(2, 1, 1, 5, 2.0);   // D
-            s.fill_strums(3, 1, 4, 1, 2.0);   // Em, palm-muted rock
-            s.fill_arpeggio(4, 1, 1, 7, 2.0); // G, Travis
-            s.fill_arpeggio(5, 1, 1, 6, 2.0); // C
-            s.fill_arpeggio(6, 1, 0, 3, 2.0); // Am, up and down
-            s.fill_arpeggio(7, 1, 4, 1, 4.0); // Em, pinch
+            s.tempo = 118.0;
+            s.key = 4;   // E
+            s.scale = 1; // natural minor
+            const std::array<int, 6> E5{{0, 2, 2, -1, -1, -1}}, G5{{3, 5, 5, -1, -1, -1}}, A5{{-1, 0, 2, 2, -1, -1}},
+                C5{{-1, 3, 5, 5, -1, -1}}, B5{{-1, 2, 4, 4, -1, -1}};
+            auto hit = [&](double start, double length, const std::array<int, 6> &frets, bool palm, bool up, double velocity,
+                           const char *chord)
+            {
+                models::RollStrum t;
+                t.start = start;
+                t.length = length;
+                t.frets = frets;
+                t.palm = palm;
+                t.up = up;
+                t.velocity = velocity;
+                t.chord = chord;
+                s.strums.push_back(t);
+            };
+            // the verse: chugs, then the accents left ringing
+            for (int bar = 0; bar < 4; ++bar)
+            {
+                const double b = 4.0 * bar;
+                const int chugs = bar % 2 == 0 ? 6 : 4;
+                for (int k = 0; k < chugs; ++k)
+                    hit(b + 0.5 * k, 0.5, E5, true, false, k % 2 == 0 ? 0.85 : 0.7, "E5");
+                if (bar % 2 == 0)
+                {
+                    hit(b + 3.0, 0.5, G5, false, false, 0.95, "G5");
+                    hit(b + 3.5, 0.5, A5, false, false, 0.95, "A5");
+                }
+                else if (bar == 1)
+                {
+                    hit(b + 2.0, 1.0, C5, false, false, 0.95, "C5");
+                    hit(b + 3.0, 1.0, B5, false, false, 0.95, "B5");
+                }
+                else
+                {
+                    hit(b + 2.0, 0.5, G5, false, false, 0.95, "G5");
+                    hit(b + 2.5, 0.5, A5, false, false, 0.9, "A5");
+                    hit(b + 3.0, 1.0, B5, false, false, 1.0, "B5");
+                }
+            }
+            // the chorus: open chords in eighths, down on the beats, up between
+            const std::pair<int, const char *> chorus[4] = {{1, "Em"}, {6, "C"}, {7, "G"}, {5, "D"}};
+            for (int bar = 0; bar < 4; ++bar)
+            {
+                std::array<int, 6> frets{};
+                for (int i = 0; i < 6; ++i)
+                    frets[(size_t)i] = CHORD_SHAPES[chorus[bar].first].frets[i];
+                for (int k = 0; k < 8; ++k)
+                    hit(16.0 + 4.0 * bar + 0.5 * k, 0.5, frets, false, k % 2 == 1, 0.85, chorus[bar].second);
+            }
+            s.sort();
+            // the Feel: the meter's accents, the chorus hit on 2 and 4, a light palm on its upstrokes
+            s.feel = FeelCurve::preset_lanes(FEEL_NATURAL, s.meter(), s.steps());
+            for (int step = 64; step < s.steps(); ++step)
+            {
+                const int in_bar = step % 16;
+                if (in_bar == 4 || in_bar == 12)
+                    s.feel.force[(size_t)step] = 1.0;
+                if (in_bar % 4 == 2)
+                    s.feel.palm[(size_t)step] = 0.375;
+            }
             return s;
         }
     };

@@ -433,7 +433,7 @@ namespace grmg
 				start(e.pluck);
 				break;
 			case models::EventType::damp:
-				voices_[(size_t)e.string].damp(e.extra);
+				voices_[(size_t)e.string].damp(e.extra, e.contact, e.land_s > 0.0 ? e.land_s : HAND_LAND_S);
 				break;
 			case models::EventType::squeak:
 				for (auto &s : squeaks_)
@@ -449,6 +449,11 @@ namespace grmg
 			case models::EventType::palm_off:
 				song_palm_ = e.type == models::EventType::palm_on;
 				set_palm(song_palm_ || live_palm);
+				// the palm leaves the strings: what still rings under it opens up again
+				if (!song_palm_ && !live_palm)
+					for (auto &v : voices_)
+						if (v.active && v.touched())
+							v.lift(PALM_LIFT_S);
 				break;
 			}
 		}

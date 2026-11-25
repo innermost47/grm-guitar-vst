@@ -50,6 +50,12 @@ if(GRMG_BUILD_TESTS)
     add_executable(test_live_playing tests/test_live_playing.cpp)
     target_link_libraries(test_live_playing PRIVATE grm_core)
     add_test(NAME guitar_live_playing COMMAND test_live_playing)
+    add_executable(test_hand_contact tests/test_hand_contact.cpp)
+    target_link_libraries(test_hand_contact PRIVATE grm_core)
+    add_test(NAME guitar_hand_contact COMMAND test_hand_contact)
+    add_executable(test_feel_lanes tests/test_feel_lanes.cpp)
+    target_link_libraries(test_feel_lanes PRIVATE grm_core)
+    add_test(NAME guitar_feel_lanes COMMAND test_feel_lanes)
     add_executable(timbre_probe tests/timbre_probe.cpp)
     target_link_libraries(timbre_probe PRIVATE grm_core)
     add_test(NAME timbre_probe_runs COMMAND timbre_probe ${CMAKE_BINARY_DIR}/timbre_probe_out)
@@ -121,6 +127,9 @@ if(GRMG_BUILD_PLUGIN)
             assets/icons/speaker-slash.svg
             assets/icons/stop.svg
             assets/icons/strum.svg
+            assets/icons/steps-clone.svg
+            assets/icons/steps-vary.svg
+            assets/icons/steps-dice.svg
             assets/icons/trash.svg
     )
 
@@ -140,12 +149,15 @@ if(GRMG_BUILD_PLUGIN)
         plugin/services/PresetLibrary.cpp
         plugin/widgets/PresetBar.cpp
         plugin/widgets/TensionView.cpp
+        plugin/widgets/VuMeter.cpp
+        plugin/widgets/SideTabs.cpp
+        plugin/widgets/StepLane.cpp
         plugin/views/MixerView.cpp
         plugin/views/NeckView.cpp
         plugin/views/NetworksView.cpp
         plugin/views/ParamPanel.cpp
         plugin/views/RollView.cpp
-        plugin/views/ScopeView.cpp)
+        )
 
     target_include_directories(GRMGuitar PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/plugin

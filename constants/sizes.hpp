@@ -58,7 +58,20 @@ namespace ui::theme
         int modalButtonWidth = 110;
         int modalButtonHeight = 28;
         int presetBarWidth = 320;    // the presets' menu and its two buttons
-        int tensionViewHeight = 44;  // the strings' notes and tensions (Strings tab)
+        int tensionViewHeight = 66;  // the strings' notes and tensions (Strings tab), on two lines when narrow
+        // the editor: its size, the settings' sidebar (a share of the width), its column of tabs, the presets' row,
+        // a mixer strip and its meter, a Feel lane under the roll
+        int editorWidth = 1700;
+        int editorHeight = 960;
+        int editorMinWidth = 1480; // the roll's two bars fit beside the sidebar
+        int editorMinHeight = 760;
+        int sidebarPercent = 25;
+        int sideTabWidth = 108;
+        int sideTabHeight = 30;
+        int presetRowHeight = 34;
+        int mixerStripWidth = 120;
+        int vuMeterWidth = 16;
+        int feelLaneHeight = 34;
         int minSmallBtnWidth = 24;
         int minSmallBtnHeight = 24;
         int iconButton = 24;
@@ -144,7 +157,17 @@ namespace ui::theme
             theme.dimensions.modalButtonWidth = static_cast<int>(110 * uiScale);
             theme.dimensions.modalButtonHeight = static_cast<int>(28 * uiScale);
             theme.dimensions.presetBarWidth = static_cast<int>(320 * uiScale);
-            theme.dimensions.tensionViewHeight = static_cast<int>(44 * uiScale);
+            theme.dimensions.tensionViewHeight = static_cast<int>(66 * uiScale);
+            theme.dimensions.editorWidth = static_cast<int>(1700 * uiScale);
+            theme.dimensions.editorHeight = static_cast<int>(960 * uiScale);
+            theme.dimensions.editorMinWidth = static_cast<int>(1480 * uiScale);
+            theme.dimensions.editorMinHeight = static_cast<int>(760 * uiScale);
+            theme.dimensions.sideTabWidth = static_cast<int>(108 * uiScale);
+            theme.dimensions.sideTabHeight = static_cast<int>(30 * uiScale);
+            theme.dimensions.presetRowHeight = static_cast<int>(34 * uiScale);
+            theme.dimensions.mixerStripWidth = static_cast<int>(120 * uiScale);
+            theme.dimensions.vuMeterWidth = static_cast<int>(16 * uiScale);
+            theme.dimensions.feelLaneHeight = static_cast<int>(34 * uiScale);
             theme.dimensions.minSmallBtnWidth = static_cast<int>(24 * uiScale);
             theme.dimensions.minSmallBtnHeight = static_cast<int>(24 * uiScale);
             theme.dimensions.iconButton = static_cast<int>(24 * uiScale);

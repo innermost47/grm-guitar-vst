@@ -10,7 +10,7 @@
 
 namespace ui
 {
-    // Phosphor icons (fill style, MIT license) and the glyphs drawn for GRM Guitar (strum, arpeggio)
+    // Phosphor icons (fill style, MIT license) and the glyphs drawn for GRM Guitar (strum, arpeggio, the Feel steps')
     inline constexpr std::array<IconFile, ICON_COUNT> ICON_FILES = {{
         {IconId::play, "play.svg"},
         {IconId::stop, "stop.svg"},
@@ -38,6 +38,9 @@ namespace ui
         {IconId::caretLeft, "caret-left.svg"},
         {IconId::caretRight, "caret-right.svg"},
         {IconId::floppyDisk, "floppy-disk.svg"},
+        {IconId::stepsClone, "steps-clone.svg"},
+        {IconId::stepsVary, "steps-vary.svg"},
+        {IconId::stepsDice, "steps-dice.svg"},
     }};
 
     // ---- the plugin on the net: its releases, the GRM it shows off
@@ -72,6 +75,27 @@ namespace ui
     inline const juce::Colour TEXT{juce::Colour(theme::defaultPalette.mediumGrey)};
     inline const juce::Colour WAVE{juce::Colour(theme::defaultPalette.cyan)};
     inline const juce::Colour WARNING{juce::Colour(theme::defaultPalette.terracottaLight)}; // something to look at
+    // the Feel lanes under the roll (StepLane): force, timing, palm
+    inline const juce::Colour FEEL_FORCE{juce::Colour(theme::defaultPalette.gold)};
+    inline const juce::Colour FEEL_TIMING{juce::Colour(theme::defaultPalette.cyan)};
+    inline const juce::Colour FEEL_PALM{juce::Colour(theme::defaultPalette.mauve)};
+    // the level meters (VuMeter): their segments' colours, the peak held, the case they sit in
+    inline const juce::Colour VU_GREEN{juce::Colour(theme::defaultPalette.sageGreen)};
+    inline const juce::Colour VU_ORANGE{juce::Colour(theme::defaultPalette.amber)};
+    inline const juce::Colour VU_RED{juce::Colour(theme::defaultPalette.terracotta)};
+    inline const juce::Colour VU_PEAK{juce::Colour(theme::defaultPalette.warmWhite)};
+    inline const juce::Colour VU_CASE{juce::Colour(theme::defaultPalette.obsidian)};
+    namespace vu
+    {
+        constexpr int SEGMENTS = 20;
+        constexpr float FLOOR_DB = -60.0f;                   // the bottom of the scale
+        constexpr float ORANGE_FROM = 0.67f, RED_FROM = 0.90f; // of the scale
+        constexpr float CLIP_FROM = 0.95f;
+        constexpr float RELEASE = 0.92f;                      // the level falls by this per frame (it rises at once)
+        constexpr int PEAK_HOLD_FRAMES = 45;                  // the peak stays this many frames, then falls
+        constexpr float PEAK_FALL = 0.9f;
+        constexpr float UNLIT_ALPHA = 0.1f; // a segment not reached
+    }
 
     inline const juce::Colour STRING_COLOURS[6] = {
         juce::Colour(theme::defaultPalette.gold),
