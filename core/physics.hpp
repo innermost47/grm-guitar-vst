@@ -18,6 +18,7 @@
 #include "../constants/core.hpp"
 #include "fft.hpp"
 #include "guitar_networks.hpp"
+#include "magnetic_pickup.hpp"
 
 namespace grmg
 {
@@ -201,6 +202,55 @@ namespace grmg
         c.fr = r["fr"];
         c.Q = r["Q"];
         return c;
+    }
+
+    // a pickup of `type` centred `centre_m` from the saddle, the strings `height_mm` above its poles: where its coils
+    // sense them, how wide, how hot (models::PickupSensing, see MagneticPickup). `one_coil`: a humbucker split, only its
+    // coil on the neck's side is heard.
+    inline models::PickupSensing pickup_sensing_network(int type, double centre_m, double height_mm, bool one_coil = false)
+    {
+        const auto &t = PICKUP_TYPES[std::min(std::max(type, 0), NUM_PICKUP_TYPES - 1)];
+        const auto &single = PICKUP_TYPES[0];
+        const bool humbucker = t.coils == 2;
+        grm::Network net;
+        net.add_node("x", 0.1);
+        const int ih = net.add_node("h", 3.0), ir = net.add_node("r", 2.5), ia = net.add_node("a", 3.0), ig = net.add_node("g", 1.0);
+        std::map<std::string, grm::Measurement> measured = {{"x", {centre_m, 1e-4}},
+                                                            {"h", {std::max(height_mm, PICKUP_HEIGHT_MIN_MM), 1e-3}},
+                                                            {"r", {1000.0 * t.pole_radius_m, 1e-3}}};
+        if (humbucker)
+        {
+            // its two coils, each half the spacing from the centre
+            net.add_node("d", 0.018);
+            net.add_node("x1", 0.1);
+            net.add_node("x2", 0.1);
+            net.add_sum("coil on the bridge side", {{"x1", 1.0}, {"x", -1.0}, {"d", 0.5}}, 0.0, 1e-12);
+            net.add_sum("coil on the neck side", {{"x2", 1.0}, {"x", -1.0}, {"d", -0.5}}, 0.0, 1e-12);
+            measured["d"] = {t.coil_spacing_m, 1e-4};
+        }
+        // the width a pole hears: the string's height and the pole's spread (mm)
+        net.add_fn("listening width", {"a", "h", "r"}, [=](const grm::Values &v)
+                   { return v[ia] * v[ia] - v[ih] * v[ih] - 0.5 * v[ir] * v[ir]; }, 1e-9);
+        // how hot: its flux curve's slope at this height against a single coil's at the reference height
+        net.add_fn("gain", {"g", "h"}, [=](const grm::Values &v)
+                   { return v[ig] * MagneticPickup::slope(PICKUP_HEIGHT_REF_MM, single.nl_A, single.nl_Leq_mm, single.nl_req_mm) -
+                            MagneticPickup::slope(v[ih], t.nl_A, t.nl_Leq_mm, t.nl_req_mm); }, 1e-12);
+        const auto r = net.solve(measured);
+        models::PickupSensing s;
+        s.coils = humbucker && !one_coil ? 2 : 1;
+        if (!humbucker)
+            s.coil_x = {r["x"], 0.0};
+        else if (one_coil)
+            s.coil_x = {r["x2"], 0.0};
+        else
+            s.coil_x = {r["x1"], r["x2"]};
+        s.window_m = r["a"] / 1000.0;
+        s.height_mm = r["h"];
+        s.nl_A = t.nl_A;
+        s.nl_Leq_mm = t.nl_Leq_mm;
+        s.nl_req_mm = t.nl_req_mm;
+        s.gain = r["g"];
+        return s;
     }
 
     inline models::Biquad pickup_filter(const models::PickupCircuit &c, double sr)

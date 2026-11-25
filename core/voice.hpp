@@ -21,6 +21,7 @@
 #include <complex>
 #include <cstdint>
 
+#include "magnetic_pickup.hpp"
 #include "model.hpp"
 
 namespace grmg
@@ -61,6 +62,13 @@ namespace grmg
 
 	inline double sinc(double x) { return std::abs(x) < 1e-12 ? 1.0 : std::sin(PI * x) / (PI * x); }
 
+	// no magnetic pickup under the strings
+	inline const std::array<MagneticPickup, 3> &no_pickups()
+	{
+		static const std::array<MagneticPickup, 3> none{};
+		return none;
+	}
+
 	class StringVoice
 	{
 	public:
@@ -74,13 +82,15 @@ namespace grmg
 			return active && note >= 0 && (channel == 0 || note_channel == channel) && (pitch < 0 || note == pitch);
 		}
 
-		// pickup_x > 0: a magnetic pickup listens at that distance from the saddle (render's `pickup` output)
+		// pickups: the magnetic pickups under the string (render's `heard` outputs): each coil follows the string's
+		// motion over it in both planes, and its voltage is MagneticPickup's (the window, the flux curve, the distance)
 		// voicing: how the string answers the attack (models::Voicing).
 		//   - Its two planes: each mode n rings twice, across the top, with the losses into the body (body.loss), and
 		//     along it, where the bridge hardly gives (h_coupling of those losses), a little detuned (the reactive
 		//     part of the same coupling, and the split). The attack's angle shares the pluck between them (sin across,
 		//     cos along); what reaches the bridge, the body and the room from the plane along the top is h_radiation
-		//     of its force, what a magnetic pickup hears of it h_pickup of its motion.
+		//     of its force. A magnetic pickup hears the plane across the top towards its poles, the other one only
+		//     through the distance it adds (MagneticPickup::voltage).
 		//   - The last fret under the plane across the top: the string bounces off it (see collide).
 		//   - The pick's push before the release (a strike only): the string is drawn aside along a progressive curve,
 		//     slipping on the pick and scraping its edge, then the modes start from the shape it was pushed to.
@@ -90,7 +100,7 @@ namespace grmg
 		// new length, with the force it puts on the bridge at that instant (the shape near the saddle has not moved
 		// yet), and the finger's own small excitation is added to it.
 		void start(const models::Pluck &p, const models::Body &body, const models::StringLosses &losses, double brightness, double sr,
-				   const std::array<double, 3> &pickup_xs = std::array<double, 3>{0.0, 0.0, 0.0},
+				   const std::array<MagneticPickup, 3> &pickups = no_pickups(),
 				   const StringVoice *carry = nullptr, const models::Voicing &voicing = models::Voicing::single_plane())
 		{
 			std::array<std::array<cplx, MAX_MODES>, PLANES> carried{};
@@ -113,7 +123,8 @@ namespace grmg
 			const std::array<double, PLANES> share = {std::sin(angle), std::cos(angle)};
 			const std::array<double, PLANES> heard = {1.0, radiated};
 			const std::array<double, PLANES> coupling = {1.0, voicing.h_coupling};
-			const std::array<double, PLANES> pickup = {1.0, voicing.h_pickup / radiated};
+			const std::array<double, PLANES> motion = {1.0, 1.0 / radiated}; // a slot's true force over the one it holds
+			set_coils(pickups);
 			const double split = std::pow(2.0, -voicing.split_cents / 1200.0);
 			// the last fret, its distance from the saddle, and the string's height over it: the string runs straight
 			// from the fret it is held on (or the nut) to the saddle, twice the action high there
@@ -150,22 +161,27 @@ namespace grmg
 			// newtons on the bridge: T pi / L * (release height) * (normalised modal amplitudes)
 			const double scale = pl.T * PI / pl.Leff * Y_REF * p.gain;
 			double first = 0.0;
-			push_disp_ = {0.0, 0.0, 0.0};
-			for (int k = 0; k < count; ++k)
+			across_ = 0;
+			push_disp_ = {};
+			// the slots plane by plane (all the modes across the top, then along it): the coils follow each plane over
+			// a contiguous run of slots (coil_motion)
+			for (int plane = 0; plane < PLANES; ++plane)
 			{
-				const int n = k + 1;
-				const double f0 = n * pl.f1 * std::sqrt(1.0 + pl.B * n * n);
-				const double into_body = body.loss(f0, pl.c, pl.Leff, pl.Zs);
-				// the plane along the top: what the body's reactance pulls the plane across it away from (it stays put)
-				const double detune = (1.0 - voicing.h_coupling) * body.detune(f0, pl.c, pl.Leff, pl.Zs) / (2 * PI);
-				// mode n's displacement per newton on the bridge (F = T n pi / L y), where the pickups and the fret are
-				const double per_newton = pl.Leff / (pl.T * n * PI);
-				std::array<double, 3> at_pickup{};
-				for (int q = 0; q < 3; ++q)
-					at_pickup[(size_t)q] = pickup_xs[(size_t)q] > 0 ? per_newton * std::sin(n * PI * pickup_xs[(size_t)q] / pl.Leff) : 0.0;
-				const double at_fret = frets ? per_newton * std::sin(n * PI * fret_x / pl.Leff) : 0.0;
-				for (int plane = 0; plane < PLANES; ++plane)
+				if (plane == 1)
+					across_ = count_;
+				for (int k = 0; k < count; ++k)
 				{
+					const int n = k + 1;
+					const double f0 = n * pl.f1 * std::sqrt(1.0 + pl.B * n * n);
+					const double into_body = body.loss(f0, pl.c, pl.Leff, pl.Zs);
+					// the plane along the top: what the body's reactance pulls the plane across it away from (it stays put)
+					const double detune = (1.0 - voicing.h_coupling) * body.detune(f0, pl.c, pl.Leff, pl.Zs) / (2 * PI);
+					// mode n's displacement per newton on the bridge (F = T n pi / L y), where the coils and the fret are
+					const double per_newton = pl.Leff / (pl.T * n * PI);
+					std::array<double, MAX_COILS> at_coil{};
+					for (int c = 0; c < coils_; ++c)
+						at_coil[(size_t)c] = per_newton * pickups_[(size_t)coil_pickup_[(size_t)c]].coil_shape(coil_index_[(size_t)c], n, pl.Leff);
+					const double at_fret = frets ? per_newton * std::sin(n * PI * fret_x / pl.Leff) : 0.0;
 					const double a = amp[(size_t)plane][(size_t)k] * share[(size_t)plane] * heard[(size_t)plane];
 					const cplx kept = carried[(size_t)plane][(size_t)k];
 					if (std::abs(a) < 1e-4 * peak && kept == cplx(0.0, 0.0))
@@ -181,8 +197,8 @@ namespace grmg
 					}
 					const double w = 2 * PI * f;
 					first += a;
-					for (int q = 0; q < 3; ++q)
-						push_disp_[(size_t)q] += (scale * a + kept.real()) * at_pickup[(size_t)q] * pickup[(size_t)plane];
+					for (int c = 0; c < coils_; ++c)
+						push_disp_[(size_t)plane][(size_t)c] += (scale * a + kept.real()) * at_coil[(size_t)c] * motion[(size_t)plane];
 					if (sg < w)
 					{
 						// cos(wd t) + (sg / wd) sin(wd t) = Re[(1 - i sg / wd) e^(i wd t)]
@@ -193,9 +209,12 @@ namespace grmg
 						z_[m] = scale * a * cplx(1.0, -sg / wd) + kept;
 						step_[m] = std::exp(cplx(-sg, wd) / sr_);
 						rate_[m] = cplx(-sg, wd);
-						// the pickup hears the string's velocity where it sits: mode n's displacement there, derived
-						for (int q = 0; q < 3; ++q)
-							pick3_[q][m] = rate_[m] * (pickup[(size_t)plane] * at_pickup[(size_t)q]);
+						// each coil follows the string over it: mode n's true displacement there, and its velocity
+						for (int c = 0; c < coils_; ++c)
+						{
+							coil_disp_[(size_t)c][m] = motion[(size_t)plane] * at_coil[(size_t)c];
+							coil_vel_[(size_t)c][m] = rate_[m] * coil_disp_[(size_t)c][m];
+						}
 						// the fret meets the plane across the top: the string's displacement and velocity over it, and
 						// what an impulse J there does to the mode: its velocity jumps by 2 / (mu L) sin(n pi x / L) J,
 						// so its bridge force's rate by T n pi / L of that, which turns z by -i of it over wd
@@ -278,7 +297,10 @@ namespace grmg
 		{
 			if (!active)
 				return;
-			Block b{out, heard, feedback, heard[0] != nullptr, heard[1] != nullptr, heard[2] != nullptr};
+			Block b{out, heard, feedback};
+			for (int c = 0; c < coils_; ++c)
+				if (heard[(size_t)coil_pickup_[(size_t)c]])
+					b.live[(size_t)b.lives++] = c;
 			if (feedback)
 				for (int m = 0; m < count_; ++m)
 					b.fb_drive[(size_t)m] = 0.003 / std::sqrt((double)n_[(size_t)m]);
@@ -286,7 +308,7 @@ namespace grmg
 			for (; t < samples && push_t_ < push_len_; ++t)
 			{
 				std::array<double, 4> o{};
-				push_sample(o);
+				push_sample(b, o);
 				if (!emit(b, t, o))
 					return;
 			}
@@ -318,18 +340,26 @@ namespace grmg
 	private:
 		static constexpr int PLANES = 2;			   // across the top, along it
 		static constexpr int SLOTS = PLANES * MAX_MODES; // every mode of every plane
+		static constexpr int MAX_COILS = 6;			   // three pickups, a humbucker's two coils each
 		static constexpr double GLIDE_FLOOR = 1e-4; // a glide below this share of T (0.1 cent) is not worth following
 		static constexpr double PULL_FLOOR = 1e-4;	// nor a pull on the bridge below this (newtons)
 
 		double sr_ = 48000.0;
 		int count_ = 0, over_ = 0;
+		int across_ = 0; // the slots of the plane across the top come first: 0 .. across_ - 1
 		long t_ = 0, regain_end_ = 0;
 		bool regain_ = false;
 		double onset_ = 0, onset_step_ = 0, fade_ = 1, fade_step_ = 0;
 		// the mode number and the plane of each ringing slot (the slots skip silent modes)
 		std::array<int, SLOTS> n_{}, plane_{};
 		std::array<cplx, SLOTS> z_{}, step_{}, rate_{};
-		std::array<std::array<cplx, SLOTS>, 3> pick3_{};
+		// the coils under the string: their pickup, which coil of it, each slot's true displacement over it per unit of
+		// the slot's force, and its velocity there
+		std::array<MagneticPickup, 3> pickups_{};
+		int coils_ = 0;
+		std::array<int, MAX_COILS> coil_pickup_{}, coil_index_{};
+		std::array<std::array<double, SLOTS>, MAX_COILS> coil_disp_{};
+		std::array<std::array<cplx, SLOTS>, MAX_COILS> coil_vel_{};
 		std::array<double, SLOTS> q_{}, g_{};
 		std::array<std::array<double, 2>, SLOTS> oc_{}, od_{};
 		// the fret: each slot's displacement over it per newton, its velocity there, the turn an impulse gives it
@@ -340,7 +370,7 @@ namespace grmg
 		// the pick's push: its length and progress (samples), the force it ends on, the pickups' displacements then
 		long push_len_ = 0, push_t_ = 0;
 		double push_force_ = 0.0, push_last_ = 0.0;
-		std::array<double, 3> push_disp_{};
+		std::array<std::array<double, MAX_COILS>, PLANES> push_disp_{}; // over each coil, in each plane
 		double slip_ = 0.0, slip_depth_ = 0.0, slip_chance_ = 0.0, slip_decay_ = 0.0;
 		double scrape_ = 0.0, scrape_lp_ = 0.0, scrape_coef_ = 0.0;
 		// the tension: T change per squared newton of the modes, its average, the retuning it gives, its pull
@@ -364,10 +394,65 @@ namespace grmg
 			double *out;
 			std::array<double *, 3> heard;
 			const double *feedback;
-			bool h0, h1, h2;
+			std::array<int, MAX_COILS> live{}; // the coils whose pickup is listened to
+			int lives = 0;
 			std::array<double, SLOTS> fb_drive{};
 			double peak = 0.0;
 		};
+
+		// the string's displacement and velocity over each coil, in each plane, for one sample
+		using CoilMotion = std::array<std::array<double, MAX_COILS>, PLANES>;
+
+		// the coils of the pickups under the string, in order
+		void set_coils(const std::array<MagneticPickup, 3> &pickups)
+		{
+			pickups_ = pickups;
+			coils_ = 0;
+			for (int q = 0; q < 3; ++q)
+				for (int c = 0; c < pickups[(size_t)q].coils(); ++c)
+				{
+					coil_pickup_[(size_t)coils_] = q;
+					coil_index_[(size_t)coils_] = c;
+					++coils_;
+				}
+		}
+
+		// the string's displacement and velocity over each live coil, plane by plane (the slots of a plane are
+		// contiguous: one tight sum each), as the slots ring now (the palm coming back, g_, when there is one)
+		template <bool Palm>
+		void coil_motion(const Block &b, CoilMotion &y, CoilMotion &v) const
+		{
+			for (int k = 0; k < b.lives; ++k)
+			{
+				const size_t c = (size_t)b.live[(size_t)k];
+				const double *disp = coil_disp_[c].data();
+				const cplx *vel = coil_vel_[c].data();
+				for (size_t plane = 0; plane < PLANES; ++plane)
+				{
+					const int from = plane == 0 ? 0 : across_, to = plane == 0 ? across_ : count_;
+					double sy = 0.0, sv = 0.0;
+					for (int m = from; m < to; ++m)
+					{
+						const double g = Palm ? g_[(size_t)m] : 1.0;
+						sy += z_[(size_t)m].real() * g * disp[m];
+						sv += cmul_re(z_[(size_t)m], vel[m]) * g;
+					}
+					y[plane][c] = sy;
+					v[plane][c] = sv;
+				}
+			}
+		}
+
+		// each live coil's voltage, added to its pickup's output (o[1 + pickup])
+		void hear(const Block &b, const CoilMotion &y, const CoilMotion &v, std::array<double, 4> &o) const
+		{
+			for (int k = 0; k < b.lives; ++k)
+			{
+				const size_t c = (size_t)b.live[(size_t)k];
+				const int q = coil_pickup_[c];
+				o[(size_t)q + 1] += pickups_[(size_t)q].voltage(y[0][c], v[0][c], y[1][c], v[1][c]);
+			}
+		}
 
 		// samples from..to of the modes ringing: the force on the bridge, the pickups, the fret and the tension (the
 		// true force of a slot is z, times the palm coming back, over the share heard). -1 when the voice ended.
@@ -384,6 +469,8 @@ namespace grmg
 							g_[(size_t)k] = std::exp(-q_[(size_t)k] * e);
 					}
 				std::array<double, 4> o{}; // the bridge force, then the three pickups
+				CoilMotion cy{}, cv{};	   // the string over each coil
+				coil_motion<Palm>(b, cy, cv);
 				double y = 0.0, squares = 0.0;
 				const double fb = b.feedback ? b.feedback[t] : 0.0;
 				for (int m = 0; m < count_; ++m)
@@ -392,12 +479,6 @@ namespace grmg
 					const cplx z = z_[(size_t)m];
 					const double re = z.real() * g;
 					o[0] += re;
-					if (b.h0)
-						o[1] += cmul_re(z, pick3_[0][(size_t)m]) * g;
-					if (b.h1)
-						o[2] += cmul_re(z, pick3_[1][(size_t)m]) * g;
-					if (b.h2)
-						o[3] += cmul_re(z, pick3_[2][(size_t)m]) * g;
 					if constexpr (Contact)
 						y += re * at_fret_[(size_t)m];
 					if constexpr (Tension)
@@ -414,6 +495,7 @@ namespace grmg
 							z_[(size_t)k] *= std::exp(-q_[(size_t)k] * e5);
 						regain_ = false;
 					}
+				hear(b, cy, cv, o);
 				if constexpr (Contact)
 					if (y > clearance_)
 						collide<Palm>();
@@ -571,7 +653,7 @@ namespace grmg
 		// one sample of the push: the string drawn aside along (t / T)^2 (Zollner: the force grows progressively), the
 		// slips in its second half (the string jumps back a little, the pick takes it again), the scrape on the
 		// pick's edge. The bridge feels the force, the pickups the string moving under them.
-		void push_sample(std::array<double, 4> &o)
+		void push_sample(const Block &b, std::array<double, 4> &o)
 		{
 			const double x = (double)(++push_t_) / (double)push_len_;
 			if (x > 0.5 && slip_depth_ > 0 && 0.5 * (noise() + 1.0) < slip_chance_)
@@ -582,8 +664,17 @@ namespace grmg
 			const double speed = (u - push_last_) * sr_;
 			push_last_ = u;
 			o[0] += push_force_ * u;
-			for (int q = 0; q < 3; ++q)
-				o[(size_t)q + 1] += push_disp_[(size_t)q] * speed;
+			CoilMotion y{}, v{};
+			for (int k = 0; k < b.lives; ++k)
+			{
+				const size_t c = (size_t)b.live[(size_t)k];
+				for (size_t plane = 0; plane < PLANES; ++plane)
+				{
+					y[plane][c] = push_disp_[plane][c] * u;
+					v[plane][c] = push_disp_[plane][c] * speed;
+				}
+			}
+			hear(b, y, v, o);
 		}
 
 		// the ringing slot k as it sounds now: with the palm still coming back and the fade of a note struck again
@@ -606,7 +697,7 @@ namespace grmg
 		bool palm = false;
 
 		void set(const models::Place &pl, const models::Palm *palm_net, const models::Body &body, const models::StringLosses &losses, double sr,
-				 const std::array<double, 3> &pickup_xs = std::array<double, 3>{0.0, 0.0, 0.0})
+				 const std::array<MagneticPickup, 3> &pickups = no_pickups())
 		{
 			sr_ = sr;
 			count_ = 0;
@@ -622,12 +713,11 @@ namespace grmg
 				const size_t k = (size_t)count_++;
 				step_[k] = std::exp(cplx(-sg, 2 * PI * f) / sr);
 				drive_[k] = -body.admittance(f) / sr;
-				// its force gain_ Re z on the bridge, as a velocity where the pickup sits (see StringVoice)
+				// its force gain_ Re z on the bridge, as the velocity the pickups hear: a string nobody plays moves little,
+				// each pickup hears it through its coils at the slope at rest (MagneticPickup::small_signal_shape)
 				const cplx base = cplx(-sg, 2 * PI * f) * gain_ * (pl.Leff / (pl.T * n * PI));
 				for (int p = 0; p < 3; ++p)
-					pick3_[p][k] = pickup_xs[p] > 0
-									   ? base * std::sin(n * PI * pickup_xs[p] / pl.Leff)
-									   : cplx(0.0, 0.0);
+					pick3_[p][k] = base * pickups[(size_t)p].small_signal_shape(n, pl.Leff);
 				z_[k] = 0.0;
 			}
 			for (int k = count_; k < SYMPATHY_MODES; ++k)

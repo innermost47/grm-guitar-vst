@@ -129,9 +129,18 @@ namespace grmg
     constexpr int NUM_WOODS = (int)(sizeof(WOODS) / sizeof(WOODS[0]));
     constexpr double SLAB_M = 0.0445;
 
+    // the circuits: a 70s Strat single coil, a hot humbucker (Lemme's average). How they sense the string: their poles
+    // (about 5 mm across), a humbucker's two rows of poles about 18 mm apart, and the flux curves Novak et al. measured
+    // (DAFx 2018, Fig. 9) on a Seymour Duncan SSL-5 single coil and an SH-2N humbucker
     constexpr models::PickupType PICKUP_TYPES[] = {
-        {"Single coil (Strat 70s)", 2.2, 6.5e3, 110e-12},
-        {"Hot (Lemme average)", 4.1, 12e3, 130e-12}};
+        {"Single coil (Strat 70s)", 2.2, 6.5e3, 110e-12, 1, 0.0, 2.5e-3, 21.51e-3, 12.98, 2.77},
+        {"Humbucker, hot (Lemme average)", 4.1, 12e3, 130e-12, 2, 18e-3, 2.4e-3, 40.67e-3, 9.86, 1.34}};
+    // the height a single coil's level is the engine's unit at (Novak et al. measured from 3 to 10 mm)
+    constexpr double PICKUP_HEIGHT_REF_MM = 3.0;
+    constexpr double PICKUP_HEIGHT_MIN_MM = 1.0; // the string never comes closer to a pole than this
+    // the flux curve's slope is read from a table in the audio loop: its points from PICKUP_HEIGHT_MIN_MM on, this far
+    constexpr int PICKUP_SLOPE_POINTS = 256;
+    constexpr double PICKUP_SLOPE_SPAN_MM = 16.0;
 
     constexpr double PICKUP_LOAD = 1.0 / (1.0 / 250e3 + 1.0 / 1e6);
     constexpr double PICKUP_LEVEL = 1.0, PIEZO_LEVEL = 2.8;
@@ -335,7 +344,7 @@ namespace grmg
         "tuning", "string_age", "brightness", "core", "stiff", "attack", "pluck", "force", "pick", "palm_mm",
         "palm_intensity", "live_palm", "body_size", "top_mm", "coupling", "braces_g", "body_q", "body_amount", "wood",
         "density_pct", "hollow",
-        "sensor", "pickup_mm", "pickup_type", "cable_pf",
+        "sensor", "pickup_mm", "pickup_height_mm", "pickup_type", "cable_pf",
         "pickup_bridge_on", "pickup_middle_on", "pickup_neck_on", "pickup_bridge_split",
         "pickup_bridge_type", "pickup_middle_type", "pickup_neck_type",
         "amp_on", "amp_clean_model", "amp_lead_model", "amp_od_on", "amp_cab",
@@ -355,7 +364,6 @@ namespace grmg
         {"attack_angle_up", "Upstroke angle (deg)", 0.0f, 90.0f, 0.0f, &models::Voicing::angle_up},
         {"plane_coupling", "Along-top bridge coupling", 0.0f, 1.0f, 0.0f, &models::Voicing::h_coupling},
         {"plane_radiation", "Along-top radiation", 0.0f, 1.0f, 0.0f, &models::Voicing::h_radiation},
-        {"plane_pickup", "Along-top pickup", 0.0f, 1.0f, 0.0f, &models::Voicing::h_pickup},
         {"plane_split", "Planes split (cents)", 0.0f, 20.0f, 3.0f, &models::Voicing::split_cents},
         {"fret_action", "Action at 12th fret (mm)", 0.0f, 4.0f, 0.0f, &models::Voicing::action_mm},
         {"fret_bounce", "Fret bounce", 0.0f, 1.0f, 0.0f, &models::Voicing::fret_bounce},

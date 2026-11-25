@@ -62,6 +62,7 @@ models::Settings GuitarTrack::readSettings() const
 	s.hollow = std::round(v("hollow") * 50.0) / 50.0; // steps of 0.02 (each a body network to solve)
 	s.sensor = juce::jlimit(0, 3, c("sensor"));
 	s.pickup_mm = std::round(v("pickup_mm"));
+	s.pickup_height_mm = std::round(v("pickup_height_mm") * 10.0) / 10.0;
 	s.pickup_type = juce::jlimit(0, grmg::NUM_PICKUP_TYPES - 1, c("pickup_type"));
 	s.cable_pf = std::round(v("cable_pf") / 10.0) * 10.0;
 	s.pickup_bridge_on = b("pickup_bridge_on");
@@ -293,6 +294,7 @@ void GuitarTrack::solveStep(double sr, unsigned seed, double tempo, bool loop, s
 		copy->solve_losses();
 		copy->s.sensor = s.sensor;
 		copy->s.pickup_mm = s.pickup_mm;
+		copy->s.pickup_height_mm = s.pickup_height_mm;
 		copy->s.pickup_type = s.pickup_type;
 		copy->s.cable_pf = s.cable_pf;
 		copy->s.pickup_bridge_on = s.pickup_bridge_on;

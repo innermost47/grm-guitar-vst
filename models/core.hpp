@@ -30,10 +30,28 @@ namespace grmg::models
         double rho, E;
     };
 
+    // a magnetic pickup as built: its coil(s) as a circuit, and how it senses a string
     struct PickupType
     {
         const char *name;
-        double L, R, C;
+        double L, R, C;        // the whole pickup's inductance (H), resistance (ohm), capacitance (F)
+        int coils;             // 1: a single coil, 2: a humbucker (two coils in series, side by side along the string)
+        double coil_spacing_m; // between the two coils' rows of poles
+        double pole_radius_m;  // a pole piece's radius
+        // the flux through a coil against the string's distance x (mm) to its pole (Novak et al., DAFx 2018, Eq. 6):
+        // NL(x) = A ((x + Leq) / cbrt(req^2 + (x + Leq)^2) - x / cbrt(req^2 + x^2)), A in mV s
+        double nl_A, nl_Leq_mm, nl_req_mm;
+    };
+
+    // one pickup once placed under the strings: where its coils sense them, how wide, how close, how hot
+    struct PickupSensing
+    {
+        int coils = 0;                       // 0: no pickup there
+        std::array<double, 2> coil_x{};      // each coil's distance from the saddle (m)
+        double window_m = 0.0;               // the width of the string a pole hears (the field's reach, m)
+        double height_mm = 3.0;              // the string at rest, above the poles
+        double nl_A = 0.0, nl_Leq_mm = 0.0, nl_req_mm = 1.0;
+        double gain = 1.0;                   // its slope at rest, against a single coil's at the reference height
     };
 
     struct PalmMode
@@ -251,7 +269,6 @@ namespace grmg::models
         double angle_up = 15.0;    // the same for an upstroke
         double h_coupling = 0.15;  // the bridge's admittance along the top, over its admittance across it
         double h_radiation = 0.3;  // the share of the along-the-top force that reaches the body and the room
-        double h_pickup = 0.5;     // how much a magnetic pickup hears of the motion along the top
         double split_cents = 0.0;  // an extra distance between the two planes (beats everywhere: a chorus, by choice)
 
         double action_mm = 1.8;    // the string's height over the 12th fret (0: no fret under it)
@@ -543,6 +560,7 @@ namespace grmg::models
 
         int sensor = 0;
         double pickup_mm = 100.0;
+        double pickup_height_mm = 3.0; // the strings above the pickups' poles
         int pickup_type = 0;
         double cable_pf = 500.0;
         bool pickup_bridge_on = true;

@@ -89,6 +89,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout GRMGuitarProcessor::createLa
 		// sensor
 		choice("sensor", "Sensor", StringArray{"Microphone (body and room)", "Magnetic pickup", "Piezo under the saddle", "Three pickups (HSS)"}, 0);
 		real("pickup_mm", "Pickup from the saddle (mm)", 20.0f, 200.0f, 100.0f, 0.0f, 1.0f);
+		real("pickup_height_mm", "Pickup height under the strings (mm)", 1.5f, 8.0f, 3.0f, 0.0f, 0.1f);
 		choice("pickup_type", "Pickup", ui::namesOf(PICKUP_TYPES), 0);
 		real("cable_pf", "Cable (pF)", 100.0f, 1500.0f, 500.0f, 500.0f, 10.0f);
 		// sensor 3: three pickups (HSS), each with its own switch, the bridge may be split

@@ -83,6 +83,7 @@ namespace grmg
 		static bool same_pickups(const models::Settings &a, const models::Settings &b)
 		{
 			return a.sensor == b.sensor && std::abs(a.pickup_mm - b.pickup_mm) < 1e-9 &&
+				   std::abs(a.pickup_height_mm - b.pickup_height_mm) < 1e-9 &&
 				   a.pickup_type == b.pickup_type && std::abs(a.cable_pf - b.cable_pf) < 1e-9 &&
 				   a.pickup_bridge_on == b.pickup_bridge_on && a.pickup_middle_on == b.pickup_middle_on &&
 				   a.pickup_neck_on == b.pickup_neck_on && a.pickup_bridge_split == b.pickup_bridge_split &&
@@ -126,35 +127,31 @@ namespace grmg
 		models::PickupCircuit pickup;
 		std::array<models::PickupCircuit, 3> pickup3{};
 		std::array<bool, 3> pickup3_on{};
+		// how the magnetic pickups sense the strings (sensor 1: the first one; sensor 3: bridge, middle, neck)
+		std::array<MagneticPickup, 3> pickups{};
 
 		void solve_pickup()
 		{
+			pickups = {};
 			if (s.sensor == 1)
 			{
 				pickup = pickup_network(s.pickup_type, s.cable_pf);
+				pickups[0] = MagneticPickup(pickup_sensing_network(s.pickup_type, s.pickup_mm / 1000.0, s.pickup_height_mm));
 			}
 			else if (s.sensor == 3)
 			{
+				// a split bridge humbucker: one of its coils, a single coil's circuit
 				const int bridge_type = s.pickup_bridge_split ? 0 : s.pickup_bridge_type;
 				pickup3[0] = pickup_network(bridge_type, s.cable_pf);
 				pickup3[1] = pickup_network(s.pickup_middle_type, s.cable_pf);
 				pickup3[2] = pickup_network(s.pickup_neck_type, s.cable_pf);
 				pickup3_on = {s.pickup_bridge_on, s.pickup_middle_on, s.pickup_neck_on};
+				const std::array<int, 3> types = {s.pickup_bridge_type, s.pickup_middle_type, s.pickup_neck_type};
+				for (int k = 0; k < 3; ++k)
+					pickups[(size_t)k] = MagneticPickup(pickup_sensing_network(types[(size_t)k], PICKUP_POS_MM[k] / 1000.0, s.pickup_height_mm,
+																			   k == 0 && s.pickup_bridge_split));
 			}
 		}
-
-		std::array<double, 3> pickup_xs() const
-		{
-			if (s.sensor == 1)
-				return {s.pickup_mm / 1000.0, 0.0, 0.0};
-			if (s.sensor == 3)
-				return {PICKUP_POS_MM[0] / 1000.0,
-						PICKUP_POS_MM[1] / 1000.0,
-						PICKUP_POS_MM[2] / 1000.0};
-			return {0.0, 0.0, 0.0};
-		}
-
-		double pickup_x() const { return pickup_xs()[0]; }
 
 		void solve_losses()
 		{

@@ -391,7 +391,7 @@ namespace grmg
 			auto &s = sym_[(size_t)i];
 			s.fret = fret;
 			s.palm = palm != nullptr;
-			s.set(m.place[(size_t)i][(size_t)fret], palm, m.body, m.losses[(size_t)i], sr_, m.pickup_xs());
+			s.set(m.place[(size_t)i][(size_t)fret], palm, m.body, m.losses[(size_t)i], sr_, m.pickups);
 			s.free_from_now(fade);
 		}
 
@@ -412,7 +412,7 @@ namespace grmg
 				if (!carries)
 					previous.fade_out(0.02);
 			}
-			v.start(p, m.body, m.losses[(size_t)p.string], m.s.brightness, sr_, m.pickup_xs(), carries ? &previous : nullptr, voicing);
+			v.start(p, m.body, m.losses[(size_t)p.string], m.s.brightness, sr_, m.pickups, carries ? &previous : nullptr, voicing);
 			if (carries)
 				previous.active = false;
 			v.note = -1;

@@ -32,6 +32,7 @@
 #include "timbre/sound_check.hpp"
 #include "timbre/stroke_spread.hpp"
 #include "timbre/sustain_movement.hpp"
+#include "timbre/tonal_balance.hpp"
 
 namespace
 {
@@ -47,6 +48,8 @@ namespace
     constexpr int STROKES = 8;      // the power chord, struck this many times
     constexpr double STROKE_BEATS = 1.0;
     constexpr double HELD_S = 2.5;          // a held chord rings this long
+    constexpr double REFERENCE_TEMPO = 160.0;     // the punk rhythm compared with a real guitar's recording
+    constexpr double REFERENCE_PICKUP_MM = 45.0;  // a bridge humbucker's centre, from the saddle
     constexpr double MOVEMENT_FROM_S = 0.3; // its movement is measured past its attack
 
     Song single_note(int string, int fret)
@@ -348,8 +351,61 @@ namespace
             wav::write_mono((out / (file + ".wav")).string(), impulse, SR);
         }
     }
+
+    // E5, G5 and A5 (standard tuning) in eighths, a bar each, as a punk rhythm guitar plays them
+    Song punk_chords()
+    {
+        Song s;
+        s.bars = 3;
+        s.tempo = REFERENCE_TEMPO;
+        const int shapes[3][3] = {{0, 2, 2}, {3, 5, 5}, {5, 7, 7}};
+        for (int bar = 0; bar < 3; ++bar)
+            for (int k = 0; k < 8; ++k)
+                for (int string = 0; string < 3; ++string)
+                {
+                    models::RollNote n;
+                    n.string = string;
+                    n.fret = shapes[bar][string];
+                    n.start = bar * 4.0 + 0.5 * k;
+                    n.length = 0.45;
+                    s.notes.push_back(n);
+                }
+        return s;
+    }
+
+    // a real guitar's recording (its DI): its tonal balance against the same kind of playing under each pickup type
+    void reference(timbre::MetricsTable &table, timbre::SoundCheck &checked, const std::filesystem::path &out,
+                   const std::string &path)
+    {
+        std::printf("\n== reference: %s\n", path.c_str());
+        std::vector<double> x;
+        int sr = 0;
+        if (!wav::read_mono(path, x, sr))
+        {
+            std::printf("FAILED: could not read %s\n", path.c_str());
+            checked.check("reference", {});
+            return;
+        }
+        const timbre::TonalBalance real(x, sr);
+        table.add("reference", "95 % of the energy below", timbre::SpectrumProbe(sr).energy_below_hz(x, 0.95), "Hz");
+        for (int type = 0; type < NUM_PICKUP_TYPES; ++type)
+        {
+            auto s = rigs::named("pickup");
+            s.pickup_type = type;
+            s.pickup_mm = REFERENCE_PICKUP_MM;
+            OfflineRenderer renderer(s, SR);
+            const auto take = renderer.render_song(punk_chords(), 7, 0.5);
+            const std::string name = "reference vs pickup type " + std::to_string(type);
+            checked.check(name, take.pickup);
+            const timbre::TonalBalance render(take.pickup, SR);
+            table.add(name, "balance gap", render.gap_db(real), "dB");
+            table.add(name, "balance gap above 2 kHz", render.gap_db(real, timbre::TonalBalance::HIGHS_HZ), "dB");
+            wav::write_mono((out / ("punk_chords_pickup_type_" + std::to_string(type) + ".wav")).string(), take.pickup, SR);
+        }
+    }
 }
 
+// Usage: timbre_probe [out_dir] [reference.wav]
 int main(int argc, char **argv)
 {
     const std::filesystem::path out = argc > 1 ? argv[1] : "timbre_probe_out";
@@ -362,6 +418,8 @@ int main(int argc, char **argv)
     power_chords(table, checked, out);
     held_chords(table, checked, out);
     pickup_types(table, checked, out);
+    if (argc > 2)
+        reference(table, checked, out, argv[2]);
     const auto csv = (out / "metrics.csv").string();
     if (!table.write_csv(csv))
     {

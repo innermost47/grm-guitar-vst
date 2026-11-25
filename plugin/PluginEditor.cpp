@@ -343,7 +343,7 @@ void GRMGuitarEditor::rebuildGuitars()
 	addTab("Attack & palm", withTunables({"attack", "pluck", "force", "pick", "palm_mm", "palm_intensity", "live_palm"}, VOICE_TUNABLES));
 	addTab("Body", {"hollow", "wood", "density_pct", "body_size", "top_mm", "braces_g", "body_q", "coupling", "body_amount", "sympathy"});
 	addTab("Sensor",
-		   {"sensor", "pickup_mm", "pickup_type", "cable_pf",
+		   {"sensor", "pickup_mm", "pickup_height_mm", "pickup_type", "cable_pf",
 			"pickup_bridge_on", "pickup_middle_on", "pickup_neck_on",
 			"pickup_bridge_split",
 			"pickup_bridge_type", "pickup_middle_type", "pickup_neck_type"},
@@ -353,6 +353,7 @@ void GRMGuitarEditor::rebuildGuitars()
 			   panel.setSensorId(processor.paramId("sensor"));
 			   panel.showOnlyForSensor(processor.paramId("pickup_mm"), {1});
 			   panel.showOnlyForSensor(processor.paramId("pickup_type"), {1});
+			   panel.showOnlyForSensor(processor.paramId("pickup_height_mm"), {1, 3});
 			   panel.showOnlyForSensor(processor.paramId("cable_pf"), {1, 3});
 			   panel.showOnlyForSensor(processor.paramId("pickup_bridge_on"), {3});
 			   panel.showOnlyForSensor(processor.paramId("pickup_middle_on"), {3});
