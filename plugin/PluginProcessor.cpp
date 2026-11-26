@@ -33,14 +33,14 @@ GRMGuitarProcessor::~GRMGuitarProcessor()
 
 namespace
 {
-// a level meter's peak, raised by the audio thread to the highest since the interface last took it
-void raisePeak(std::atomic<float> &peak, float value)
-{
-	float was = peak.load();
-	while (value > was && !peak.compare_exchange_weak(was, value))
+	// a level meter's peak, raised by the audio thread to the highest since the interface last took it
+	void raisePeak(std::atomic<float> &peak, float value)
 	{
+		float was = peak.load();
+		while (value > was && !peak.compare_exchange_weak(was, value))
+		{
+		}
 	}
-}
 } // namespace
 
 juce::AudioProcessorValueTreeState::ParameterLayout GRMGuitarProcessor::createLayout()
@@ -152,7 +152,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout GRMGuitarProcessor::createLa
 		// room
 		flag("room_on", "Room", true);
 		choice("room_size", "Room size", ui::namesOf(ROOMS), 1);
-		choice("room_material", "Walls", ui::namesOf(MATERIALS), 2);
+		choice("room_material", "Walls", ui::namesOf(MATERIALS), 4);
 		real("room_distance", "Listener (m)", 0.3f, 6.0f, 1.0f, 1.5f);
 		// player
 		flag("human", "Human feel", true);

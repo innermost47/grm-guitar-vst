@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 Anthony Charretier
 cmake_minimum_required(VERSION 3.22)
-project(GRMGuitar VERSION 0.4.0 LANGUAGES C CXX)
+project(GRMGuitar VERSION 0.4.1 LANGUAGES C CXX)
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the build type" FORCE)
