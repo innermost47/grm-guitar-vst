@@ -33,6 +33,9 @@ Thank you to all three for taking the time to try it and write about it.
 
 ## The GRM family
 
+- **[grm-hand-pan](https://github.com/innermost47/grm-hand-pan)**: a handpan VST3 / standalone plugin solved
+  from published acoustic and biomechanical measurements rather than samples, complete with its own two-hand
+  sequencer (**Hand Pan Roll**), pattern banks and song arranger.
 - **[grm-core](https://github.com/innermost47/grm-core)**: the Global Relational Model, the research it comes
   from, its tests and the equation found between the data. The guitar was first written there as a Python proof of
   concept (`grm_guitar.py`); this plugin is the product.
