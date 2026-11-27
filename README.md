@@ -27,6 +27,8 @@ Thank you to all three for taking the time to try it and write about it.
 
 ## Videos demos
 
+[![Watch the GRM Guitar with GRM Hand Pan and GRM Open Labs](https://img.youtube.com/vi/-11V4Tk_h5U/maxresdefault.jpg)](https://www.youtube.com/watch?v=-11V4Tk_h5U)  
+
 [![Watch the GRM Guitar demo on YouTube](https://img.youtube.com/vi/PHgxrdl3X0Q/maxresdefault.jpg)](https://www.youtube.com/watch?v=PHgxrdl3X0Q)  
 
 [![!With feedback larsen](https://img.youtube.com/vi/dbz1AT30W6M/maxresdefault.jpg)](https://www.youtube.com/watch?v=dbz1AT30W6M)
